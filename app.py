@@ -3,15 +3,16 @@
 # =========================================================
 import io
 import os
-import numpy as np
-import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+import pandas as pd
+import numpy as np
 
 st.set_page_config(
     page_title="Daily Production & HR Report | RFL",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -34,11 +35,10 @@ EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "53
 
 @st.cache_data
 def load_and_parse_data(file_bytes):
-    """Parses raw Excel workbook containing 'Details' and/or 'Sheet2'."""
+    """Parses raw Excel workbook containing 'Details'."""
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
 
-    # 1. Parse Details Sheet
     if "Details" in xls.sheet_names:
         df_det = pd.read_excel(xls, sheet_name="Details")
         df_det["DateClean"] = pd.to_datetime(df_det["Date"], errors="coerce").dt.strftime("%d-%m-%Y")
@@ -85,7 +85,6 @@ def compute_daily_size_summary(df_day_details):
 
         ach_pct = (tot_prod_pcs / tot_cap_pcs * 100) if tot_cap_pcs > 0 else 0.0
 
-        # Remarks classification logic: Low < 10, High >= 20 or >= 90%
         if mc_qty == 0 or tot_prod_pcs == 0:
             remarks = "Stopped"
         elif ach_pct >= 90.0 or run_hr_avg >= 20.0:
@@ -119,14 +118,12 @@ def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
     a_tot = df_day_details["A Total"].fillna(0).sum()
     b_tot = df_day_details["B Total"].fillna(0).sum()
 
-    # Rejection pieces per shift
     a_bad = max(0.0, a_tot - a_good) if a_tot > 0 else (df_day_details["T-Bad"].sum() * (a_good / (a_good + b_good))) if (a_good + b_good) > 0 else 0.0
     b_bad = max(0.0, b_tot - b_good) if b_tot > 0 else (df_day_details["T-Bad"].sum() - a_bad)
 
     a_ton = ((df_day_details["A Good"] * df_day_details["Unit Wt"]) / 1000.0).sum()
     b_ton = ((df_day_details["B Good"] * df_day_details["Unit Wt"]) / 1000.0).sum()
 
-    # Per HR metrics
     a_per_hr_pcs = (a_good / day_hr) if day_hr > 0 else 0.0
     b_per_hr_pcs = (b_good / night_hr) if night_hr > 0 else 0.0
 
@@ -197,101 +194,106 @@ def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
 
 
 # =========================================================
-# SECTION 2: LANDING / UPLOAD SCREEN
+# SECTION 1: SIMPLIFIED FILE UPLOAD SCREEN
 # =========================================================
 if not st.session_state["app_launched"]:
     st.markdown("## 📊 **DAILY REPORT RFL SETUP**")
     st.markdown("##### Upload your production workbook to launch the live console.")
     st.divider()
 
-    col1, col2 = st.columns([1.5, 1])
-    with col1:
-        st.markdown(
-            '<div class="setup-card" style="background:#fff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #2563eb;"><h3>📂 Source Production File</h3><p style="color:#64748b !important;">Select the Excel file containing the Details and Sheet2 logs</p></div>',
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        '<div style="background:#fff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #2563eb; max-width:850px; margin:0 auto;">'
+        '<h3 style="margin-top:0;">📂 Upload Production Workbook</h3>'
+        '<p style="color:#64748b !important;">Select the Excel file (.xlsx) containing the production logs</p></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+
+    col_up, _ = st.columns([2, 1])
+    with col_up:
         uploaded_file = st.file_uploader("Upload Excel File (.xlsx, .xls)", type=["xlsx", "xls"], key="daily_upload")
 
-    with col2:
-        st.markdown(
-            '<div class="setup-card" style="background:#fff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #8b5cf6;"><h3>👥 Shift Manpower Input</h3><p style="color:#64748b !important;">Enter deployed workforce count for productivity indexing</p></div>',
-            unsafe_allow_html=True,
-        )
-        day_hr = st.number_input("☀️ Day Shift HR (Persons)", min_value=1, value=65, step=1)
-        night_hr = st.number_input("🌙 Night Shift HR (Persons)", min_value=1, value=60, step=1)
-
-    st.divider()
-    c_btn, _ = st.columns([1, 3])
-    with c_btn:
-        if st.button("🚀 Launch Executive Dashboard", type="primary", use_container_width=True):
-            if uploaded_file is None:
-                st.error("Please upload the production Excel file to continue.")
-            else:
+        if uploaded_file is not None:
+            if st.button("🚀 Launch Executive Dashboard", type="primary", use_container_width=True):
                 st.session_state["file_bytes"] = uploaded_file.getvalue()
-                st.session_state["day_hr"] = day_hr
-                st.session_state["night_hr"] = night_hr
+                st.session_state["file_name"] = uploaded_file.name
                 st.session_state["app_launched"] = True
                 st.rerun()
 
 # =========================================================
-# SECTION 3: UNIFIED ONE-PAGE EXECUTIVE DASHBOARD
+# SECTION 2: LIVE EXECUTIVE DASHBOARD
 # =========================================================
 else:
     df_details = load_and_parse_data(st.session_state["file_bytes"])
-
     all_dates = sorted([d for d in df_details["DateClean"].dropna().unique() if d != "nan"])
 
-    with st.sidebar:
-        col_logo, col_text = st.columns([1, 2.3], gap="small", vertical_alignment="center")
-        with col_logo:
-            if os.path.exists("logo.png"):
-                st.image("logo.png", use_container_width=True)
-            else:
-                st.markdown("🏭")
-        with col_text:
-            st.markdown("### **DAILY REPORT RFL**")
-            st.caption("Executive Console")
+    # Top Control Bar for Date and Manpower
+    st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
+    c_date, c_day, c_night, c_act = st.columns([1.5, 1, 1, 1], gap="medium")
 
-        st.divider()
+    with c_date:
         sel_date = st.selectbox("📅 **Operational Date:**", all_dates, index=len(all_dates) - 1)
 
-        st.divider()
-        st.markdown("#### 👥 **Manpower Parameters**")
-        cur_day_hr = st.number_input("Day Shift HR", min_value=1, value=st.session_state.get("day_hr", 65), step=1)
-        cur_night_hr = st.number_input("Night Shift HR", min_value=1, value=st.session_state.get("night_hr", 60), step=1)
-        st.session_state["day_hr"] = cur_day_hr
-        st.session_state["night_hr"] = cur_night_hr
+    with c_day:
+        day_hr = st.number_input("☀️ **Day Shift HR**", min_value=1, value=65, step=1)
 
-        st.divider()
-        if st.button("🔄 Change Uploaded File", use_container_width=True):
+    with c_night:
+        night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=60, step=1)
+
+    with c_act:
+        st.markdown("<div style='margin-top: 1.7rem;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 Change File", use_container_width=True):
             st.session_state["app_launched"] = False
             st.session_state.pop("file_bytes", None)
             st.rerun()
 
-    # Filter by selected date
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Filter data for selected date
     df_day = df_details[df_details["DateClean"] == sel_date].copy()
     df_size = compute_daily_size_summary(df_day)
-    df_shift = compute_shiftwise_productivity(df_day, cur_day_hr, cur_night_hr)
+    df_shift = compute_shiftwise_productivity(df_day, day_hr, night_hr)
 
-    # Global KPI Totals
+    # Global KPI Calculations
     total_prod = df_size["Total Prod (Pcs)"].sum()
     total_cap = df_size["Total Cap (Pcs)"].sum()
     active_mcs = df_size[df_size["MC QTY"] > 0]["MC QTY"].sum()
     total_ton = df_size["Prod Ton"].sum()
     overall_eff = (total_prod / total_cap * 100) if total_cap > 0 else 0.0
 
-    total_hr = cur_day_hr + cur_night_hr
+    total_hr = day_hr + night_hr
     hr_output = (total_prod / total_hr) if total_hr > 0 else 0.0
     hr_per_mc = (total_hr / active_mcs) if active_mcs > 0 else 0.0
 
-    # Weighted CT & Run Hours
     active_grp = df_size[df_size["MC QTY"] > 0]
     avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
     avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
 
-    # ---------------------------------------------------------
-    # 1. TOP EXECUTIVE BANNER
-    # ---------------------------------------------------------
+    # Snapshot Download JavaScript Bridge (html2canvas to JPG)
+    components.html(
+        f"""
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+        <script>
+        function captureReport() {{
+            const target = window.parent.document.querySelector('.main .block-container');
+            html2canvas(target, {{scale: 2, useCORS: true}}).then(canvas => {{
+                const link = document.createElement('a');
+                link.download = 'Daily_Production_Report_{sel_date}.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                link.click();
+            }});
+        }}
+        </script>
+        <div style="text-align: right; margin-bottom: 8px;">
+            <button onclick="captureReport()" style="background:#2563eb; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer; font-family:sans-serif; font-size:12px; box-shadow: 0 2px 6px rgba(37,99,235,0.3);">
+                📸 Download Report as JPG
+            </button>
+        </div>
+        """,
+        height=45,
+    )
+
+    # 1. TOP HEADER BANNER
     st.markdown(
         f"""
         <div class="report-header-banner">
@@ -309,25 +311,20 @@ else:
         unsafe_allow_html=True,
     )
 
-    # ---------------------------------------------------------
-    # 2. KPI METRIC CARDS ROW
-    # ---------------------------------------------------------
+    # 2. KPI METRICS CARDS ROW
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
     k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
     k3.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">ACTIVE MC</div><div class="kpi-val">{active_mcs}</div><div class="kpi-sub">Operating MC</div></div>', unsafe_allow_html=True)
-    k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({cur_day_hr}D + {cur_night_hr}N)</div></div>', unsafe_allow_html=True)
+    k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({day_hr}D + {night_hr}N)</div></div>', unsafe_allow_html=True)
     k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,}</div><div class="kpi-sub">Pcs / Person</div></div>', unsafe_allow_html=True)
     k6.markdown(f'<div class="kpi-card pink"><div class="kpi-title">HR PER MC</div><div class="kpi-val">{hr_per_mc:.1f}</div><div class="kpi-sub">Persons / MC</div></div>', unsafe_allow_html=True)
 
     st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
 
-    # ---------------------------------------------------------
-    # 3. MID SECTION: SIZE-WISE BREAKDOWN (LEFT) + NARRATIVE (RIGHT)
-    # ---------------------------------------------------------
+    # 3. MID SECTION: SIZE BREAKDOWN (LEFT) + NARRATIVE ANALYSIS (RIGHT)
     col_left, col_right = st.columns([1.45, 1.05], gap="medium")
 
-    # High / Low / Stopped machine analysis
     running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
     top_row = running_df.iloc[0] if not running_df.empty else None
 
@@ -413,15 +410,12 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
         with st.expander("📋 Copy Plain Text Report (for WhatsApp / Email)"):
             st.text_area("Report Text", value=raw_narrative_text, height=160, label_visibility="collapsed")
 
-    # ---------------------------------------------------------
     # 4. BOTTOM SECTION: SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN
-    # ---------------------------------------------------------
     st.markdown('<div class="panel-card"><h4>👥 SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN</h4>', unsafe_allow_html=True)
 
     table_cols = ["Shift Name", "HR Count (Persons)", "Total Output (Pcs)", "Good Output (Pcs)", "Rejection (Pcs)", "Rejection Rate", "Good Tonnage", "Per HR Good Output", "Per HR Tonnage"]
     st.dataframe(df_shift[table_cols], use_container_width=True, hide_index=True)
 
-    # Shift Delta Highlights
     day_row = df_shift.iloc[0]
     night_row = df_shift.iloc[1]
     tot_shift_row = df_shift.iloc[2]
