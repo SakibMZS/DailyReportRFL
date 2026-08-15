@@ -1,35 +1,23 @@
 /* =========================================================
-   OPERATIONS CONSOLE — style.css
+   DAILY REPORT RFL — UNIFIED EXECUTIVE DASHBOARD STYLING
    ========================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-    --bg: #eef3f8;
+    --bg: #f4f7fb;
     --surface: #ffffff;
-    --surface-soft: #f7faff;
-    --surface-muted: #f1f5f9;
-
-    --text: #0f172a;
-    --text-soft: #475569;
+    --text-main: #0f172a;
     --text-muted: #64748b;
-
-    --border: #dbe4ee;
-    --border-strong: #c7d3e0;
-
-    --blue: #2563eb;
-    --blue-dark: #1d4ed8;
-
-    --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
-    --radius: 14px;
+    --border-color: #e2e8f0;
+    --blue-accent: #2563eb;
+    --green-accent: #10b981;
 }
 
 .stApp {
-    background:
-        radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.07), transparent 28%),
-        linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%) !important;
-    color: var(--text) !important;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    background-color: var(--bg) !important;
+    font-family: 'Inter', sans-serif !important;
+    color: var(--text-main) !important;
 }
 
 header[data-testid="stHeader"] {
@@ -37,63 +25,178 @@ header[data-testid="stHeader"] {
 }
 
 .block-container {
-    max-width: 1540px !important;
+    max-width: 1600px !important;
     padding-top: 0.5rem !important;
-    padding-bottom: 2.5rem !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
+    padding-bottom: 3rem !important;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
 }
 
-/* Sidebar styling */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #f8fbff 0%, #edf3f9 58%, #e9f1f8 100%) !important;
-    border-right: 1px solid var(--border) !important;
-    box-shadow: 6px 0 24px rgba(15, 23, 42, 0.045) !important;
+/* Header Banner Card */
+.report-header-banner {
+    background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%);
+    border-radius: 14px;
+    padding: 1.25rem 1.75rem;
+    color: #ffffff !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.15rem;
+    box-shadow: 0 10px 25px rgba(9, 30, 58, 0.12);
 }
 
-section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-    padding-top: 0.25rem !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stImage"] img {
-    max-height: 50px !important;
-    width: auto !important;
-    object-fit: contain !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stColumn"] h3 {
-    font-size: 1.05rem !important;
+.report-header-banner h2 {
+    color: #ffffff !important;
+    font-size: 1.65rem !important;
     font-weight: 800 !important;
     margin: 0 !important;
     padding: 0 !important;
-    line-height: 1.2 !important;
 }
 
-section[data-testid="stSidebar"] [data-testid="stColumn"] p {
-    font-size: 0.75rem !important;
-    margin: 0 !important;
-    padding: 0 !important;
+.report-header-banner p {
+    color: #94a3b8 !important;
+    font-size: 0.85rem !important;
+    margin: 0.2rem 0 0 0 !important;
 }
 
-/* Setup Card */
-.setup-card {
-    background: linear-gradient(145deg, #ffffff 0%, #f8fbff 100%) !important;
-    padding: 1.35rem 1.4rem !important;
-    border-radius: var(--radius) !important;
-    border: 1px solid var(--border) !important;
-    border-top: 4px solid var(--blue) !important;
-    box-shadow: var(--shadow-sm) !important;
-    margin-bottom: 1rem !important;
+.efficiency-badge-large {
+    background: #10b981;
+    border-radius: 12px;
+    padding: 0.75rem 1.5rem;
+    text-align: center;
+    color: #ffffff;
+    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
 }
+
+.efficiency-badge-large .value {
+    font-size: 1.9rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.efficiency-badge-large .label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+}
+
+/* Metric Row Cards */
+.kpi-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 0.85rem 0.9rem;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+    text-align: center;
+    border-top: 4px solid var(--blue-accent);
+}
+
+.kpi-card.blue { border-top-color: #2563eb; }
+.kpi-card.purple { border-top-color: #8b5cf6; }
+.kpi-card.yellow { border-top-color: #f59e0b; }
+.kpi-card.indigo { border-top-color: #6366f1; }
+.kpi-card.teal { border-top-color: #06b6d4; }
+.kpi-card.pink { border-top-color: #ec4899; }
+
+.kpi-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.2rem;
+}
+
+.kpi-val {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.kpi-sub {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    margin-top: 0.15rem;
+}
+
+/* Panel Containers */
+.panel-card {
+    background: #ffffff;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
+    padding: 1.25rem 1.4rem;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+    margin-bottom: 1.25rem;
+}
+
+.panel-card h4 {
+    font-size: 1.02rem !important;
+    font-weight: 800 !important;
+    margin-bottom: 0.85rem !important;
+    color: #0f172a;
+}
+
+/* Narrative Report Block */
+.narrative-block {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: #1e293b;
+}
+
+.narrative-block h5 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin: 0.75rem 0 0.2rem 0;
+    color: #0f172a;
+}
+
+.narrative-block h5:first-child {
+    margin-top: 0;
+}
+
+/* Bottom Dual Highlight Cards */
+.callout-card {
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.callout-card.green {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 5px solid #16a34a;
+}
+
+.callout-card.red {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-left: 5px solid #dc2626;
+}
+
+.callout-card h5 {
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    margin: 0 0 0.4rem 0 !important;
+}
+
+.callout-card.green h5 { color: #15803d !important; }
+.callout-card.red h5 { color: #b91c1c !important; }
 
 /* Data Tables */
 [data-testid="stDataFrame"] {
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    background: #ffffff !important;
-    box-shadow: var(--shadow-sm) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 10px !important;
 }
 
 [data-testid="stDataFrame"] * {
-    font-size: 0.78rem !important;
+    font-size: 0.77rem !important;
 }
