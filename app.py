@@ -1,5 +1,5 @@
 # =========================================================
-# OPERATIONS CONSOLE — MULTI-REPORT ENTERPRISE PLATFORM
+# OPERATIONS CONSOLE — FULL-WIDTH ENTERPRISE PLATFORM
 # =========================================================
 import io
 import os
@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="Operations Console | Daily Report RFL",
     page_icon="🏭",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
@@ -25,15 +25,14 @@ def load_css(file_name="style.css"):
 
 load_css("style.css")
 
-# Session state initialization for module navigation
-if "selected_module" not in st.session_state:
-    st.session_state["selected_module"] = "🏠 Hub Home / Overview"
+if "active_view" not in st.session_state:
+    st.session_state["active_view"] = "hub_home"
 
 EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
 
 
 # =========================================================
-# MODULE 1: COMPUTATION & GRAPHICS ENGINE
+# MODULE 1: COMPUTATIONS & BACKEND GRAPHICS ENGINE
 # =========================================================
 @st.cache_data
 def m1_parse_workbook(file_bytes):
@@ -361,158 +360,142 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
 
 
 # =========================================================
-# GLOBAL PERSISTENT SIDEBAR DIRECTORY
-# =========================================================
-with st.sidebar:
-    col_logo, col_text = st.columns([1, 2.3], gap="small", vertical_alignment="center")
-    with col_logo:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", use_container_width=True)
-        else:
-            st.markdown("🏭")
-    with col_text:
-        st.markdown("### **OPERATIONS HUB**")
-        st.caption("Industrial Analytics Platform")
-
-    st.divider()
-
-    module_list = [
-        "🏠 Hub Home / Overview",
-        "📊 Size-Wise Performance & HR",
-        "⏱️ Mold Changeover & Downtime",
-        "📉 Daily Scrap & Defect Analytics",
-        "📈 Monthly Trends & OEE Analytics",
-    ]
-
-    selected_nav = st.radio(
-        "📍 **NAVIGATION DIRECTORY:**",
-        module_list,
-        index=module_list.index(st.session_state["selected_module"]) if st.session_state["selected_module"] in module_list else 0,
-    )
-    st.session_state["selected_module"] = selected_nav
-
-    st.divider()
-
-    # Reset all session states
-    if st.button("🗑️ Clear Cache / Reset Sessions", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
-
-
-# =========================================================
-# SCREEN ROUTING
+# FULL-WIDTH VIEW ROUTING
 # =========================================================
 
 # ---------------------------------------------------------
-# 1. HUB HOME / OVERVIEW
+# VIEW 1: HUB HOME / OVERVIEW
 # ---------------------------------------------------------
-if st.session_state["selected_module"] == "🏠 Hub Home / Overview":
-    st.markdown("## 🏭 **OPERATIONS CONSOLE & REPORTING HUB**")
-    st.markdown("##### Centralized industrial engineering and daily operational management suite.")
+if st.session_state["active_view"] == "hub_home":
+    c_brand, c_meta = st.columns([3, 1])
+    with c_brand:
+        st.markdown("## 🏭 **OPERATIONS CONSOLE & REPORTING HUB**")
+        st.caption("Centralized Industrial Engineering & Daily Operational Intelligence")
+    with c_meta:
+        if st.button("🗑️ Reset All Sessions / Clear Cache", use_container_width=True):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
+
     st.divider()
 
-    st.markdown("### 📋 **Operational Reporting Modules**")
-    
-    col1, col2 = st.columns(2, gap="medium")
+    st.markdown("### 📋 **Select a Reporting Module to Launch**")
 
-    with col1:
+    # Top Row of Module Cards
+    c1, c2 = st.columns(2, gap="large")
+
+    with c1:
         st.markdown(
             """
-            <div class="panel-card" style="border-top: 4px solid #2563eb;">
-                <h4>📊 Size-Wise Performance & HR</h4>
-                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                    Generate daily plant efficiency briefs, machine-size capacity breakdown, manpower productivity indexing (Pcs/HR & kg/HR), WhatsApp/Email copy text, and 1-page JPG graphical report cards.
-                </p>
-                <div style="margin-top: 1rem;">
-                    <span style="background: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">ACTIVE MODULE</span>
+            <div class="hub-card" style="border-top: 5px solid #2563eb;">
+                <div>
+                    <span style="background: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Active Module</span>
+                    <h3 style="margin-top: 0.75rem;">📊 Size-Wise Performance & HR</h3>
+                    <p>
+                        Daily factory efficiency briefs, machine-size capacity breakdown, shift manpower productivity indexing (Pcs/HR & kg/HR), WhatsApp copy text, and pixel-perfect 1-page visual report exports.
+                    </p>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("🚀 Open Size-Wise Module", type="primary", use_container_width=True):
-            st.session_state["selected_module"] = "📊 Size-Wise Performance & HR"
+        if st.button("🚀 Launch Size-Wise Module", type="primary", use_container_width=True):
+            st.session_state["active_view"] = "mod_size_wise"
             st.rerun()
 
-    with col2:
+    with c2:
         st.markdown(
             """
-            <div class="panel-card" style="border-top: 4px solid #8b5cf6;">
-                <h4>⏱️ Mold Changeover & Downtime</h4>
-                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                    Track SMED changeover times, toggle conversion benchmarks, hydraulic cylinder optimizations, and idle mechanical downtime losses across production lines.
-                </p>
-                <div style="margin-top: 1rem;">
-                    <span style="background: #f3e8ff; color: #7c3aed; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+            <div class="hub-card" style="border-top: 5px solid #8b5cf6;">
+                <div>
+                    <span style="background: #f3e8ff; color: #7c3aed; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Workspace Ready</span>
+                    <h3 style="margin-top: 0.75rem;">⏱️ Mold Changeover & Downtime</h3>
+                    <p>
+                        Track SMED mold changeover benchmarks, mechanical toggle system conversions vs hydraulic cylinders, tool setup times, and line stoppage losses.
+                    </p>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("⚙️ Open Changeover Module", use_container_width=True):
-            st.session_state["selected_module"] = "⏱️ Mold Changeover & Downtime"
+        if st.button("⚙️ Launch Changeover Module", use_container_width=True):
+            st.session_state["active_view"] = "mod_changeover"
             st.rerun()
 
-    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-    col3, col4 = st.columns(2, gap="medium")
+    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
-    with col3:
+    # Bottom Row of Module Cards
+    c3, c4 = st.columns(2, gap="large")
+
+    with c3:
         st.markdown(
             """
-            <div class="panel-card" style="border-top: 4px solid #ef4444;">
-                <h4>📉 Daily Scrap & Defect Analytics</h4>
-                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                    Monitor item-level rejection rates, purge waste, color change scrap, and Six Sigma quality control trends across plant shifts.
-                </p>
-                <div style="margin-top: 1rem;">
-                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+            <div class="hub-card" style="border-top: 5px solid #ef4444;">
+                <div>
+                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Workspace Ready</span>
+                    <h3 style="margin-top: 0.75rem;">📉 Daily Scrap & Defect Analytics</h3>
+                    <p>
+                        Analyze item-level rejection quantities, resin purge losses, masterbatch color change scrap, and Six Sigma quality defect distributions.
+                    </p>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("⚙️ Open Scrap Module", use_container_width=True):
-            st.session_state["selected_module"] = "📉 Daily Scrap & Defect Analytics"
+        if st.button("⚙️ Launch Scrap Module", use_container_width=True):
+            st.session_state["active_view"] = "mod_scrap"
             st.rerun()
 
-    with col4:
+    with c4:
         st.markdown(
             """
-            <div class="panel-card" style="border-top: 4px solid #10b981;">
-                <h4>📈 Monthly Trends & OEE Analytics</h4>
-                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
-                    Month-to-Date (MTD) cumulative production curves, availability/performance/quality OEE factoring, and capacity utilization insights.
-                </p>
-                <div style="margin-top: 1rem;">
-                    <span style="background: #dcfce7; color: #16a34a; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+            <div class="hub-card" style="border-top: 5px solid #10b981;">
+                <div>
+                    <span style="background: #dcfce7; color: #16a34a; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Workspace Ready</span>
+                    <h3 style="margin-top: 0.75rem;">📈 Monthly Trends & OEE Analytics</h3>
+                    <p>
+                        Month-to-Date (MTD) cumulative production curves, availability / performance / quality OEE factoring, and plant capacity utilization insights.
+                    </p>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("⚙️ Open OEE Module", use_container_width=True):
-            st.session_state["selected_module"] = "📈 Monthly Trends & OEE Analytics"
+        if st.button("⚙️ Launch OEE Module", use_container_width=True):
+            st.session_state["active_view"] = "mod_oee"
             st.rerun()
 
 
 # ---------------------------------------------------------
-# 2. MODULE 1: SIZE-WISE PERFORMANCE & HR
+# VIEW 2: MODULE 1 — SIZE-WISE PERFORMANCE & HR
 # ---------------------------------------------------------
-elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
+elif st.session_state["active_view"] == "mod_size_wise":
 
-    # Step A: Ingestion if no file uploaded specifically for Module 1
+    # Top Navigation Breadcrumb Bar
+    c_back, c_title, c_act = st.columns([1.2, 3, 1.2], vertical_alignment="center")
+    with c_back:
+        if st.button("⬅️ Back to Operations Hub", use_container_width=True):
+            st.session_state["active_view"] = "hub_home"
+            st.rerun()
+    with c_title:
+        st.markdown("<h3 style='margin:0; text-align:center; font-weight:800; color:#0f172a;'>📊 SIZE-WISE PERFORMANCE & HR CONSOLE</h3>", unsafe_allow_html=True)
+    with c_act:
+        if "m1_file_bytes" in st.session_state:
+            if st.button("🔄 Change Excel File", use_container_width=True):
+                st.session_state.pop("m1_file_bytes", None)
+                st.session_state.pop("m1_file_name", None)
+                st.rerun()
+
+    st.divider()
+
+    # Step A: Ingestion if no file uploaded
     if "m1_file_bytes" not in st.session_state:
-        st.markdown("## 📊 **SIZE-WISE PERFORMANCE & HR MODULE**")
-        st.markdown("##### Upload your daily production summary sheet to launch this workspace.")
-        st.divider()
-
-        c_up, _ = st.columns([1.8, 1])
+        c_up, _ = st.columns([2, 1])
         with c_up:
             st.markdown(
                 '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #2563eb; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
-                '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Production Workbook</h3>'
-                '<p style="color:#64748b !important;">Select the Excel workbook (.xlsx, .xls) with the daily production details.</p></div>',
+                '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Daily Production Workbook</h3>'
+                '<p style="color:#64748b !important;">Select the Excel workbook (.xlsx, .xls) containing the production details.</p></div>',
                 unsafe_allow_html=True,
             )
             st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
@@ -520,19 +503,19 @@ elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
             uploaded_file = st.file_uploader("Select Excel File (.xlsx, .xls)", type=["xlsx", "xls"], key="m1_uploader")
 
             if uploaded_file is not None:
-                if st.button("🚀 Load Workbook & Generate Dashboard", type="primary", use_container_width=True):
+                if st.button("🚀 Ingest Workbook & Generate Dashboard", type="primary", use_container_width=True):
                     st.session_state["m1_file_bytes"] = uploaded_file.getvalue()
                     st.session_state["m1_file_name"] = uploaded_file.name
                     st.rerun()
 
-    # Step B: Active Workspace
+    # Step B: Live Full-Width Workspace
     else:
         df_details = m1_parse_workbook(st.session_state["m1_file_bytes"])
         all_dates = sorted([d for d in df_details["DateClean"].dropna().unique() if d != "nan"])
 
         # Control Bar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.4, 0.8], gap="small")
+        c_date, c_day, c_night, c_snap = st.columns([1.5, 1, 1, 1.4], gap="small")
 
         with c_date:
             sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
@@ -570,7 +553,7 @@ elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
         low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
         high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
 
-        # Backend JPG Generation
+        # Generate Image Bytes in backend
         jpg_bytes = m1_generate_executive_jpg(
             df_size, total_prod, total_cap, active_mcs, total_hr, day_hr, night_hr,
             hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct,
@@ -586,13 +569,6 @@ elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
                 mime="image/jpeg",
                 use_container_width=True,
             )
-
-        with c_act:
-            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-            if st.button("🔄 Change File", use_container_width=True):
-                st.session_state.pop("m1_file_bytes", None)
-                st.session_state.pop("m1_file_name", None)
-                st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -614,7 +590,7 @@ elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
             unsafe_allow_html=True,
         )
 
-        # KPI Cards Row
+        # KPI Metrics Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
@@ -741,22 +717,28 @@ With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {
 
 
 # ---------------------------------------------------------
-# 3. FUTURE RESERVED WORKSPACES
+# VIEW 3, 4, 5: FUTURE RESERVED WORKSPACES
 # ---------------------------------------------------------
-elif st.session_state["selected_module"] == "⏱️ Mold Changeover & Downtime":
+elif st.session_state["active_view"] == "mod_changeover":
+    if st.button("⬅️ Back to Operations Hub"):
+        st.session_state["active_view"] = "hub_home"
+        st.rerun()
+    st.divider()
     st.markdown("## ⏱️ **MOLD CHANGEOVER & DOWNTIME MODULE**")
-    st.markdown("##### SMED mold replacement optimization and machine availability tracking.")
-    st.divider()
-    st.info("🛠️ This module workspace is ready for your changeover metrics and data format.")
+    st.info("🛠️ This full-width module workspace is ready for your changeover metrics and dataset structure.")
 
-elif st.session_state["selected_module"] == "📉 Daily Scrap & Defect Analytics":
+elif st.session_state["active_view"] == "mod_scrap":
+    if st.button("⬅️ Back to Operations Hub"):
+        st.session_state["active_view"] = "hub_home"
+        st.rerun()
+    st.divider()
     st.markdown("## 📉 **DAILY SCRAP & DEFECT ANALYTICS MODULE**")
-    st.markdown("##### Part-level defect rates, purge loss, and scrap cost analysis.")
-    st.divider()
-    st.info("🛠️ This module workspace is ready for your scrap tracking data format.")
+    st.info("🛠️ This full-width module workspace is ready for your scrap tracking metrics and dataset structure.")
 
-elif st.session_state["selected_module"] == "📈 Monthly Trends & OEE Analytics":
-    st.markdown("## 📈 **MONTHLY TRENDS & OEE ANALYTICS MODULE**")
-    st.markdown("##### Month-to-Date (MTD) cumulative production and plant OEE factoring.")
+elif st.session_state["active_view"] == "mod_oee":
+    if st.button("⬅️ Back to Operations Hub"):
+        st.session_state["active_view"] = "hub_home"
+        st.rerun()
     st.divider()
-    st.info("🛠️ This module workspace is ready for your OEE tracking data format.")
+    st.markdown("## 📈 **MONTHLY TRENDS & OEE ANALYTICS MODULE**")
+    st.info("🛠️ This full-width module workspace is ready for your OEE tracking metrics and dataset structure.")
