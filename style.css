@@ -1,14 +1,14 @@
 /* =========================================================
-   DAILY REPORT RFL — STRICT ONE-PAGE DASHBOARD STYLING
+   DAILY REPORT RFL — STRICT 1-PAGE EXPORT STYLING
    ========================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-    --bg: #f4f7fb;
+    --bg: #f8fafc;
     --surface: #ffffff;
     --text-main: #0f172a;
-    --text-muted: #475569;
+    --text-muted: #64748b;
     --border-color: #e2e8f0;
     --blue-accent: #2563eb;
     --green-accent: #10b981;
@@ -24,231 +24,146 @@ header[data-testid="stHeader"], footer {
     display: none !important;
 }
 
-/* Strict compact viewport padding */
 .block-container {
-    max-width: 1560px !important;
-    padding-top: 0.4rem !important;
-    padding-bottom: 0.5rem !important;
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
+    max-width: 1300px !important;
+    padding: 0.5rem 1rem 1rem 1rem !important;
 }
 
-/* Control Bar Card */
+/* Control Bar */
 .control-bar-card {
     background: #ffffff;
-    border-radius: 10px;
-    padding: 0.5rem 0.9rem 0.2rem 0.9rem;
+    border-radius: 8px;
+    padding: 0.4rem 0.8rem;
     border: 1px solid var(--border-color);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
     margin-bottom: 0.5rem;
 }
 
-/* Fix Streamlit input widget sizes */
-div[data-baseweb="input"], 
-div[data-baseweb="select"],
-div[data-baseweb="input"] input,
-div[data-baseweb="base-input"] {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border-color: #cbd5e1 !important;
-    border-radius: 6px !important;
-    min-height: 32px !important;
-    height: 32px !important;
-    font-size: 0.8rem !important;
+/* Report Main Container (Captured by html2canvas) */
+#report-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1.25rem 1.4rem;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+    max-width: 1240px;
+    margin: 0 auto;
 }
 
-label[data-testid="stWidgetLabel"] p {
-    color: #334155 !important;
-    font-weight: 700 !important;
-    font-size: 0.75rem !important;
-    margin-bottom: -2px !important;
-}
-
-/* Header Banner Card */
-.report-header-banner {
+/* Header Banner */
+.rep-header {
     background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%);
-    border-radius: 10px;
-    padding: 0.6rem 1.25rem;
-    color: #ffffff !important;
+    border-radius: 8px;
+    padding: 0.75rem 1.2rem;
+    color: #ffffff;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
-    box-shadow: 0 4px 12px rgba(9, 30, 58, 0.08);
+    margin-bottom: 0.8rem;
 }
 
-.report-header-banner h2 {
-    color: #ffffff !important;
-    font-size: 1.25rem !important;
-    font-weight: 800 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    line-height: 1.15 !important;
-}
-
-.report-header-banner p {
-    color: #94a3b8 !important;
-    font-size: 0.72rem !important;
-    margin: 0.1rem 0 0 0 !important;
-}
-
-.efficiency-badge-large {
-    background: #10b981;
-    border-radius: 8px;
-    padding: 0.4rem 1rem;
-    text-align: center;
+.rep-header h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 800;
     color: #ffffff;
-    box-shadow: 0 3px 8px rgba(16, 185, 129, 0.25);
 }
 
-.efficiency-badge-large .value {
-    font-size: 1.35rem;
+.rep-header p {
+    margin: 0.1rem 0 0 0;
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.rep-badge {
+    background: #10b981;
+    border-radius: 6px;
+    padding: 0.35rem 0.85rem;
+    text-align: center;
+}
+
+.rep-badge .val {
+    font-size: 1.15rem;
     font-weight: 900;
     line-height: 1;
 }
 
-.efficiency-badge-large .label {
-    font-size: 0.58rem;
+.rep-badge .lbl {
+    font-size: 0.55rem;
     font-weight: 700;
-    letter-spacing: 0.05em;
     text-transform: uppercase;
-    margin-top: 0.1rem;
 }
 
-/* Metric Row Cards */
-.kpi-card {
+/* Section Box */
+.section-box {
     background: #ffffff;
-    border-radius: 8px;
-    padding: 0.45rem 0.6rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
-    text-align: center;
-    border-top: 3px solid var(--blue-accent);
-}
-
-.kpi-card.blue { border-top-color: #2563eb; }
-.kpi-card.purple { border-top-color: #8b5cf6; }
-.kpi-card.yellow { border-top-color: #f59e0b; }
-.kpi-card.indigo { border-top-color: #6366f1; }
-.kpi-card.teal { border-top-color: #06b6d4; }
-.kpi-card.pink { border-top-color: #ec4899; }
-
-.kpi-title {
-    font-size: 0.62rem;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 0.1rem;
-}
-
-.kpi-val {
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: #0f172a;
-    line-height: 1.15;
-}
-
-.kpi-sub {
-    font-size: 0.64rem;
-    color: #94a3b8;
-    margin-top: 0.05rem;
-}
-
-/* Panel Containers */
-.panel-card {
-    background: #ffffff;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    padding: 0.75rem 0.9rem;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
-    margin-bottom: 0.5rem;
-}
-
-.panel-card h4 {
-    font-size: 0.82rem !important;
-    font-weight: 800 !important;
-    margin-bottom: 0.45rem !important;
-    color: #0f172a;
-    letter-spacing: 0.02em;
-}
-
-/* Narrative Report Block */
-.narrative-block {
-    background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 0.65rem 0.8rem;
-    font-size: 0.74rem;
-    line-height: 1.4;
+    padding: 0.6rem 0.8rem;
+    height: 100%;
+}
+
+.section-box h4 {
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+    margin: 0 0 0.4rem 0 !important;
+    color: #0f172a !important;
+}
+
+/* Narrative Statement */
+.narrative-body {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.73rem;
+    line-height: 1.45;
     color: #1e293b;
 }
 
-.narrative-block h5 {
-    font-size: 0.78rem;
+.narrative-body h5 {
+    font-size: 0.76rem;
     font-weight: 700;
     margin: 0.45rem 0 0.1rem 0;
     color: #0f172a;
 }
 
-.narrative-block h5:first-child {
+.narrative-body h5:first-child {
     margin-top: 0;
 }
 
-/* Bottom Dual Highlight Cards */
-.callout-card {
-    border-radius: 8px;
-    padding: 0.55rem 0.75rem;
-    font-size: 0.74rem;
-    line-height: 1.4;
-    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.02);
+/* Clean HTML Table Styling */
+.clean-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.69rem;
+    text-align: center;
 }
 
-.callout-card.green {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-left: 4px solid #16a34a;
+.clean-table th {
+    background: #0f172a;
+    color: #ffffff;
+    font-weight: 700;
+    padding: 4px 6px;
+    border: 1px solid #0f172a;
 }
 
-.callout-card.red {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-left: 4px solid #dc2626;
+.clean-table td {
+    padding: 3px 5px;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
 }
 
-.callout-card h5 {
-    font-size: 0.8rem !important;
-    font-weight: 800 !important;
-    margin: 0 0 0.2rem 0 !important;
+.clean-table tr:nth-child(even) {
+    background-color: #f8fafc;
 }
 
-.callout-card.green h5 { color: #15803d !important; }
-.callout-card.red h5 { color: #b91c1c !important; }
-
-/* Tight Data Tables */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--border-color) !important;
-    border-radius: 8px !important;
+.clean-table tr.subtotal-row td {
+    font-weight: 800;
+    background: #f1f5f9;
+    border-top: 2px solid #cbd5e1;
 }
 
-[data-testid="stDataFrame"] * {
-    font-size: 0.71rem !important;
-}
-
-/* Print Rules for 1-Page Output */
-@media print {
-    .control-bar-card, .no-print {
-        display: none !important;
-    }
-    .block-container {
-        padding: 0 !important;
-        max-width: 100% !important;
-    }
-    .report-header-banner, .panel-card, .kpi-card {
-        box-shadow: none !important;
-        border: 1px solid #cbd5e1 !important;
-    }
-    body {
-        zoom: 88%;
-    }
-}
+.badge-stopped { color: #dc2626; font-weight: 700; }
+.badge-high { color: #16a34a; font-weight: 700; }
+.badge-low { color: #d97706; font-weight: 700; }
