@@ -1,5 +1,5 @@
 # =========================================================
-# DAILY REPORT RFL — COMPLETE EXECUTIVE CONSOLE
+# DAILY REPORT RFL — EXECUTIVE AUTOMATION CONSOLE
 # =========================================================
 import io
 import os
@@ -27,15 +27,12 @@ load_css("style.css")
 if "app_launched" not in st.session_state:
     st.session_state["app_launched"] = False
 
-# =========================================================
-# DATA PARSING ENGINE
-# =========================================================
+# Standard machine sizes sequence
 EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
 
 
 @st.cache_data
 def load_and_parse_data(file_bytes):
-    """Parses raw Excel workbook containing 'Details'."""
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
 
@@ -50,7 +47,6 @@ def load_and_parse_data(file_bytes):
 
 
 def compute_daily_size_summary(df_day_details):
-    """Computes Machine Size performance table with active-shift capacity scaling."""
     records = []
     for sz in EXCEL_SIZES:
         grp = df_day_details[df_day_details["Size"].astype(str).str.replace(".0", "", regex=False) == sz]
@@ -118,7 +114,6 @@ def compute_daily_size_summary(df_day_details):
 
 
 def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
-    """Computes Shift A vs Shift B labor productivity and scrap rate breakdown."""
     a_good = df_day_details["A Good"].sum()
     b_good = df_day_details["B Good"].sum()
 
@@ -201,7 +196,7 @@ def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
 
 
 # =========================================================
-# SECTION 1: SIMPLIFIED UPLOAD SCREEN
+# SECTION 1: UPLOAD SCREEN
 # =========================================================
 if not st.session_state["app_launched"]:
     st.markdown("## 📊 **DAILY REPORT RFL SETUP**")
@@ -228,13 +223,13 @@ if not st.session_state["app_launched"]:
                 st.rerun()
 
 # =========================================================
-# SECTION 2: FULL EXECUTIVE DASHBOARD VIEW
+# SECTION 2: LIVE CONSOLE
 # =========================================================
 else:
     df_details = load_and_parse_data(st.session_state["file_bytes"])
     all_dates = sorted([d for d in df_details["DateClean"].dropna().unique() if d != "nan"])
 
-    # 1. TOP CONTROL BAR
+    # 1. Top Control Bar
     st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
     c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.2, 0.8], gap="small")
 
@@ -242,10 +237,10 @@ else:
         sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
 
     with c_day:
-        day_hr = st.number_input("☀️ **Day Shift HR**", min_value=1, value=65, step=1)
+        day_hr = st.number_input("☀️ **Day Shift HR**", min_value=1, value=73, step=1)
 
     with c_night:
-        night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=60, step=1)
+        night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=61, step=1)
 
     with c_snap:
         st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
@@ -255,7 +250,7 @@ else:
             <script>
             function captureReport() {{
                 const target = window.parent.document.querySelector('#export-report-container');
-                html2canvas(target, {{scale: 2, useCORS: true, backgroundColor: '#ffffff'}}).then(canvas => {{
+                html2canvas(target, {{scale: 2.5, useCORS: true, backgroundColor: '#ffffff'}}).then(canvas => {{
                     const link = document.createElement('a');
                     link.download = 'Daily_Production_Report_{sel_date}.jpg';
                     link.href = canvas.toDataURL('image/jpeg', 0.95);
@@ -279,7 +274,7 @@ else:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Process Metrics
+    # Process metrics
     df_day = df_details[df_details["DateClean"] == sel_date].copy()
     df_size = compute_daily_size_summary(df_day)
     df_shift = compute_shiftwise_productivity(df_day, day_hr, night_hr)
@@ -298,7 +293,7 @@ else:
     avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
     avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
 
-    # 2. TOP HEADER BANNER
+    # 2. Header Banner
     st.markdown(
         f"""
         <div class="report-header-banner">
@@ -316,7 +311,7 @@ else:
         unsafe_allow_html=True,
     )
 
-    # 3. KPI METRICS CARDS ROW
+    # 3. KPI Metrics Cards
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
     k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
@@ -327,15 +322,15 @@ else:
 
     st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
 
-    # 4. MID SECTION: SIZE BREAKDOWN (LEFT) + NARRATIVE ANALYSIS (RIGHT)
+    # 4. Mid Section: Table (Left) + Narrative (Right)
     col_left, col_right = st.columns([1.45, 1.05], gap="medium")
 
     running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
     top_row = running_df.iloc[0] if not running_df.empty else None
 
     stopped_mcs = df_size[(df_size["MC QTY"] == 0) | (df_size["Total Prod (Pcs)"] == 0)]["MC Size"].tolist()
-    low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 10) & (df_size["Total Prod (Pcs)"] > 0)]
-    high_ach_mcs = df_size[(df_size["% Achievement"] >= 90.0) | (df_size["Run Hr Avg"] >= 20.0)]
+    low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
+    high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
 
     with col_left:
         st.markdown('<div class="panel-card"><h4>⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>', unsafe_allow_html=True)
@@ -375,7 +370,7 @@ else:
         if stopped_mcs:
             areas_improvement.append(f"• MC Sizes {', '.join(stopped_mcs)} were completely stopped (0% achievement).")
         for _, r in low_hr_mcs.iterrows():
-            areas_improvement.append(f"• MC Size {r['MC Size']} recorded low run hours ({r['Run Hr Avg']} Hours Avg) and output ({r['% Achievement']:.0f}% achievement).")
+            areas_improvement.append(f"• MC Size {r['MC Size']} recorded lower output achievement ({r['% Achievement']:.0f}% achievement, {r['Run Hr Avg']} Run Hours Avg).")
         for _, r in high_ach_mcs.iterrows():
             areas_improvement.append(f"• MC Size {r['MC Size']} performed exceptionally well with {r['% Achievement']:.0f}% achievement and {r['Run Hr Avg']} Run Hours.")
 
@@ -387,7 +382,7 @@ else:
 Total production reached {total_prod:,} Pcs against a target capacity of {total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}% ({total_ton:.2f} Ton produced).
 
 👥 Manpower Productivity (HR Output)
-With {total_hr} HR personnel deployed across {active_mcs} active machines, average productivity was {int(round(hr_output)):,} Pcs/person and {hr_per_mc:.1f} HR/machine.
+With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {active_mcs} active machines, average productivity was {int(round(hr_output)):,} Pcs/person and {hr_per_mc:.1f} HR/machine.
 
 🏆 Top Contributing Machine
 {top_contrib_text}
@@ -402,7 +397,7 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
                     <h5>🎯 Overall Target Achievement</h5>
                     <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({total_ton:.2f} Ton produced).</p>
                     <h5>👥 Manpower Productivity (HR Output)</h5>
-                    <p>With <b>{total_hr} HR</b> personnel deployed across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
+                    <p>With <b>{total_hr} HR</b> personnel deployed ({day_hr} Day + {night_hr} Night) across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
                     <h5>🏆 Top Contributing Machine</h5>
                     <p>{top_contrib_text}</p>
                     <h5>⚠️ Area for Improvement & Highlights</h5>
@@ -415,7 +410,7 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
         with st.expander("📋 Copy Plain Text Report (for WhatsApp / Email)"):
             st.text_area("Report Text", value=raw_narrative_text, height=160, label_visibility="collapsed")
 
-    # 5. BOTTOM SECTION: SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN
+    # 5. Bottom Section: Shiftwise Breakdown
     st.markdown('<div class="panel-card"><h4>👥 SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN</h4>', unsafe_allow_html=True)
 
     table_cols = ["Shift Name", "HR Count (Persons)", "Total Output (Pcs)", "Good Output (Pcs)", "Rejection (Pcs)", "Rejection Rate", "Good Tonnage", "Per HR Good Output", "Per HR Tonnage"]
@@ -425,15 +420,15 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
     night_row = df_shift.iloc[1]
     tot_shift_row = df_shift.iloc[2]
 
-    pcs_diff_pct = ((day_row["per_hr_pcs_raw"] - night_row["per_hr_pcs_raw"]) / night_row["per_hr_pcs_raw"] * 100) if night_row["per_hr_pcs_raw"] > 0 else 0.0
-    kg_diff_pct = ((day_row["per_hr_kg_raw"] - night_row["per_hr_kg_raw"]) / night_row["per_hr_kg_raw"] * 100) if night_row["per_hr_kg_raw"] > 0 else 0.0
+    pcs_diff_pct = ((night_row["per_hr_pcs_raw"] - day_row["per_hr_pcs_raw"]) / day_row["per_hr_pcs_raw"] * 100) if day_row["per_hr_pcs_raw"] > 0 else 0.0
+    kg_diff_pct = ((night_row["per_hr_kg_raw"] - day_row["per_hr_kg_raw"]) / day_row["per_hr_kg_raw"] * 100) if day_row["per_hr_kg_raw"] > 0 else 0.0
 
     c_hl1, c_hl2 = st.columns(2, gap="medium")
     with c_hl1:
         st.markdown(
             f"""<div class="callout-card green">
                 <h5>👥 Labor Efficiency Highlights</h5>
-                Day Shift achieved <b>{pcs_diff_pct:+.2f}%</b> piece output per HR ({day_row['per_hr_pcs_raw']:,.2f} vs {night_row['per_hr_pcs_raw']:,.2f} Pcs) and <b>{kg_diff_pct:+.2f}%</b> tonnage per HR ({day_row['per_hr_kg_raw']:.2f} vs {night_row['per_hr_kg_raw']:.2f} kg) compared to Night Shift.
+                Night Shift achieved <b>{pcs_diff_pct:+.2f}%</b> piece output per HR ({night_row['per_hr_pcs_raw']:,.2f} vs {day_row['per_hr_pcs_raw']:,.2f} Pcs) and <b>{kg_diff_pct:+.2f}%</b> tonnage per HR ({night_row['per_hr_kg_raw']:.2f} vs {day_row['per_hr_kg_raw']:.2f} kg) compared to Day Shift.
             </div>""",
             unsafe_allow_html=True,
         )
@@ -449,18 +444,16 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # =========================================================
-    # 6. DEDICATED 1-PAGE EXPORT TEMPLATE (Captured by Download Button)
-    # =========================================================
+    # 6. Hidden High-Res Capture Container (for 1-page JPG export)
     t1_rows_html = ""
     for _, r in df_size.iterrows():
-        rem_color = "#dc2626" if r["Remarks"] == "Stopped" else ("#16a34a" if r["Remarks"] == "High Ach." else ("#d97706" if r["Remarks"] == "Low Hours" else "#0f172a"))
+        rem_color = "#dc2626" if r["Remarks"] == "Stopped" else ("#16a34a" if r["Remarks"] == "High Ach." else ("#d97706" if r["Remarks"] == "Low Hours" or r["Remarks"] == "Low Ach." else "#0f172a"))
         t1_rows_html += f"""
         <tr>
             <td style="padding:4px 6px; border:1px solid #e2e8f0; font-weight:700;">{r['MC Size']}</td>
             <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['MC QTY']}</td>
             <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['CT Avg']:.0f}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['Run Hr Avg']:.1f}</td>
+            <td style="padding:4px 6px; border:1px solid #e2e8f0; background:#edf4ff;">{r['Run Hr Avg']:.1f}</td>
             <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['Total Cap (Pcs)']:,}</td>
             <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['Total Prod (Pcs)']:,}</td>
             <td style="padding:4px 6px; border:1px solid #e2e8f0; color:{rem_color}; font-weight:700;">{r['Remarks']}</td>
@@ -472,42 +465,24 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">Sub Total</td>
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">{active_mcs}</td>
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">{avg_ct:.0f}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{avg_run_hr:.1f}</td>
+        <td style="padding:5px 6px; border:1px solid #e2e8f0; background:#edf4ff;">{avg_run_hr:.1f}</td>
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">{int(total_cap):,}</td>
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">{int(total_prod):,}</td>
         <td style="padding:5px 6px; border:1px solid #e2e8f0;">-</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{overall_eff:.0f}%</td>
+        <td style="padding:5px 6px; border:1px solid #e2e8f0; color:#10b981;">{overall_eff:.0f}%</td>
     </tr>
     """
 
-    t2_rows_html = ""
-    for _, r in df_shift.iterrows():
-        is_sub = "background:#f1f5f9; font-weight:800;" if "Total" in r["Shift Name"] else ""
-        t2_rows_html += f"""
-        <tr style="{is_sub}">
-            <td style="padding:5px 6px; border:1px solid #e2e8f0; font-weight:700;">{r['Shift Name']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['HR Count (Persons)']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Total Output (Pcs)']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Good Output (Pcs)']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Rejection (Pcs)']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Rejection Rate']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Good Tonnage']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0; font-weight:700; color:#16a34a;">{r['Per HR Good Output']}</td>
-            <td style="padding:5px 6px; border:1px solid #e2e8f0;">{r['Per HR Tonnage']}</td>
-        </tr>
-        """
-
-    # Hidden dedicated capture card for html2canvas
     st.markdown(
         f"""
         <div style="position: absolute; left: -9999px; top: -9999px;">
-            <div id="export-report-container" style="width: 1120px; background: #ffffff; padding: 24px; font-family: Inter, sans-serif; color: #0f172a;">
-                <!-- Header -->
-                <div style="background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%); border-radius: 10px; padding: 14px 20px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div id="export-report-container" style="width: 1200px; background: #f4f7fc; padding: 20px; font-family: Inter, sans-serif; color: #0f172a;">
+                <!-- Header Banner -->
+                <div style="background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%); border-radius: 12px; padding: 14px 20px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div>
                         <span style="color: #60a5fa; font-size: 11px; font-weight: 800; text-transform: uppercase;">✦ OPERATIONAL ANALYTICS - DAILY SUMMARY</span>
                         <h2 style="margin: 2px 0 0 0; font-size: 20px; font-weight: 800; color: #ffffff;">Daily Production & HR Report</h2>
-                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">📅 Report Date: <b>{sel_date}</b></p>
+                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Comprehensive Operational Efficiency & Machine Performance Dashboard &nbsp;|&nbsp; 📅 Report Date: <b>{sel_date}</b></p>
                     </div>
                     <div style="background: #10b981; border-radius: 8px; padding: 6px 16px; text-align: center;">
                         <div style="font-size: 22px; font-weight: 900; line-height: 1; color: #ffffff;">{overall_eff:.0f}%</div>
@@ -515,21 +490,55 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
                     </div>
                 </div>
 
+                <!-- KPI Cards -->
+                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 12px;">
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #2563eb;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL PROD</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_prod:,}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Pcs Output</div>
+                    </div>
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #8b5cf6;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL CAP</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_cap:,}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Target Pcs</div>
+                    </div>
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #f59e0b;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">ACTIVE MC</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{active_mcs}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Operating MC</div>
+                    </div>
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #6366f1;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL HR</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_hr}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Manpower ({day_hr}D + {night_hr}N)</div>
+                    </div>
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #06b6d4;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">HR OUTPUT</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{int(round(hr_output)):,}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Pcs / Person</div>
+                    </div>
+                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #ec4899;">
+                        <div style="font-size:9px; font-weight:700; color:#64748b;">HR PER MC</div>
+                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{hr_per_mc:.1f}</div>
+                        <div style="font-size:9px; color:#94a3b8;">Persons / MC</div>
+                    </div>
+                </div>
+
                 <!-- Mid Grid -->
                 <div style="display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; margin-bottom: 12px;">
-                    <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 800;">⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>
+                    <div style="background:#fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 12.5px; font-weight: 800;">⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>
                         <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center;">
                             <thead>
                                 <tr style="background: #0f172a; color: #ffffff;">
                                     <th style="padding: 5px;">MC Size</th>
                                     <th style="padding: 5px;">MC QTY</th>
                                     <th style="padding: 5px;">CT Avg</th>
-                                    <th style="padding: 5px;">Run Hr</th>
-                                    <th style="padding: 5px;">Total Cap</th>
-                                    <th style="padding: 5px;">Total Prod</th>
+                                    <th style="padding: 5px;">Run Hr Avg</th>
+                                    <th style="padding: 5px;">Total Cap (Pcs)</th>
+                                    <th style="padding: 5px;">Total Prod (Pcs)</th>
                                     <th style="padding: 5px;">Remarks</th>
-                                    <th style="padding: 5px;">% Ach</th>
+                                    <th style="padding: 5px;">% Achievement</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -538,9 +547,9 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
                         </table>
                     </div>
 
-                    <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 800;">🎯 KEY PERFORMANCE ANALYSIS</h4>
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; font-size: 11.5px; line-height: 1.45;">
+                    <div style="background:#fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 12.5px; font-weight: 800;">🎯 KEY PERFORMANCE ANALYSIS</h4>
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 11.5px; line-height: 1.45;">
                             <h5 style="margin: 0 0 2px 0; font-size: 12px; font-weight: 700;">🎯 Overall Target Achievement</h5>
                             <p style="margin: 0 0 6px 0;">Total production reached <b>{total_prod:,} Pcs</b> against target of <b>{total_cap:,} Pcs</b> (<b style="color: #10b981;">{overall_eff:.0f}% Efficiency</b>, {total_ton:.2f} Ton).</p>
                             
@@ -554,29 +563,6 @@ With {total_hr} HR personnel deployed across {active_mcs} active machines, avera
                             <p style="margin: 0; white-space: pre-line;">{improvement_block_text}</p>
                         </div>
                     </div>
-                </div>
-
-                <!-- Bottom Section -->
-                <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
-                    <h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 800;">👥 SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN</h4>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center;">
-                        <thead>
-                            <tr style="background: #0f172a; color: #ffffff;">
-                                <th style="padding: 5px;">Shift Name</th>
-                                <th style="padding: 5px;">HR Count</th>
-                                <th style="padding: 5px;">Total Output</th>
-                                <th style="padding: 5px;">Good Output</th>
-                                <th style="padding: 5px;">Rejection</th>
-                                <th style="padding: 5px;">Rejection %</th>
-                                <th style="padding: 5px;">Good Ton</th>
-                                <th style="padding: 5px;">Per HR Output</th>
-                                <th style="padding: 5px;">Per HR Tonnage</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {t2_rows_html}
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </div>
