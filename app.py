@@ -1,12 +1,13 @@
 # =========================================================
-# DAILY REPORT RFL — EXECUTIVE AUTOMATION CONSOLE
+# DAILY REPORT RFL — PRODUCTION & HR EXECUTIVE CONSOLE
 # =========================================================
 import io
 import os
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 st.set_page_config(
     page_title="Daily Production & HR Report | RFL",
@@ -27,7 +28,6 @@ load_css("style.css")
 if "app_launched" not in st.session_state:
     st.session_state["app_launched"] = False
 
-# Standard machine sizes sequence
 EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
 
 
@@ -94,6 +94,8 @@ def compute_daily_size_summary(df_day_details):
             remarks = "High Ach."
         elif run_hr_avg < 10.0 and tot_prod_pcs > 0:
             remarks = "Low Hours"
+        elif ach_pct < 65.0:
+            remarks = "Low Ach."
         else:
             remarks = "-"
 
@@ -195,6 +197,165 @@ def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
     return pd.DataFrame(records)
 
 
+def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, day_hr, night_hr, hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct, stopped_mcs, low_hr_mcs, high_ach_mcs):
+    """Generates the clean high-resolution 1-page visual report as JPG bytes."""
+    fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
+    fig.patch.set_facecolor('#f4f7fc')
+    ax.set_facecolor('#f4f7fc')
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+
+    # Header Banner
+    banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#091e3a', edgecolor='none')
+    ax.add_patch(banner)
+    ax.text(4, 94.5, "OPERATIONAL ANALYTICS - DAILY SUMMARY", color='#5ba4fc', fontsize=10, fontweight='bold')
+    ax.text(4, 90.5, "Daily Production & HR Report", color='#ffffff', fontsize=19, fontweight='bold')
+    ax.text(4, 87.2, f"Comprehensive Operational Efficiency & Machine Performance Dashboard   |   Report Date: {sel_date}", color='#94a3b8', fontsize=9.2)
+
+    # Efficiency Badge
+    eff_badge = patches.FancyBboxPatch((82.0, 86.2), 14.0, 10, boxstyle="round,pad=0.2,rounding_size=1", facecolor='#10b981', edgecolor='none')
+    ax.add_patch(eff_badge)
+    ax.text(89.0, 92.2, f"{overall_eff:.0f}%", color='#ffffff', fontsize=23, fontweight='bold', ha='center', va='center')
+    ax.text(89.0, 88.2, "OVERALL EFFICIENCY", color='#ffffff', fontsize=7, fontweight='bold', ha='center', va='center')
+
+    # KPI Cards
+    kpi_data = [
+        ("TOTAL PROD", f"{total_prod:,}", "Pcs Output", "#2563eb"),
+        ("TOTAL CAP", f"{total_cap:,}", "Target Pcs", "#8b5cf6"),
+        ("ACTIVE MC", f"{active_mc}", "Operating MC", "#f59e0b"),
+        ("TOTAL HR", f"{total_hr}", f"Manpower ({day_hr}D + {night_hr}N)", "#6366f1"),
+        ("HR OUTPUT", f"{int(round(hr_output)):,}", "Pcs / Person", "#06b6d4"),
+        ("HR PER MC", f"{hr_per_mc:.1f}", "Persons / MC", "#ec4899"),
+    ]
+
+    kpi_w = 15.0
+    kpi_gap = 1.2
+    for i, (title, val, sub, col_bar) in enumerate(kpi_data):
+        x0 = 2 + i * (kpi_w + kpi_gap)
+        card = patches.FancyBboxPatch((x0, 73.5), kpi_w, 9.5, boxstyle="round,pad=0.2,rounding_size=0.8", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+        ax.add_patch(card)
+        top_bar = patches.FancyBboxPatch((x0 + 0.1, 82.2), kpi_w - 0.2, 0.6, boxstyle="round,pad=0.05,rounding_size=0.3", facecolor=col_bar, edgecolor='none')
+        ax.add_patch(top_bar)
+        ax.text(x0 + kpi_w/2, 80.8, title, color='#64748b', fontsize=7.8, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 77.2, val, color='#0f172a', fontsize=14, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 74.8, sub, color='#94a3b8', fontsize=7.0, ha='center')
+
+    # Left & Right Panels
+    left_card = patches.FancyBboxPatch((2, 2.5), 57.5, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+    ax.add_patch(left_card)
+    ax.text(4, 68.5, "MACHINE WISE PRODUCTION BREAKDOWN", color='#0f172a', fontsize=11, fontweight='bold')
+
+    right_card = patches.FancyBboxPatch((61.0, 2.5), 37.0, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+    ax.add_patch(right_card)
+    ax.text(63.0, 68.5, "KEY PERFORMANCE ANALYSIS", color='#0f172a', fontsize=11, fontweight='bold')
+
+    # Table on Left
+    col_names = ["MC Size", "MC QTY", "CT Avg", "Run Hr Avg", "Total Cap (Pcs)", "Total Prod (Pcs)", "Remarks", "% Achievement"]
+    col_xs = [6.0, 11.5, 17.0, 23.5, 32.5, 41.5, 50.0, 56.5]
+
+    tbl_hdr = patches.Rectangle((3.5, 63.8), 54.5, 3.2, facecolor='#0f172a', edgecolor='none')
+    ax.add_patch(tbl_hdr)
+    for name, cx in zip(col_names, col_xs):
+        ax.text(cx, 65.4, name, color='#ffffff', fontsize=7.5, fontweight='bold', ha='center', va='center')
+
+    row_y = 61.2
+    row_step = 4.25
+
+    for r_i, (_, r) in enumerate(df_size.iterrows()):
+        bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
+        row_bg = patches.Rectangle((3.5, row_y - 1.5), 54.5, row_step, facecolor=bg_c, edgecolor='none')
+        ax.add_patch(row_bg)
+        
+        rh_bg = patches.Rectangle((20.0, row_y - 1.5), 7.0, row_step, facecolor='#edf4ff', edgecolor='none')
+        ax.add_patch(rh_bg)
+        ax.plot([3.5, 58.0], [row_y - 1.5, row_y - 1.5], color='#e2e8f0', linewidth=0.6)
+
+        r_data = [
+            str(r["MC Size"]),
+            str(r["MC QTY"]),
+            f"{r['CT Avg']:.0f}",
+            f"{r['Run Hr Avg']:.1f}",
+            f"{int(r['Total Cap (Pcs)']):,}",
+            f"{int(r['Total Prod (Pcs)']):,}",
+            str(r["Remarks"]),
+            f"{r['% Achievement']:.0f}%"
+        ]
+
+        for c_i, (val, cx) in enumerate(zip(r_data, col_xs)):
+            font_w = 'bold' if c_i in [0, 7] else 'normal'
+            t_col = '#0f172a'
+            if c_i == 6:
+                if val == "Stopped": t_col = '#ef4444'
+                elif "High" in val: t_col = '#10b981'
+                elif "Top" in val: t_col = '#2563eb'
+                elif "Low" in val: t_col = '#f59e0b'
+            elif c_i == 7:
+                num = int(val.replace('%',''))
+                if num == 0: t_col = '#94a3b8'
+                elif num >= 85: t_col = '#10b981'
+                elif num >= 70: t_col = '#f59e0b'
+                else: t_col = '#ef4444'
+            ax.text(cx, row_y + 0.6, val, color=t_col, fontsize=7.6, fontweight=font_w, ha='center', va='center')
+        row_y -= row_step
+
+    # Sub Total row
+    sub_bg = patches.Rectangle((3.5, row_y - 1.5), 54.5, row_step, facecolor='#f1f5f9', edgecolor='none')
+    ax.add_patch(sub_bg)
+    active_grp = df_size[df_size["MC QTY"] > 0]
+    avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mc if active_mc > 0 else 0.0
+    avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mc if active_mc > 0 else 0.0
+
+    sub_vals = ["Sub Total", str(active_mc), f"{avg_ct:.0f}", f"{avg_run_hr:.1f}", f"{int(total_cap):,}", f"{int(total_prod):,}", "-", f"{overall_eff:.0f}%"]
+    for c_i, (val, cx) in enumerate(zip(sub_vals, col_xs)):
+        t_col = '#10b981' if c_i == 7 else '#0f172a'
+        ax.text(cx, row_y + 0.6, val, color=t_col, fontsize=8.0, fontweight='bold', ha='center', va='center')
+    ax.plot([3.5, 58.0], [row_y + row_step - 1.5, row_y + row_step - 1.5], color='#cbd5e1', linewidth=1.2)
+
+    # Narrative on Right
+    narr_y = 65.0
+    ax.text(63.0, narr_y, "Overall Target Achievement", color='#0f172a', fontsize=9.5, fontweight='bold')
+    narr_y -= 2.6
+    p1 = f"Total production reached {total_prod:,} Pcs against a target capacity of\n{total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}%."
+    ax.text(63.0, narr_y, p1, color='#475569', fontsize=7.8, linespacing=1.45, va='top')
+
+    narr_y -= 7.5
+    ax.text(63.0, narr_y, "Manpower Productivity (HR Output)", color='#0f172a', fontsize=9.5, fontweight='bold')
+    narr_y -= 2.6
+    p2 = f"With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across\n{active_mc} active machines, average productivity was {int(round(hr_output)):,} Pcs/person\nand {hr_per_mc:.1f} HR/machine."
+    ax.text(63.0, narr_y, p2, color='#475569', fontsize=7.8, linespacing=1.45, va='top')
+
+    narr_y -= 7.5
+    ax.text(63.0, narr_y, "Top Contributing Machine", color='#0f172a', fontsize=9.5, fontweight='bold')
+    narr_y -= 2.6
+    if top_row is not None:
+        p3 = f"MC Size {top_row['MC Size']} generated highest output of {top_row['Total Prod (Pcs)']:,} Pcs\n(approx. {share_pct:.1f}% of factory production) with {top_row['% Achievement']:.0f}% achievement and\n{top_row['Run Hr Avg']} Run Hours Avg."
+        ax.text(63.0, narr_y, p3, color='#475569', fontsize=7.8, linespacing=1.45, va='top')
+
+    narr_y -= 7.5
+    ax.text(63.0, narr_y, "Area for Improvement & Highlights", color='#0f172a', fontsize=9.5, fontweight='bold')
+    narr_y -= 2.6
+
+    bullets = []
+    if stopped_mcs:
+        bullets.append((f"• MC Sizes {', '.join(stopped_mcs)} were completely stopped (0% achievement).", '#ef4444'))
+    for _, r in low_hr_mcs.iterrows():
+        bullets.append((f"• MC Size {r['MC Size']} recorded lower output ({r['% Achievement']:.0f}% achievement,\n  {r['Run Hr Avg']} Run Hours Avg).", '#ef4444'))
+    for _, r in high_ach_mcs.iterrows():
+        bullets.append((f"• MC Size {r['MC Size']} performed exceptionally well with {r['% Achievement']:.0f}% achievement\n  and {r['Run Hr Avg']} Run Hours.", '#10b981'))
+
+    for b_text, b_col in bullets[:5]:
+        ax.text(63.0, narr_y, b_text, color=b_col, fontsize=7.6, linespacing=1.35, va='top')
+        narr_y -= 3.6 if '\n' not in b_text else 5.2
+
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    buf = io.BytesIO()
+    plt.savefig(buf, format='jpg', facecolor=fig.get_facecolor(), edgecolor='none', dpi=220)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 # =========================================================
 # SECTION 1: UPLOAD SCREEN
 # =========================================================
@@ -231,7 +392,7 @@ else:
 
     # 1. Top Control Bar
     st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-    c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.2, 0.8], gap="small")
+    c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.4, 0.8], gap="small")
 
     with c_date:
         sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
@@ -241,38 +402,6 @@ else:
 
     with c_night:
         night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=61, step=1)
-
-    with c_snap:
-        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-        components.html(
-            f"""
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-            <script>
-            function captureReport() {{
-                const target = window.parent.document.querySelector('#export-report-container');
-                html2canvas(target, {{scale: 2.5, useCORS: true, backgroundColor: '#ffffff'}}).then(canvas => {{
-                    const link = document.createElement('a');
-                    link.download = 'Daily_Production_Report_{sel_date}.jpg';
-                    link.href = canvas.toDataURL('image/jpeg', 0.95);
-                    link.click();
-                }});
-            }}
-            </script>
-            <button onclick="captureReport()" style="background:#2563eb; color:white; border:none; padding:9px 14px; border-radius:8px; font-weight:700; cursor:pointer; font-family:Inter, sans-serif; font-size:12px; width:100%; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">
-                📸 Download JPG
-            </button>
-            """,
-            height=42,
-        )
-
-    with c_act:
-        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 File", use_container_width=True):
-            st.session_state["app_launched"] = False
-            st.session_state.pop("file_bytes", None)
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Process metrics
     df_day = df_details[df_details["DateClean"] == sel_date].copy()
@@ -292,6 +421,40 @@ else:
     active_grp = df_size[df_size["MC QTY"] > 0]
     avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
     avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
+
+    running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
+    top_row = running_df.iloc[0] if not running_df.empty else None
+    share_pct = (top_row["Total Prod (Pcs)"] / total_prod * 100) if (top_row is not None and total_prod > 0) else 0.0
+
+    stopped_mcs = df_size[(df_size["MC QTY"] == 0) | (df_size["Total Prod (Pcs)"] == 0)]["MC Size"].tolist()
+    low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
+    high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
+
+    # Generate Image Bytes in backend
+    jpg_bytes = generate_executive_jpg(
+        df_size, total_prod, total_cap, active_mcs, total_hr, day_hr, night_hr,
+        hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct,
+        stopped_mcs, low_hr_mcs, high_ach_mcs
+    )
+
+    with c_snap:
+        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+        st.download_button(
+            label="📸 Download 1-Page JPG",
+            data=jpg_bytes,
+            file_name=f"Daily_Production_Report_{sel_date}.jpg",
+            mime="image/jpeg",
+            use_container_width=True,
+        )
+
+    with c_act:
+        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+        if st.button("🔄 File", use_container_width=True):
+            st.session_state["app_launched"] = False
+            st.session_state.pop("file_bytes", None)
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # 2. Header Banner
     st.markdown(
@@ -325,13 +488,6 @@ else:
     # 4. Mid Section: Table (Left) + Narrative (Right)
     col_left, col_right = st.columns([1.45, 1.05], gap="medium")
 
-    running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
-    top_row = running_df.iloc[0] if not running_df.empty else None
-
-    stopped_mcs = df_size[(df_size["MC QTY"] == 0) | (df_size["Total Prod (Pcs)"] == 0)]["MC Size"].tolist()
-    low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
-    high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
-
     with col_left:
         st.markdown('<div class="panel-card"><h4>⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>', unsafe_allow_html=True)
 
@@ -359,7 +515,6 @@ else:
     with col_right:
         top_contrib_text = ""
         if top_row is not None:
-            share_pct = (top_row["Total Prod (Pcs)"] / total_prod * 100) if total_prod > 0 else 0.0
             top_contrib_text = (
                 f"MC Size {top_row['MC Size']} generated the highest output of {top_row['Total Prod (Pcs)']:,} Pcs "
                 f"(approx. {share_pct:.1f}% of overall factory production) with {top_row['% Achievement']:.0f}% achievement "
@@ -443,129 +598,3 @@ With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {
         )
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-    # 6. Hidden High-Res Capture Container (for 1-page JPG export)
-    t1_rows_html = ""
-    for _, r in df_size.iterrows():
-        rem_color = "#dc2626" if r["Remarks"] == "Stopped" else ("#16a34a" if r["Remarks"] == "High Ach." else ("#d97706" if r["Remarks"] == "Low Hours" or r["Remarks"] == "Low Ach." else "#0f172a"))
-        t1_rows_html += f"""
-        <tr>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0; font-weight:700;">{r['MC Size']}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['MC QTY']}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['CT Avg']:.0f}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0; background:#edf4ff;">{r['Run Hr Avg']:.1f}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['Total Cap (Pcs)']:,}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0;">{r['Total Prod (Pcs)']:,}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0; color:{rem_color}; font-weight:700;">{r['Remarks']}</td>
-            <td style="padding:4px 6px; border:1px solid #e2e8f0; font-weight:700;">{r['% Achievement']:.0f}%</td>
-        </tr>
-        """
-    t1_rows_html += f"""
-    <tr style="background:#f1f5f9; font-weight:800; border-top:2px solid #cbd5e1;">
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">Sub Total</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{active_mcs}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{avg_ct:.0f}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0; background:#edf4ff;">{avg_run_hr:.1f}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{int(total_cap):,}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">{int(total_prod):,}</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0;">-</td>
-        <td style="padding:5px 6px; border:1px solid #e2e8f0; color:#10b981;">{overall_eff:.0f}%</td>
-    </tr>
-    """
-
-    st.markdown(
-        f"""
-        <div style="position: absolute; left: -9999px; top: -9999px;">
-            <div id="export-report-container" style="width: 1200px; background: #f4f7fc; padding: 20px; font-family: Inter, sans-serif; color: #0f172a;">
-                <!-- Header Banner -->
-                <div style="background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%); border-radius: 12px; padding: 14px 20px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <div>
-                        <span style="color: #60a5fa; font-size: 11px; font-weight: 800; text-transform: uppercase;">✦ OPERATIONAL ANALYTICS - DAILY SUMMARY</span>
-                        <h2 style="margin: 2px 0 0 0; font-size: 20px; font-weight: 800; color: #ffffff;">Daily Production & HR Report</h2>
-                        <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Comprehensive Operational Efficiency & Machine Performance Dashboard &nbsp;|&nbsp; 📅 Report Date: <b>{sel_date}</b></p>
-                    </div>
-                    <div style="background: #10b981; border-radius: 8px; padding: 6px 16px; text-align: center;">
-                        <div style="font-size: 22px; font-weight: 900; line-height: 1; color: #ffffff;">{overall_eff:.0f}%</div>
-                        <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #ffffff;">Overall Efficiency</div>
-                    </div>
-                </div>
-
-                <!-- KPI Cards -->
-                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 12px;">
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #2563eb;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL PROD</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_prod:,}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Pcs Output</div>
-                    </div>
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #8b5cf6;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL CAP</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_cap:,}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Target Pcs</div>
-                    </div>
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #f59e0b;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">ACTIVE MC</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{active_mcs}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Operating MC</div>
-                    </div>
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #6366f1;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">TOTAL HR</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{total_hr}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Manpower ({day_hr}D + {night_hr}N)</div>
-                    </div>
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #06b6d4;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">HR OUTPUT</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{int(round(hr_output)):,}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Pcs / Person</div>
-                    </div>
-                    <div style="background:#fff; border-radius:8px; padding:8px; text-align:center; border:1px solid #e2e8f0; border-top:3px solid #ec4899;">
-                        <div style="font-size:9px; font-weight:700; color:#64748b;">HR PER MC</div>
-                        <div style="font-size:16px; font-weight:800; color:#0f172a;">{hr_per_mc:.1f}</div>
-                        <div style="font-size:9px; color:#94a3b8;">Persons / MC</div>
-                    </div>
-                </div>
-
-                <!-- Mid Grid -->
-                <div style="display: grid; grid-template-columns: 1.45fr 1fr; gap: 12px; margin-bottom: 12px;">
-                    <div style="background:#fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 12.5px; font-weight: 800;">⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>
-                        <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center;">
-                            <thead>
-                                <tr style="background: #0f172a; color: #ffffff;">
-                                    <th style="padding: 5px;">MC Size</th>
-                                    <th style="padding: 5px;">MC QTY</th>
-                                    <th style="padding: 5px;">CT Avg</th>
-                                    <th style="padding: 5px;">Run Hr Avg</th>
-                                    <th style="padding: 5px;">Total Cap (Pcs)</th>
-                                    <th style="padding: 5px;">Total Prod (Pcs)</th>
-                                    <th style="padding: 5px;">Remarks</th>
-                                    <th style="padding: 5px;">% Achievement</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {t1_rows_html}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div style="background:#fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 12.5px; font-weight: 800;">🎯 KEY PERFORMANCE ANALYSIS</h4>
-                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 11.5px; line-height: 1.45;">
-                            <h5 style="margin: 0 0 2px 0; font-size: 12px; font-weight: 700;">🎯 Overall Target Achievement</h5>
-                            <p style="margin: 0 0 6px 0;">Total production reached <b>{total_prod:,} Pcs</b> against target of <b>{total_cap:,} Pcs</b> (<b style="color: #10b981;">{overall_eff:.0f}% Efficiency</b>, {total_ton:.2f} Ton).</p>
-                            
-                            <h5 style="margin: 6px 0 2px 0; font-size: 12px; font-weight: 700;">👥 Manpower Productivity (HR Output)</h5>
-                            <p style="margin: 0 0 6px 0;">With <b>{total_hr} HR</b> on <b>{active_mcs} MCs</b>: <b>{int(round(hr_output)):,} Pcs/person</b> & <b>{hr_per_mc:.1f} HR/machine</b>.</p>
-                            
-                            <h5 style="margin: 6px 0 2px 0; font-size: 12px; font-weight: 700;">🏆 Top Contributing Machine</h5>
-                            <p style="margin: 0 0 6px 0;">{top_contrib_text}</p>
-                            
-                            <h5 style="margin: 6px 0 2px 0; font-size: 12px; font-weight: 700;">⚠️ Area for Improvement & Highlights</h5>
-                            <p style="margin: 0; white-space: pre-line;">{improvement_block_text}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
