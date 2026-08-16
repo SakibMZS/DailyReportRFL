@@ -1,5 +1,5 @@
 /* =========================================================
-   DAILY REPORT RFL — UNIFIED EXECUTIVE DASHBOARD STYLING
+   DAILY REPORT RFL — STRICT ONE-PAGE DASHBOARD STYLING
    ========================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -8,7 +8,7 @@
     --bg: #f4f7fb;
     --surface: #ffffff;
     --text-main: #0f172a;
-    --text-muted: #64748b;
+    --text-muted: #475569;
     --border-color: #e2e8f0;
     --blue-accent: #2563eb;
     --green-accent: #10b981;
@@ -20,87 +20,110 @@
     color: var(--text-main) !important;
 }
 
-header[data-testid="stHeader"] {
+header[data-testid="stHeader"], footer {
     display: none !important;
 }
 
+/* Strict compact viewport padding */
 .block-container {
-    max-width: 1600px !important;
-    padding-top: 0.75rem !important;
-    padding-bottom: 3rem !important;
-    padding-left: 1.5rem !important;
-    padding-right: 1.5rem !important;
+    max-width: 1560px !important;
+    padding-top: 0.4rem !important;
+    padding-bottom: 0.5rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
 }
 
 /* Control Bar Card */
 .control-bar-card {
     background: #ffffff;
-    border-radius: 12px;
-    padding: 0.85rem 1.25rem;
+    border-radius: 10px;
+    padding: 0.5rem 0.9rem 0.2rem 0.9rem;
     border: 1px solid var(--border-color);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.15rem;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
+    margin-bottom: 0.5rem;
+}
+
+/* Fix Streamlit input widget sizes */
+div[data-baseweb="input"], 
+div[data-baseweb="select"],
+div[data-baseweb="input"] input,
+div[data-baseweb="base-input"] {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+    border-radius: 6px !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    font-size: 0.8rem !important;
+}
+
+label[data-testid="stWidgetLabel"] p {
+    color: #334155 !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+    margin-bottom: -2px !important;
 }
 
 /* Header Banner Card */
 .report-header-banner {
     background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%);
-    border-radius: 14px;
-    padding: 1.25rem 1.75rem;
+    border-radius: 10px;
+    padding: 0.6rem 1.25rem;
     color: #ffffff !important;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.15rem;
-    box-shadow: 0 10px 25px rgba(9, 30, 58, 0.12);
+    margin-bottom: 0.5rem;
+    box-shadow: 0 4px 12px rgba(9, 30, 58, 0.08);
 }
 
 .report-header-banner h2 {
     color: #ffffff !important;
-    font-size: 1.65rem !important;
+    font-size: 1.25rem !important;
     font-weight: 800 !important;
     margin: 0 !important;
     padding: 0 !important;
+    line-height: 1.15 !important;
 }
 
 .report-header-banner p {
     color: #94a3b8 !important;
-    font-size: 0.85rem !important;
-    margin: 0.2rem 0 0 0 !important;
+    font-size: 0.72rem !important;
+    margin: 0.1rem 0 0 0 !important;
 }
 
 .efficiency-badge-large {
     background: #10b981;
-    border-radius: 12px;
-    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    padding: 0.4rem 1rem;
     text-align: center;
     color: #ffffff;
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+    box-shadow: 0 3px 8px rgba(16, 185, 129, 0.25);
 }
 
 .efficiency-badge-large .value {
-    font-size: 1.9rem;
+    font-size: 1.35rem;
     font-weight: 900;
     line-height: 1;
 }
 
 .efficiency-badge-large .label {
-    font-size: 0.65rem;
+    font-size: 0.58rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    margin-top: 0.2rem;
+    margin-top: 0.1rem;
 }
 
 /* Metric Row Cards */
 .kpi-card {
     background: #ffffff;
-    border-radius: 12px;
-    padding: 0.85rem 0.9rem;
+    border-radius: 8px;
+    padding: 0.45rem 0.6rem;
     border: 1px solid var(--border-color);
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
     text-align: center;
-    border-top: 4px solid var(--blue-accent);
+    border-top: 3px solid var(--blue-accent);
 }
 
 .kpi-card.blue { border-top-color: #2563eb; }
@@ -111,59 +134,60 @@ header[data-testid="stHeader"] {
 .kpi-card.pink { border-top-color: #ec4899; }
 
 .kpi-title {
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 700;
     color: #64748b;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.2rem;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.1rem;
 }
 
 .kpi-val {
-    font-size: 1.4rem;
+    font-size: 1.1rem;
     font-weight: 800;
     color: #0f172a;
-    line-height: 1.2;
+    line-height: 1.15;
 }
 
 .kpi-sub {
-    font-size: 0.72rem;
+    font-size: 0.64rem;
     color: #94a3b8;
-    margin-top: 0.15rem;
+    margin-top: 0.05rem;
 }
 
 /* Panel Containers */
 .panel-card {
     background: #ffffff;
-    border-radius: 14px;
+    border-radius: 10px;
     border: 1px solid var(--border-color);
-    padding: 1.25rem 1.4rem;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.25rem;
+    padding: 0.75rem 0.9rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    margin-bottom: 0.5rem;
 }
 
 .panel-card h4 {
-    font-size: 1.02rem !important;
+    font-size: 0.82rem !important;
     font-weight: 800 !important;
-    margin-bottom: 0.85rem !important;
+    margin-bottom: 0.45rem !important;
     color: #0f172a;
+    letter-spacing: 0.02em;
 }
 
 /* Narrative Report Block */
 .narrative-block {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 1.1rem 1.25rem;
-    font-size: 0.85rem;
-    line-height: 1.55;
+    border-radius: 8px;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.74rem;
+    line-height: 1.4;
     color: #1e293b;
 }
 
 .narrative-block h5 {
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     font-weight: 700;
-    margin: 0.75rem 0 0.2rem 0;
+    margin: 0.45rem 0 0.1rem 0;
     color: #0f172a;
 }
 
@@ -173,40 +197,58 @@ header[data-testid="stHeader"] {
 
 /* Bottom Dual Highlight Cards */
 .callout-card {
-    border-radius: 12px;
-    padding: 1.1rem 1.25rem;
-    font-size: 0.85rem;
-    line-height: 1.55;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.02);
 }
 
 .callout-card.green {
     background: #f0fdf4;
     border: 1px solid #bbf7d0;
-    border-left: 5px solid #16a34a;
+    border-left: 4px solid #16a34a;
 }
 
 .callout-card.red {
     background: #fef2f2;
     border: 1px solid #fecaca;
-    border-left: 5px solid #dc2626;
+    border-left: 4px solid #dc2626;
 }
 
 .callout-card h5 {
-    font-size: 0.95rem !important;
+    font-size: 0.8rem !important;
     font-weight: 800 !important;
-    margin: 0 0 0.4rem 0 !important;
+    margin: 0 0 0.2rem 0 !important;
 }
 
 .callout-card.green h5 { color: #15803d !important; }
 .callout-card.red h5 { color: #b91c1c !important; }
 
-/* Data Tables */
+/* Tight Data Tables */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--border-color) !important;
-    border-radius: 10px !important;
+    border-radius: 8px !important;
 }
 
 [data-testid="stDataFrame"] * {
-    font-size: 0.77rem !important;
+    font-size: 0.71rem !important;
+}
+
+/* Print Rules for 1-Page Output */
+@media print {
+    .control-bar-card, .no-print {
+        display: none !important;
+    }
+    .block-container {
+        padding: 0 !important;
+        max-width: 100% !important;
+    }
+    .report-header-banner, .panel-card, .kpi-card {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+    }
+    body {
+        zoom: 88%;
+    }
 }
