@@ -1,5 +1,5 @@
 # =========================================================
-# DAILY REPORT RFL — PRODUCTION & HR EXECUTIVE CONSOLE
+# OPERATIONS CONSOLE — MULTI-REPORT ENTERPRISE PLATFORM
 # =========================================================
 import io
 import os
@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 st.set_page_config(
-    page_title="Daily Production & HR Report | RFL",
-    page_icon="📊",
+    page_title="Operations Console | Daily Report RFL",
+    page_icon="🏭",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 
@@ -25,28 +25,32 @@ def load_css(file_name="style.css"):
 
 load_css("style.css")
 
-if "app_launched" not in st.session_state:
-    st.session_state["app_launched"] = False
+# Session state initialization for module navigation
+if "selected_module" not in st.session_state:
+    st.session_state["selected_module"] = "🏠 Hub Home / Overview"
 
 EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
 
 
+# =========================================================
+# MODULE 1: COMPUTATION & GRAPHICS ENGINE
+# =========================================================
 @st.cache_data
-def load_and_parse_data(file_bytes):
+def m1_parse_workbook(file_bytes):
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
 
-    if "Details" in xls.sheet_names:
-        df_det = pd.read_excel(xls, sheet_name="Details")
-        df_det["DateClean"] = pd.to_datetime(df_det["Date"], errors="coerce").dt.strftime("%d-%m-%Y")
-        df_det["DateObj"] = pd.to_datetime(df_det["Date"], errors="coerce")
+    target_sheet = "Details" if "Details" in xls.sheet_names else xls.sheet_names[0]
+    df = pd.read_excel(xls, sheet_name=target_sheet)
+
+    if "Date" in df.columns:
+        df["DateClean"] = pd.to_datetime(df["Date"], errors="coerce").dt.strftime("%d-%m-%Y")
     else:
-        df_det = pd.DataFrame()
+        df["DateClean"] = "Default"
+    return df
 
-    return df_det
 
-
-def compute_daily_size_summary(df_day_details):
+def m1_compute_size_summary(df_day_details):
     records = []
     for sz in EXCEL_SIZES:
         grp = df_day_details[df_day_details["Size"].astype(str).str.replace(".0", "", regex=False) == sz]
@@ -75,16 +79,16 @@ def compute_daily_size_summary(df_day_details):
             avg_ct = grp["CT"].mean()
 
         def calc_row_cap(r):
-            active_shifts = (1.0 if pd.notna(r["A Good"]) and r["A Good"] > 0 else 0.0) + \
-                            (1.0 if pd.notna(r["B Good"]) and r["B Good"] > 0 else 0.0)
+            active_shifts = (1.0 if pd.notna(r.get("A Good")) and r.get("A Good", 0) > 0 else 0.0) + \
+                            (1.0 if pd.notna(r.get("B Good")) and r.get("B Good", 0) > 0 else 0.0)
             if active_shifts == 0 and (r.get("T-Bad", 0) > 0):
                 active_shifts = 1.0
-            return r["STD Cap/Shift"] * active_shifts
+            return r.get("STD Cap/Shift", 0) * active_shifts
 
         tot_cap_pcs = grp.apply(calc_row_cap, axis=1).sum()
         tot_prod_pcs = grp["T-Good"].sum()
-        cap_ton = ((grp.apply(calc_row_cap, axis=1) * grp["Unit Wt"]) / 1000.0).sum()
-        prod_ton = ((grp["T-Good"] * grp["Unit Wt"]) / 1000.0).sum()
+        cap_ton = ((grp.apply(calc_row_cap, axis=1) * grp.get("Unit Wt", 0)) / 1000.0).sum()
+        prod_ton = ((grp["T-Good"] * grp.get("Unit Wt", 0)) / 1000.0).sum()
 
         ach_pct = (tot_prod_pcs / tot_cap_pcs * 100) if tot_cap_pcs > 0 else 0.0
 
@@ -115,18 +119,21 @@ def compute_daily_size_summary(df_day_details):
     return pd.DataFrame(records)
 
 
-def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
-    a_good = df_day_details["A Good"].sum()
-    b_good = df_day_details["B Good"].sum()
+def m1_compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
+    a_good = df_day_details["A Good"].sum() if "A Good" in df_day_details.columns else 0.0
+    b_good = df_day_details["B Good"].sum() if "B Good" in df_day_details.columns else 0.0
 
-    a_tot = df_day_details["A Total"].fillna(0).sum()
-    b_tot = df_day_details["B Total"].fillna(0).sum()
+    a_tot = df_day_details["A Total"].fillna(0).sum() if "A Total" in df_day_details.columns else a_good
+    b_tot = df_day_details["B Total"].fillna(0).sum() if "B Total" in df_day_details.columns else b_good
 
-    a_bad = max(0.0, a_tot - a_good) if a_tot > 0 else (df_day_details["T-Bad"].sum() * (a_good / (a_good + b_good))) if (a_good + b_good) > 0 else 0.0
-    b_bad = max(0.0, b_tot - b_good) if b_tot > 0 else (df_day_details["T-Bad"].sum() - a_bad)
+    t_bad = df_day_details["T-Bad"].sum() if "T-Bad" in df_day_details.columns else 0.0
 
-    a_ton = ((df_day_details["A Good"] * df_day_details["Unit Wt"]) / 1000.0).sum()
-    b_ton = ((df_day_details["B Good"] * df_day_details["Unit Wt"]) / 1000.0).sum()
+    a_bad = max(0.0, a_tot - a_good) if a_tot > 0 else (t_bad * (a_good / (a_good + b_good))) if (a_good + b_good) > 0 else 0.0
+    b_bad = max(0.0, b_tot - b_good) if b_tot > 0 else (t_bad - a_bad)
+
+    unit_wt = df_day_details.get("Unit Wt", 0)
+    a_ton = ((a_good * unit_wt) / 1000.0).sum()
+    b_ton = ((b_good * unit_wt) / 1000.0).sum()
 
     a_per_hr_pcs = (a_good / day_hr) if day_hr > 0 else 0.0
     b_per_hr_pcs = (b_good / night_hr) if night_hr > 0 else 0.0
@@ -197,8 +204,7 @@ def compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
     return pd.DataFrame(records)
 
 
-def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, day_hr, night_hr, hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct, stopped_mcs, low_hr_mcs, high_ach_mcs):
-    """Generates the clean high-resolution 1-page visual report as JPG bytes."""
+def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, day_hr, night_hr, hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct, stopped_mcs, low_hr_mcs, high_ach_mcs):
     fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
     fig.patch.set_facecolor('#f4f7fc')
     ax.set_facecolor('#f4f7fc')
@@ -206,7 +212,7 @@ def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, 
     ax.set_ylim(0, 100)
     ax.axis('off')
 
-    # Header Banner
+    # Banner
     banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#091e3a', edgecolor='none')
     ax.add_patch(banner)
     ax.text(4, 94.5, "OPERATIONAL ANALYTICS - DAILY SUMMARY", color='#5ba4fc', fontsize=10, fontweight='bold')
@@ -250,7 +256,6 @@ def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, 
     ax.add_patch(right_card)
     ax.text(63.0, 68.5, "KEY PERFORMANCE ANALYSIS", color='#0f172a', fontsize=11, fontweight='bold')
 
-    # Table on Left
     col_names = ["MC Size", "MC QTY", "CT Avg", "Run Hr Avg", "Total Cap (Pcs)", "Total Prod (Pcs)", "Remarks", "% Achievement"]
     col_xs = [6.0, 11.5, 17.0, 23.5, 32.5, 41.5, 50.0, 56.5]
 
@@ -299,7 +304,6 @@ def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, 
             ax.text(cx, row_y + 0.6, val, color=t_col, fontsize=7.6, fontweight=font_w, ha='center', va='center')
         row_y -= row_step
 
-    # Sub Total row
     sub_bg = patches.Rectangle((3.5, row_y - 1.5), 54.5, row_step, facecolor='#f1f5f9', edgecolor='none')
     ax.add_patch(sub_bg)
     active_grp = df_size[df_size["MC QTY"] > 0]
@@ -357,181 +361,317 @@ def generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, 
 
 
 # =========================================================
-# SECTION 1: UPLOAD SCREEN
+# GLOBAL PERSISTENT SIDEBAR DIRECTORY
 # =========================================================
-if not st.session_state["app_launched"]:
-    st.markdown("## 📊 **DAILY REPORT RFL SETUP**")
-    st.markdown("##### Upload your production workbook to launch the live console.")
+with st.sidebar:
+    col_logo, col_text = st.columns([1, 2.3], gap="small", vertical_alignment="center")
+    with col_logo:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", use_container_width=True)
+        else:
+            st.markdown("🏭")
+    with col_text:
+        st.markdown("### **OPERATIONS HUB**")
+        st.caption("Industrial Analytics Platform")
+
     st.divider()
 
-    st.markdown(
-        '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #2563eb; max-width:850px; margin:0 auto; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
-        '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Production Workbook</h3>'
-        '<p style="color:#64748b !important;">Select the Excel file (.xlsx) containing the production logs</p></div>',
-        unsafe_allow_html=True,
+    module_list = [
+        "🏠 Hub Home / Overview",
+        "📊 Size-Wise Performance & HR",
+        "⏱️ Mold Changeover & Downtime",
+        "📉 Daily Scrap & Defect Analytics",
+        "📈 Monthly Trends & OEE Analytics",
+    ]
+
+    selected_nav = st.radio(
+        "📍 **NAVIGATION DIRECTORY:**",
+        module_list,
+        index=module_list.index(st.session_state["selected_module"]) if st.session_state["selected_module"] in module_list else 0,
     )
-    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    st.session_state["selected_module"] = selected_nav
 
-    col_up, _ = st.columns([2, 1])
-    with col_up:
-        uploaded_file = st.file_uploader("Select Excel File (.xlsx, .xls)", type=["xlsx", "xls"], key="daily_upload")
+    st.divider()
 
-        if uploaded_file is not None:
-            if st.button("🚀 Launch Executive Dashboard", type="primary", use_container_width=True):
-                st.session_state["file_bytes"] = uploaded_file.getvalue()
-                st.session_state["file_name"] = uploaded_file.name
-                st.session_state["app_launched"] = True
-                st.rerun()
+    # Reset all session states
+    if st.button("🗑️ Clear Cache / Reset Sessions", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+
 
 # =========================================================
-# SECTION 2: LIVE CONSOLE
+# SCREEN ROUTING
 # =========================================================
-else:
-    df_details = load_and_parse_data(st.session_state["file_bytes"])
-    all_dates = sorted([d for d in df_details["DateClean"].dropna().unique() if d != "nan"])
 
-    # 1. Top Control Bar
-    st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-    c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.4, 0.8], gap="small")
+# ---------------------------------------------------------
+# 1. HUB HOME / OVERVIEW
+# ---------------------------------------------------------
+if st.session_state["selected_module"] == "🏠 Hub Home / Overview":
+    st.markdown("## 🏭 **OPERATIONS CONSOLE & REPORTING HUB**")
+    st.markdown("##### Centralized industrial engineering and daily operational management suite.")
+    st.divider()
 
-    with c_date:
-        sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
+    st.markdown("### 📋 **Operational Reporting Modules**")
+    
+    col1, col2 = st.columns(2, gap="medium")
 
-    with c_day:
-        day_hr = st.number_input("☀️ **Day Shift HR**", min_value=1, value=73, step=1)
-
-    with c_night:
-        night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=61, step=1)
-
-    # Process metrics
-    df_day = df_details[df_details["DateClean"] == sel_date].copy()
-    df_size = compute_daily_size_summary(df_day)
-    df_shift = compute_shiftwise_productivity(df_day, day_hr, night_hr)
-
-    total_prod = df_size["Total Prod (Pcs)"].sum()
-    total_cap = df_size["Total Cap (Pcs)"].sum()
-    active_mcs = df_size[df_size["MC QTY"] > 0]["MC QTY"].sum()
-    total_ton = df_size["Prod Ton"].sum()
-    overall_eff = (total_prod / total_cap * 100) if total_cap > 0 else 0.0
-
-    total_hr = day_hr + night_hr
-    hr_output = (total_prod / total_hr) if total_hr > 0 else 0.0
-    hr_per_mc = (total_hr / active_mcs) if active_mcs > 0 else 0.0
-
-    active_grp = df_size[df_size["MC QTY"] > 0]
-    avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
-    avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
-
-    running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
-    top_row = running_df.iloc[0] if not running_df.empty else None
-    share_pct = (top_row["Total Prod (Pcs)"] / total_prod * 100) if (top_row is not None and total_prod > 0) else 0.0
-
-    stopped_mcs = df_size[(df_size["MC QTY"] == 0) | (df_size["Total Prod (Pcs)"] == 0)]["MC Size"].tolist()
-    low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
-    high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
-
-    # Generate Image Bytes in backend
-    jpg_bytes = generate_executive_jpg(
-        df_size, total_prod, total_cap, active_mcs, total_hr, day_hr, night_hr,
-        hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct,
-        stopped_mcs, low_hr_mcs, high_ach_mcs
-    )
-
-    with c_snap:
-        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-        st.download_button(
-            label="📸 Download 1-Page JPG",
-            data=jpg_bytes,
-            file_name=f"Daily_Production_Report_{sel_date}.jpg",
-            mime="image/jpeg",
-            use_container_width=True,
+    with col1:
+        st.markdown(
+            """
+            <div class="panel-card" style="border-top: 4px solid #2563eb;">
+                <h4>📊 Size-Wise Performance & HR</h4>
+                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                    Generate daily plant efficiency briefs, machine-size capacity breakdown, manpower productivity indexing (Pcs/HR & kg/HR), WhatsApp/Email copy text, and 1-page JPG graphical report cards.
+                </p>
+                <div style="margin-top: 1rem;">
+                    <span style="background: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">ACTIVE MODULE</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-
-    with c_act:
-        st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-        if st.button("🔄 File", use_container_width=True):
-            st.session_state["app_launched"] = False
-            st.session_state.pop("file_bytes", None)
+        if st.button("🚀 Open Size-Wise Module", type="primary", use_container_width=True):
+            st.session_state["selected_module"] = "📊 Size-Wise Performance & HR"
             st.rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # 2. Header Banner
-    st.markdown(
-        f"""
-        <div class="report-header-banner">
-            <div>
-                <span style="color: #60a5fa; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">✦ OPERATIONAL ANALYTICS - DAILY SUMMARY</span>
-                <h2>Daily Production & HR Report</h2>
-                <p>Comprehensive Operational Efficiency & Machine Performance Dashboard &nbsp;|&nbsp; 📅 <b>Report Date:</b> {sel_date}</p>
+    with col2:
+        st.markdown(
+            """
+            <div class="panel-card" style="border-top: 4px solid #8b5cf6;">
+                <h4>⏱️ Mold Changeover & Downtime</h4>
+                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                    Track SMED changeover times, toggle conversion benchmarks, hydraulic cylinder optimizations, and idle mechanical downtime losses across production lines.
+                </p>
+                <div style="margin-top: 1rem;">
+                    <span style="background: #f3e8ff; color: #7c3aed; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+                </div>
             </div>
-            <div class="efficiency-badge-large">
-                <div class="value">{overall_eff:.0f}%</div>
-                <div class="label">Overall Efficiency</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("⚙️ Open Changeover Module", use_container_width=True):
+            st.session_state["selected_module"] = "⏱️ Mold Changeover & Downtime"
+            st.rerun()
+
+    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+    col3, col4 = st.columns(2, gap="medium")
+
+    with col3:
+        st.markdown(
+            """
+            <div class="panel-card" style="border-top: 4px solid #ef4444;">
+                <h4>📉 Daily Scrap & Defect Analytics</h4>
+                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                    Monitor item-level rejection rates, purge waste, color change scrap, and Six Sigma quality control trends across plant shifts.
+                </p>
+                <div style="margin-top: 1rem;">
+                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("⚙️ Open Scrap Module", use_container_width=True):
+            st.session_state["selected_module"] = "📉 Daily Scrap & Defect Analytics"
+            st.rerun()
 
-    # 3. KPI Metrics Cards
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
-    k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
-    k3.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">ACTIVE MC</div><div class="kpi-val">{active_mcs}</div><div class="kpi-sub">Operating MC</div></div>', unsafe_allow_html=True)
-    k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({day_hr}D + {night_hr}N)</div></div>', unsafe_allow_html=True)
-    k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,}</div><div class="kpi-sub">Pcs / Person</div></div>', unsafe_allow_html=True)
-    k6.markdown(f'<div class="kpi-card pink"><div class="kpi-title">HR PER MC</div><div class="kpi-val">{hr_per_mc:.1f}</div><div class="kpi-sub">Persons / MC</div></div>', unsafe_allow_html=True)
+    with col4:
+        st.markdown(
+            """
+            <div class="panel-card" style="border-top: 4px solid #10b981;">
+                <h4>📈 Monthly Trends & OEE Analytics</h4>
+                <p style="color: #64748b; font-size: 0.85rem; line-height: 1.5;">
+                    Month-to-Date (MTD) cumulative production curves, availability/performance/quality OEE factoring, and capacity utilization insights.
+                </p>
+                <div style="margin-top: 1rem;">
+                    <span style="background: #dcfce7; color: #16a34a; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">RESERVED WORKSPACE</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("⚙️ Open OEE Module", use_container_width=True):
+            st.session_state["selected_module"] = "📈 Monthly Trends & OEE Analytics"
+            st.rerun()
 
-    st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
 
-    # 4. Mid Section: Table (Left) + Narrative (Right)
-    col_left, col_right = st.columns([1.45, 1.05], gap="medium")
+# ---------------------------------------------------------
+# 2. MODULE 1: SIZE-WISE PERFORMANCE & HR
+# ---------------------------------------------------------
+elif st.session_state["selected_module"] == "📊 Size-Wise Performance & HR":
 
-    with col_left:
-        st.markdown('<div class="panel-card"><h4>⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>', unsafe_allow_html=True)
+    # Step A: Ingestion if no file uploaded specifically for Module 1
+    if "m1_file_bytes" not in st.session_state:
+        st.markdown("## 📊 **SIZE-WISE PERFORMANCE & HR MODULE**")
+        st.markdown("##### Upload your daily production summary sheet to launch this workspace.")
+        st.divider()
 
-        subtotal_row = pd.DataFrame([{
-            "MC Size": "Sub Total",
-            "MC QTY": int(active_mcs),
-            "CT Avg": round(avg_ct, 0),
-            "Run Hr Avg": round(avg_run_hr, 1),
-            "Total Cap (Pcs)": f"{int(total_cap):,}",
-            "Total Prod (Pcs)": f"{int(total_prod):,}",
-            "Remarks": "-",
-            "% Achievement": f"{overall_eff:.0f}%",
-        }])
+        c_up, _ = st.columns([1.8, 1])
+        with c_up:
+            st.markdown(
+                '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #2563eb; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
+                '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Production Workbook</h3>'
+                '<p style="color:#64748b !important;">Select the Excel workbook (.xlsx, .xls) with the daily production details.</p></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
 
-        df_display = df_size[["MC Size", "MC QTY", "CT Avg", "Run Hr Avg", "Total Cap (Pcs)", "Total Prod (Pcs)", "Remarks", "% Achievement"]].copy()
-        df_display["Total Cap (Pcs)"] = df_display["Total Cap (Pcs)"].apply(lambda x: f"{x:,}")
-        df_display["Total Prod (Pcs)"] = df_display["Total Prod (Pcs)"].apply(lambda x: f"{x:,}")
-        df_display["% Achievement"] = df_display["% Achievement"].apply(lambda x: f"{x:.0f}%")
+            uploaded_file = st.file_uploader("Select Excel File (.xlsx, .xls)", type=["xlsx", "xls"], key="m1_uploader")
 
-        df_final_table = pd.concat([df_display, subtotal_row], ignore_index=True)
+            if uploaded_file is not None:
+                if st.button("🚀 Load Workbook & Generate Dashboard", type="primary", use_container_width=True):
+                    st.session_state["m1_file_bytes"] = uploaded_file.getvalue()
+                    st.session_state["m1_file_name"] = uploaded_file.name
+                    st.rerun()
 
-        st.dataframe(df_final_table, use_container_width=True, hide_index=True, height=430)
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Step B: Active Workspace
+    else:
+        df_details = m1_parse_workbook(st.session_state["m1_file_bytes"])
+        all_dates = sorted([d for d in df_details["DateClean"].dropna().unique() if d != "nan"])
 
-    with col_right:
-        top_contrib_text = ""
-        if top_row is not None:
-            top_contrib_text = (
-                f"MC Size {top_row['MC Size']} generated the highest output of {top_row['Total Prod (Pcs)']:,} Pcs "
-                f"(approx. {share_pct:.1f}% of overall factory production) with {top_row['% Achievement']:.0f}% achievement "
-                f"and {top_row['Run Hr Avg']} Run Hours Avg."
+        # Control Bar
+        st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
+        c_date, c_day, c_night, c_snap, c_act = st.columns([1.5, 1, 1, 1.4, 0.8], gap="small")
+
+        with c_date:
+            sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
+
+        with c_day:
+            day_hr = st.number_input("☀️ **Day Shift HR**", min_value=1, value=73, step=1)
+
+        with c_night:
+            night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=61, step=1)
+
+        # Process metrics
+        df_day = df_details[df_details["DateClean"] == sel_date].copy()
+        df_size = m1_compute_size_summary(df_day)
+        df_shift = m1_compute_shiftwise_productivity(df_day, day_hr, night_hr)
+
+        total_prod = df_size["Total Prod (Pcs)"].sum()
+        total_cap = df_size["Total Cap (Pcs)"].sum()
+        active_mcs = df_size[df_size["MC QTY"] > 0]["MC QTY"].sum()
+        total_ton = df_size["Prod Ton"].sum()
+        overall_eff = (total_prod / total_cap * 100) if total_cap > 0 else 0.0
+
+        total_hr = day_hr + night_hr
+        hr_output = (total_prod / total_hr) if total_hr > 0 else 0.0
+        hr_per_mc = (total_hr / active_mcs) if active_mcs > 0 else 0.0
+
+        active_grp = df_size[df_size["MC QTY"] > 0]
+        avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
+        avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
+
+        running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
+        top_row = running_df.iloc[0] if not running_df.empty else None
+        share_pct = (top_row["Total Prod (Pcs)"] / total_prod * 100) if (top_row is not None and total_prod > 0) else 0.0
+
+        stopped_mcs = df_size[(df_size["MC QTY"] == 0) | (df_size["Total Prod (Pcs)"] == 0)]["MC Size"].tolist()
+        low_hr_mcs = df_size[(df_size["Run Hr Avg"] > 0) & (df_size["Run Hr Avg"] < 14) & (df_size["% Achievement"] < 70) & (df_size["Total Prod (Pcs)"] > 0)]
+        high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
+
+        # Backend JPG Generation
+        jpg_bytes = m1_generate_executive_jpg(
+            df_size, total_prod, total_cap, active_mcs, total_hr, day_hr, night_hr,
+            hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct,
+            stopped_mcs, low_hr_mcs, high_ach_mcs
+        )
+
+        with c_snap:
+            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+            st.download_button(
+                label="📸 Download 1-Page JPG",
+                data=jpg_bytes,
+                file_name=f"Daily_Production_Report_{sel_date}.jpg",
+                mime="image/jpeg",
+                use_container_width=True,
             )
 
-        areas_improvement = []
-        if stopped_mcs:
-            areas_improvement.append(f"• MC Sizes {', '.join(stopped_mcs)} were completely stopped (0% achievement).")
-        for _, r in low_hr_mcs.iterrows():
-            areas_improvement.append(f"• MC Size {r['MC Size']} recorded lower output achievement ({r['% Achievement']:.0f}% achievement, {r['Run Hr Avg']} Run Hours Avg).")
-        for _, r in high_ach_mcs.iterrows():
-            areas_improvement.append(f"• MC Size {r['MC Size']} performed exceptionally well with {r['% Achievement']:.0f}% achievement and {r['Run Hr Avg']} Run Hours.")
+        with c_act:
+            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+            if st.button("🔄 Change File", use_container_width=True):
+                st.session_state.pop("m1_file_bytes", None)
+                st.session_state.pop("m1_file_name", None)
+                st.rerun()
 
-        improvement_block_text = "\n".join(areas_improvement) if areas_improvement else "• Operations ran smoothly with no major bottlenecks detected."
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        raw_narrative_text = f"""Dear Sir,
+        # Header Banner
+        st.markdown(
+            f"""
+            <div class="report-header-banner">
+                <div>
+                    <span style="color: #60a5fa; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">✦ OPERATIONAL ANALYTICS - DAILY SUMMARY</span>
+                    <h2>Daily Production & HR Report</h2>
+                    <p>Comprehensive Operational Efficiency & Machine Performance Dashboard &nbsp;|&nbsp; 📅 <b>Report Date:</b> {sel_date}</p>
+                </div>
+                <div class="efficiency-badge-large">
+                    <div class="value">{overall_eff:.0f}%</div>
+                    <div class="label">Overall Efficiency</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # KPI Cards Row
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">ACTIVE MC</div><div class="kpi-val">{active_mcs}</div><div class="kpi-sub">Operating MC</div></div>', unsafe_allow_html=True)
+        k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({day_hr}D + {night_hr}N)</div></div>', unsafe_allow_html=True)
+        k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,}</div><div class="kpi-sub">Pcs / Person</div></div>', unsafe_allow_html=True)
+        k6.markdown(f'<div class="kpi-card pink"><div class="kpi-title">HR PER MC</div><div class="kpi-val">{hr_per_mc:.1f}</div><div class="kpi-sub">Persons / MC</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
+
+        # Mid Section: Table (Left) + Analysis (Right)
+        col_left, col_right = st.columns([1.45, 1.05], gap="medium")
+
+        with col_left:
+            st.markdown('<div class="panel-card"><h4>⚙️ MACHINE WISE PRODUCTION BREAKDOWN</h4>', unsafe_allow_html=True)
+
+            subtotal_row = pd.DataFrame([{
+                "MC Size": "Sub Total",
+                "MC QTY": int(active_mcs),
+                "CT Avg": round(avg_ct, 0),
+                "Run Hr Avg": round(avg_run_hr, 1),
+                "Total Cap (Pcs)": f"{int(total_cap):,}",
+                "Total Prod (Pcs)": f"{int(total_prod):,}",
+                "Remarks": "-",
+                "% Achievement": f"{overall_eff:.0f}%",
+            }])
+
+            df_display = df_size[["MC Size", "MC QTY", "CT Avg", "Run Hr Avg", "Total Cap (Pcs)", "Total Prod (Pcs)", "Remarks", "% Achievement"]].copy()
+            df_display["Total Cap (Pcs)"] = df_display["Total Cap (Pcs)"].apply(lambda x: f"{x:,}")
+            df_display["Total Prod (Pcs)"] = df_display["Total Prod (Pcs)"].apply(lambda x: f"{x:,}")
+            df_display["% Achievement"] = df_display["% Achievement"].apply(lambda x: f"{x:.0f}%")
+
+            df_final_table = pd.concat([df_display, subtotal_row], ignore_index=True)
+
+            st.dataframe(df_final_table, use_container_width=True, hide_index=True, height=430)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with col_right:
+            top_contrib_text = ""
+            if top_row is not None:
+                top_contrib_text = (
+                    f"MC Size {top_row['MC Size']} generated the highest output of {top_row['Total Prod (Pcs)']:,} Pcs "
+                    f"(approx. {share_pct:.1f}% of overall factory production) with {top_row['% Achievement']:.0f}% achievement "
+                    f"and {top_row['Run Hr Avg']} Run Hours Avg."
+                )
+
+            areas_improvement = []
+            if stopped_mcs:
+                areas_improvement.append(f"• MC Sizes {', '.join(stopped_mcs)} were completely stopped (0% achievement).")
+            for _, r in low_hr_mcs.iterrows():
+                areas_improvement.append(f"• MC Size {r['MC Size']} recorded lower output achievement ({r['% Achievement']:.0f}% achievement, {r['Run Hr Avg']} Run Hours Avg).")
+            for _, r in high_ach_mcs.iterrows():
+                areas_improvement.append(f"• MC Size {r['MC Size']} performed exceptionally well with {r['% Achievement']:.0f}% achievement and {r['Run Hr Avg']} Run Hours.")
+
+            improvement_block_text = "\n".join(areas_improvement) if areas_improvement else "• Operations ran smoothly with no major bottlenecks detected."
+
+            raw_narrative_text = f"""Dear Sir,
 
 🎯 Overall Target Achievement
 Total production reached {total_prod:,} Pcs against a target capacity of {total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}% ({total_ton:.2f} Ton produced).
@@ -545,56 +685,78 @@ With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {
 ⚠️ Area for Improvement & Highlights
 {improvement_block_text}"""
 
-        st.markdown(
-            f"""<div class="panel-card">
-                <h4>🎯 KEY PERFORMANCE ANALYSIS</h4>
-                <div class="narrative-block">
-                    <h5>🎯 Overall Target Achievement</h5>
-                    <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({total_ton:.2f} Ton produced).</p>
-                    <h5>👥 Manpower Productivity (HR Output)</h5>
-                    <p>With <b>{total_hr} HR</b> personnel deployed ({day_hr} Day + {night_hr} Night) across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
-                    <h5>🏆 Top Contributing Machine</h5>
-                    <p>{top_contrib_text}</p>
-                    <h5>⚠️ Area for Improvement & Highlights</h5>
-                    <p style="white-space: pre-line; margin: 0;">{improvement_block_text}</p>
-                </div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+            st.markdown(
+                f"""<div class="panel-card">
+                    <h4>🎯 KEY PERFORMANCE ANALYSIS</h4>
+                    <div class="narrative-block">
+                        <h5>🎯 Overall Target Achievement</h5>
+                        <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({total_ton:.2f} Ton produced).</p>
+                        <h5>👥 Manpower Productivity (HR Output)</h5>
+                        <p>With <b>{total_hr} HR</b> personnel deployed ({day_hr} Day + {night_hr} Night) across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
+                        <h5>🏆 Top Contributing Machine</h5>
+                        <p>{top_contrib_text}</p>
+                        <h5>⚠️ Area for Improvement & Highlights</h5>
+                        <p style="white-space: pre-line; margin: 0;">{improvement_block_text}</p>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-        with st.expander("📋 Copy Plain Text Report (for WhatsApp / Email)"):
-            st.text_area("Report Text", value=raw_narrative_text, height=160, label_visibility="collapsed")
+            with st.expander("📋 Copy Plain Text Report (for WhatsApp / Email)"):
+                st.text_area("Report Text", value=raw_narrative_text, height=160, label_visibility="collapsed")
 
-    # 5. Bottom Section: Shiftwise Breakdown
-    st.markdown('<div class="panel-card"><h4>👥 SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN</h4>', unsafe_allow_html=True)
+        # Bottom Section: Shiftwise Breakdown
+        st.markdown('<div class="panel-card"><h4>👥 SHIFTWISE PRODUCTIVITY & SCRAP BREAKDOWN</h4>', unsafe_allow_html=True)
 
-    table_cols = ["Shift Name", "HR Count (Persons)", "Total Output (Pcs)", "Good Output (Pcs)", "Rejection (Pcs)", "Rejection Rate", "Good Tonnage", "Per HR Good Output", "Per HR Tonnage"]
-    st.dataframe(df_shift[table_cols], use_container_width=True, hide_index=True)
+        table_cols = ["Shift Name", "HR Count (Persons)", "Total Output (Pcs)", "Good Output (Pcs)", "Rejection (Pcs)", "Rejection Rate", "Good Tonnage", "Per HR Good Output", "Per HR Tonnage"]
+        st.dataframe(df_shift[table_cols], use_container_width=True, hide_index=True)
 
-    day_row = df_shift.iloc[0]
-    night_row = df_shift.iloc[1]
-    tot_shift_row = df_shift.iloc[2]
+        day_row = df_shift.iloc[0]
+        night_row = df_shift.iloc[1]
+        tot_shift_row = df_shift.iloc[2]
 
-    pcs_diff_pct = ((night_row["per_hr_pcs_raw"] - day_row["per_hr_pcs_raw"]) / day_row["per_hr_pcs_raw"] * 100) if day_row["per_hr_pcs_raw"] > 0 else 0.0
-    kg_diff_pct = ((night_row["per_hr_kg_raw"] - day_row["per_hr_kg_raw"]) / day_row["per_hr_kg_raw"] * 100) if day_row["per_hr_kg_raw"] > 0 else 0.0
+        pcs_diff_pct = ((night_row["per_hr_pcs_raw"] - day_row["per_hr_pcs_raw"]) / day_row["per_hr_pcs_raw"] * 100) if day_row["per_hr_pcs_raw"] > 0 else 0.0
+        kg_diff_pct = ((night_row["per_hr_kg_raw"] - day_row["per_hr_kg_raw"]) / day_row["per_hr_kg_raw"] * 100) if day_row["per_hr_kg_raw"] > 0 else 0.0
 
-    c_hl1, c_hl2 = st.columns(2, gap="medium")
-    with c_hl1:
-        st.markdown(
-            f"""<div class="callout-card green">
-                <h5>👥 Labor Efficiency Highlights</h5>
-                Night Shift achieved <b>{pcs_diff_pct:+.2f}%</b> piece output per HR ({night_row['per_hr_pcs_raw']:,.2f} vs {day_row['per_hr_pcs_raw']:,.2f} Pcs) and <b>{kg_diff_pct:+.2f}%</b> tonnage per HR ({night_row['per_hr_kg_raw']:.2f} vs {day_row['per_hr_kg_raw']:.2f} kg) compared to Day Shift.
-            </div>""",
-            unsafe_allow_html=True,
-        )
+        c_hl1, c_hl2 = st.columns(2, gap="medium")
+        with c_hl1:
+            st.markdown(
+                f"""<div class="callout-card green">
+                    <h5>👥 Labor Efficiency Highlights</h5>
+                    Night Shift achieved <b>{pcs_diff_pct:+.2f}%</b> piece output per HR ({night_row['per_hr_pcs_raw']:,.2f} vs {day_row['per_hr_pcs_raw']:,.2f} Pcs) and <b>{kg_diff_pct:+.2f}%</b> tonnage per HR ({night_row['per_hr_kg_raw']:.2f} vs {day_row['per_hr_kg_raw']:.2f} kg) compared to Day Shift.
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-    with c_hl2:
-        st.markdown(
-            f"""<div class="callout-card red">
-                <h5>⚠️ Rejection & Scrap Control</h5>
-                Overall rejection was maintained at <b>{tot_shift_row['rej_raw']:.2f}%</b> ({int(round(tot_shift_row['bad_raw'])):,} Bad Pcs). Day Shift recorded <b>{day_row['rej_raw']:.2f}%</b> while Night Shift recorded <b>{night_row['rej_raw']:.2f}%</b>.
-            </div>""",
-            unsafe_allow_html=True,
-        )
+        with c_hl2:
+            st.markdown(
+                f"""<div class="callout-card red">
+                    <h5>⚠️ Rejection & Scrap Control</h5>
+                    Overall rejection was maintained at <b>{tot_shift_row['rej_raw']:.2f}%</b> ({int(round(tot_shift_row['bad_raw'])):,} Bad Pcs). Day Shift recorded <b>{day_row['rej_raw']:.2f}%</b> while Night Shift recorded <b>{night_row['rej_raw']:.2f}%</b>.
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------
+# 3. FUTURE RESERVED WORKSPACES
+# ---------------------------------------------------------
+elif st.session_state["selected_module"] == "⏱️ Mold Changeover & Downtime":
+    st.markdown("## ⏱️ **MOLD CHANGEOVER & DOWNTIME MODULE**")
+    st.markdown("##### SMED mold replacement optimization and machine availability tracking.")
+    st.divider()
+    st.info("🛠️ This module workspace is ready for your changeover metrics and data format.")
+
+elif st.session_state["selected_module"] == "📉 Daily Scrap & Defect Analytics":
+    st.markdown("## 📉 **DAILY SCRAP & DEFECT ANALYTICS MODULE**")
+    st.markdown("##### Part-level defect rates, purge loss, and scrap cost analysis.")
+    st.divider()
+    st.info("🛠️ This module workspace is ready for your scrap tracking data format.")
+
+elif st.session_state["selected_module"] == "📈 Monthly Trends & OEE Analytics":
+    st.markdown("## 📈 **MONTHLY TRENDS & OEE ANALYTICS MODULE**")
+    st.markdown("##### Month-to-Date (MTD) cumulative production and plant OEE factoring.")
+    st.divider()
+    st.info("🛠️ This module workspace is ready for your OEE tracking data format.")
