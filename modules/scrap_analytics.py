@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Standard machine position mapping lookup table
+# Machine Position Lookup
 POSITION_MAP = {
     "IMM-280R-25": "A1-280TC", "IMM-380-5": "A2-380", "IMM-380-81": "A3-380 (PC)",
     "IMM-380-82": "A4-380 (PC)", "IMM-380-88": "A5-380", "IMM-380-7": "A6-380",
@@ -24,8 +24,16 @@ POSITION_MAP = {
     "IMM-250-8": "H2-250", "IMM-250-6": "H3-250", "IMM-250-9": "H4-250",
     "IMM-250-10": "H5-250", "IMM-270-1": "H6-270", "IMM-470-3": "I1-470",
     "IMM-470-4": "I2-470", "IMM-470-5": "I3-470", "IMM-470-6": "I4-470",
-    "IMM-530-4": "I5-530", "IMM-800-1": "I6-800",
+    "IMM-530-4": "I5-530", "IMM-800-1": "I6-800", "IMM-530-15": "I7-530",
+    "IMM-530-22": "I8-530", "IMM-120-46": "G7-120", "IMM-380-80": "A7-380"
 }
+
+
+def get_col(df, candidates, default=None):
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return default
 
 
 @st.cache_data
@@ -33,57 +41,75 @@ def m2_parse_workbook(file_bytes):
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
     
-    # 1. Parse Raw Records (This Month)
-    sheet_raw = "This Month" if "This Month" in xls.sheet_names else xls.sheet_names[0]
-    df_raw = pd.read_excel(xls, sheet_name=sheet_raw)
-    date_col = "Added Date" if "Added Date" in df_raw.columns else ("Date" if "Date" in df_raw.columns else df_raw.columns[0])
-    df_raw["DateClean"] = pd.to_datetime(df_raw[date_col], errors="coerce")
-    df_raw = df_raw.dropna(subset=["DateClean"]).sort_values("DateClean")
-    df_raw["DateStr"] = df_raw["DateClean"].dt.strftime("%Y-%m-%d")
-    df_raw["YearMonth"] = df_raw["DateClean"].dt.to_period("M")
+    # Priority sheet detection
+    sheet_name = "RejectionReport" if "RejectionReport" in xls.sheet_names else ("This Month" if "This Month" in xls.sheet_names else xls.sheet_names[0])
+    df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
     
-    # Identify unique months
-    unique_months = df_raw["YearMonth"].unique()
+    # Locate actual table header row dynamically
+    header_idx = None
+    for idx, row in df_raw.iterrows():
+        row_str = " ".join([str(v) for v in row.values])
+        if "Machine" in row_str and ("Quantity" in row_str or "Qty" in row_str or "Cause" in row_str):
+            header_idx = idx
+            break
+            
+    if header_idx is not None:
+        df_clean = pd.read_excel(xls, sheet_name=sheet_name, skiprows=header_idx)
+    else:
+        df_clean = pd.read_excel(xls, sheet_name=sheet_name)
+    
+    # Clean Column names
+    df_clean.columns = [str(c).strip() for c in df_clean.columns]
+    
+    date_col = get_col(df_clean, ["Added Date", "Date", "Entry Date", "AddedDate"], df_clean.columns[-1])
+    df_clean["DateClean"] = pd.to_datetime(df_clean[date_col], errors="coerce")
+    df_clean = df_clean.dropna(subset=["DateClean"]).sort_values("DateClean")
+    df_clean["DateStr"] = df_clean["DateClean"].dt.strftime("%Y-%m-%d")
+    df_clean["YearMonth"] = df_clean["DateClean"].dt.to_period("M")
+    
+    unique_months = df_clean["YearMonth"].unique()
     if len(unique_months) >= 2:
-        df_prev = df_raw[df_raw["YearMonth"] == unique_months[-2]].copy()
-        df_curr = df_raw[df_raw["YearMonth"] == unique_months[-1]].copy()
+        df_prev = df_clean[df_clean["YearMonth"] == unique_months[-2]].copy()
+        df_curr = df_clean[df_clean["YearMonth"] == unique_months[-1]].copy()
     else:
         df_prev = pd.DataFrame()
-        df_curr = df_raw.copy()
-
-    # 2. Check Comparison Sheet for Historical Baseline if present
-    df_comp = None
-    if "Comparison" in xls.sheet_names:
-        df_comp = pd.read_excel(xls, sheet_name="Comparison")
+        df_curr = df_clean.copy()
         
-    return df_prev, df_curr, df_raw, df_comp
+    return df_prev, df_curr, df_clean
 
 
 def m2_compute_daily_rejection(df_day, min_qty=50):
     if df_day.empty:
         return pd.DataFrame()
     
-    mc_col = "Machine" if "Machine" in df_day.columns else df_day.columns[2]
-    item_col = "Item" if "Item" in df_day.columns else df_day.columns[3]
-    cause_col = "Cause" if "Cause" in df_day.columns else "Causes"
+    mc_col = get_col(df_day, ["Machine", "MC SL", "MC Name"], df_day.columns[2])
+    item_col = get_col(df_day, ["Item", "Mold", "Item Name", "Mold / Item"], df_day.columns[3])
+    cause_col = get_col(df_day, ["Cause", "Causes", "Defect", "Reason"], "Cause")
+    qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], "Quantity")
+    wt_col = get_col(df_day, ["Weight", "Rejection Ton", "Weight (Ton)", "Weight (kg)"], "Weight")
     
     records = []
     for mc, grp in df_day.groupby(mc_col):
-        # In Excel raw data: 0.10 quantity = 100 pcs (multiply by 1000)
-        qty_factor = 1000.0 if grp["Quantity"].max() < 100 else 1.0
-        total_pcs = grp["Quantity"].sum() * qty_factor
-        total_ton = grp["Weight"].sum()
+        raw_qty = pd.to_numeric(grp[qty_col], errors="coerce").fillna(0).sum() if qty_col in grp.columns else 0.0
+        # Check if ERP unit is thousands (0.10 -> 100 pcs)
+        qty_factor = 1000.0 if (qty_col in grp.columns and grp[qty_col].max() < 100) else 1.0
+        total_pcs = raw_qty * qty_factor
         
-        # Combine unique causes and items
-        unique_causes = [str(c).strip() for c in grp[cause_col].dropna().unique() if str(c).strip()]
-        causes_str = ", ".join(unique_causes) if unique_causes else "No Rejection"
-        mold_name = str(grp[item_col].iloc[0]) if not grp[item_col].dropna().empty else "-"
-        pos = POSITION_MAP.get(mc, grp.get("Position", pd.Series(["-"])).iloc[0] if "Position" in grp.columns else "-")
+        total_ton = pd.to_numeric(grp[wt_col], errors="coerce").fillna(0).sum() if wt_col in grp.columns else 0.0
+        
+        if cause_col in grp.columns:
+            unique_causes = [str(c).strip() for c in grp[cause_col].dropna().unique() if str(c).strip()]
+            causes_str = ", ".join(unique_causes) if unique_causes else "No Rejection"
+        else:
+            causes_str = "-"
+
+        mold_name = str(grp[item_col].iloc[0]) if (item_col in grp.columns and not grp[item_col].dropna().empty) else "-"
+        pos = POSITION_MAP.get(str(mc), str(grp.get("Position", pd.Series(["-"])).iloc[0] if "Position" in grp.columns else "-"))
         
         if total_pcs >= min_qty:
             records.append({
                 "Position": pos,
-                "Machine": mc,
+                "Machine": str(mc),
                 "Causes": causes_str,
                 "Qty (Pcs)": int(round(total_pcs)),
                 "Weight (Ton)": round(total_ton, 4),
@@ -98,42 +124,43 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
 
 
 def m2_compute_pareto(df_curr):
-    cause_col = "Cause" if "Cause" in df_curr.columns else "Causes"
-    if df_curr.empty or cause_col not in df_curr.columns:
+    cause_col = get_col(df_curr, ["Cause", "Causes", "Defect", "Reason"], None)
+    qty_col = get_col(df_curr, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
+    wt_col = get_col(df_curr, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
+
+    if df_curr.empty or not cause_col:
         return pd.DataFrame()
     
-    qty_factor = 1000.0 if df_curr["Quantity"].max() < 100 else 1.0
+    qty_factor = 1000.0 if (qty_col and df_curr[qty_col].max() < 100) else 1.0
+    
     pareto = df_curr.groupby(cause_col).agg(
-        Rejection_Pcs=("Quantity", lambda x: int(round(x.sum() * qty_factor))),
-        Rejection_Ton=("Weight", "sum")
+        Rejection_Pcs=(qty_col, lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor))) if qty_col else ("DateClean", "count"),
+        Rejection_Ton=(wt_col, lambda x: pd.to_numeric(x, errors="coerce").fillna(0).sum()) if wt_col else ("DateClean", "count")
     ).reset_index()
     
+    pareto = pareto.rename(columns={cause_col: "Cause"})
     total_pcs = pareto["Rejection_Pcs"].sum()
     pareto["% Share"] = (pareto["Rejection_Pcs"] / total_pcs * 100).round(2) if total_pcs > 0 else 0.0
     pareto = pareto.sort_values("Rejection_Pcs", ascending=False).reset_index(drop=True)
     return pareto
 
 
-def m2_compute_tonnage_comparison(df_prev, df_curr, df_comp=None):
-    if df_comp is not None and "Date" in df_comp.columns and "Rejection Ton" in df_comp.columns:
-        # Pull directly from Comparison sheet
-        c_prev = df_comp[["Date", "Rejection Ton"]].dropna().copy()
-        c_prev["Day"] = pd.to_datetime(c_prev["Date"], errors="coerce").dt.day
-        c_prev = c_prev.rename(columns={"Rejection Ton": "Prev_Month_Ton"})[["Day", "Prev_Month_Ton"]]
-        
-        c_curr_cols = [c for c in df_comp.columns if "Rejection Ton." in c or c == "Rejection Ton.1"]
-        if c_curr_cols:
-            c_curr = df_comp[["Date.1", c_curr_cols[0]]].dropna().copy()
-            c_curr["Day"] = pd.to_datetime(c_curr["Date.1"], errors="coerce").dt.day
-            c_curr = c_curr.rename(columns={c_curr_cols[0]: "Curr_Month_Ton"})[["Day", "Curr_Month_Ton"]]
-            df_trend = pd.merge(c_prev, c_curr, on="Day", how="outer").sort_values("Day").fillna(0.0)
-            return df_trend
+def m2_compute_tonnage_comparison(df_prev, df_curr):
+    wt_col_prev = get_col(df_prev, ["Weight", "Rejection Ton"], None) if not df_prev.empty else None
+    wt_col_curr = get_col(df_curr, ["Weight", "Rejection Ton"], None) if not df_curr.empty else None
 
-    # Fallback to computing from raw logs
-    t_prev = df_prev.groupby(df_prev["DateClean"].dt.day)["Weight"].sum().reset_index() if not df_prev.empty else pd.DataFrame(columns=["Day", "Weight"])
-    t_curr = df_curr.groupby(df_curr["DateClean"].dt.day)["Weight"].sum().reset_index() if not df_curr.empty else pd.DataFrame(columns=["Day", "Weight"])
-    t_prev.columns = ["Day", "Prev_Month_Ton"]
-    t_curr.columns = ["Day", "Curr_Month_Ton"]
+    if not df_prev.empty and wt_col_prev:
+        t_prev = df_prev.groupby(df_prev["DateClean"].dt.day)[wt_col_prev].sum().reset_index()
+        t_prev.columns = ["Day", "Prev_Month_Ton"]
+    else:
+        t_prev = pd.DataFrame(columns=["Day", "Prev_Month_Ton"])
+
+    if not df_curr.empty and wt_col_curr:
+        t_curr = df_curr.groupby(df_curr["DateClean"].dt.day)[wt_col_curr].sum().reset_index()
+        t_curr.columns = ["Day", "Curr_Month_Ton"]
+    else:
+        t_curr = pd.DataFrame(columns=["Day", "Curr_Month_Ton"])
+
     return pd.merge(t_prev, t_curr, on="Day", how="outer").sort_values("Day").fillna(0.0)
 
 
@@ -256,7 +283,7 @@ def render_scrap_module():
             st.markdown(
                 '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #dc2626; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
                 '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Rejection / Scrap Workbook</h3>'
-                '<p style="color:#64748b !important;">Select the Excel workbook containing monthly defect records (e.g. RejectionMCwise.xlsx).</p></div>',
+                '<p style="color:#64748b !important;">Select the Excel workbook containing monthly defect records (e.g. rej78.xlsx).</p></div>',
                 unsafe_allow_html=True,
             )
             st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
@@ -267,7 +294,7 @@ def render_scrap_module():
                     st.session_state["m2_file_bytes"] = uploaded_file.getvalue()
                     st.rerun()
     else:
-        df_prev, df_curr, df_full, df_comp = m2_parse_workbook(st.session_state["m2_file_bytes"])
+        df_prev, df_curr, df_full = m2_parse_workbook(st.session_state["m2_file_bytes"])
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
         
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
@@ -280,15 +307,22 @@ def render_scrap_module():
         df_day = df_curr[df_curr["DateStr"] == sel_date].copy()
         df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
         pareto_df = m2_compute_pareto(df_curr)
-        df_trend = m2_compute_tonnage_comparison(df_prev, df_curr, df_comp)
+        df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
-        qty_factor = 1000.0 if df_day["Quantity"].max() < 100 else 1.0
-        total_rej_pcs = int(round(df_day["Quantity"].sum() * qty_factor)) if not df_day.empty else 0
-        total_rej_ton = df_day["Weight"].sum() if not df_day.empty else 0.0
+        qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs"], None)
+        wt_col = get_col(df_day, ["Weight", "Rejection Ton"], None)
+
+        qty_factor = 1000.0 if (qty_col and df_day[qty_col].max() < 100) else 1.0
+        total_rej_pcs = int(round(pd.to_numeric(df_day[qty_col], errors="coerce").fillna(0).sum() * qty_factor)) if (qty_col and not df_day.empty) else 0
+        total_rej_ton = float(pd.to_numeric(df_day[wt_col], errors="coerce").fillna(0).sum()) if (wt_col and not df_day.empty) else 0.0
         high_rej_count = len(df_day_filtered)
         top_cause = pareto_df.iloc[0]["Cause"] if not pareto_df.empty else "None"
-        mtd_ton = df_curr["Weight"].sum() if not df_curr.empty else 0.0
-        prev_avg_ton = (df_prev["Weight"].sum() / df_prev["DateStr"].nunique()) if not df_prev.empty and df_prev["DateStr"].nunique() > 0 else (df_trend["Prev_Month_Ton"].mean() if not df_trend.empty else 0.0)
+        
+        mtd_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
+        mtd_ton = float(pd.to_numeric(df_curr[mtd_wt_col], errors="coerce").fillna(0).sum()) if (mtd_wt_col and not df_curr.empty) else 0.0
+        
+        prev_wt_col = get_col(df_prev, ["Weight", "Rejection Ton"], None)
+        prev_avg_ton = (float(pd.to_numeric(df_prev[prev_wt_col], errors="coerce").fillna(0).sum()) / df_prev["DateStr"].nunique()) if (prev_wt_col and not df_prev.empty and df_prev["DateStr"].nunique() > 0) else (df_trend["Prev_Month_Ton"].mean() if not df_trend.empty else 0.0)
 
         jpg_bytes = m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_ton, top_cause, mtd_ton, prev_avg_ton, high_rej_count)
 
