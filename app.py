@@ -6,6 +6,7 @@ import streamlit as st
 
 # Import isolated modules
 from modules.size_wise import render_size_wise_module
+from modules.scrap_analytics import render_scrap_module
 
 st.set_page_config(
     page_title="Operations Console | Daily Report RFL",
@@ -28,7 +29,7 @@ if "active_view" not in st.session_state:
 
 
 # =========================================================
-# VIEW ROUTING
+# ROUTING CONTROLLER
 # =========================================================
 
 # ---------------------------------------------------------
@@ -74,6 +75,30 @@ if st.session_state["active_view"] == "hub_home":
     with c2:
         st.markdown(
             """
+            <div class="hub-card" style="border-top: 5px solid #ef4444;">
+                <div>
+                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Active Module</span>
+                    <h3 style="margin-top: 0.75rem;">📉 Daily Scrap & Defect Analytics</h3>
+                    <p>
+                        Analyze item-level rejection quantities (&gt;50 pcs threshold), month-over-month scrap tonnage variance, defect Pareto distributions, and visual report generation.
+                    </p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("🚀 Launch Scrap Module", type="primary", use_container_width=True):
+            st.session_state["active_view"] = "mod_scrap"
+            st.rerun()
+
+    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
+
+    # Bottom Row of Module Cards
+    c3, c4 = st.columns(2, gap="large")
+
+    with c3:
+        st.markdown(
+            """
             <div class="hub-card" style="border-top: 5px solid #8b5cf6;">
                 <div>
                     <span style="background: #f3e8ff; color: #7c3aed; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Workspace Ready</span>
@@ -88,30 +113,6 @@ if st.session_state["active_view"] == "hub_home":
         )
         if st.button("⚙️ Launch Changeover Module", use_container_width=True):
             st.session_state["active_view"] = "mod_changeover"
-            st.rerun()
-
-    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
-
-    # Bottom Row of Module Cards
-    c3, c4 = st.columns(2, gap="large")
-
-    with c3:
-        st.markdown(
-            """
-            <div class="hub-card" style="border-top: 5px solid #ef4444;">
-                <div>
-                    <span style="background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Workspace Ready</span>
-                    <h3 style="margin-top: 0.75rem;">📉 Daily Scrap & Defect Analytics</h3>
-                    <p>
-                        Analyze item-level rejection quantities, resin purge losses, masterbatch color change scrap, and Six Sigma quality defect distributions.
-                    </p>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if st.button("⚙️ Launch Scrap Module", use_container_width=True):
-            st.session_state["active_view"] = "mod_scrap"
             st.rerun()
 
     with c4:
@@ -142,7 +143,14 @@ elif st.session_state["active_view"] == "mod_size_wise":
 
 
 # ---------------------------------------------------------
-# VIEW 3, 4, 5: FUTURE RESERVED WORKSPACES
+# VIEW 3: MODULE 2 — DAILY SCRAP & DEFECT ANALYTICS
+# ---------------------------------------------------------
+elif st.session_state["active_view"] == "mod_scrap":
+    render_scrap_module()
+
+
+# ---------------------------------------------------------
+# VIEW 4, 5: FUTURE RESERVED WORKSPACES
 # ---------------------------------------------------------
 elif st.session_state["active_view"] == "mod_changeover":
     if st.button("⬅️ Back to Operations Hub"):
@@ -151,14 +159,6 @@ elif st.session_state["active_view"] == "mod_changeover":
     st.divider()
     st.markdown("## ⏱️ **MOLD CHANGEOVER & DOWNTIME MODULE**")
     st.info("🛠️ This full-width module workspace is ready for your changeover metrics and dataset structure.")
-
-elif st.session_state["active_view"] == "mod_scrap":
-    if st.button("⬅️ Back to Operations Hub"):
-        st.session_state["active_view"] = "hub_home"
-        st.rerun()
-    st.divider()
-    st.markdown("## 📉 **DAILY SCRAP & DEFECT ANALYTICS MODULE**")
-    st.info("🛠️ This full-width module workspace is ready for your scrap tracking metrics and dataset structure.")
 
 elif st.session_state["active_view"] == "mod_oee":
     if st.button("⬅️ Back to Operations Hub"):
