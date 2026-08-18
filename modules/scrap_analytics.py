@@ -218,12 +218,12 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # Top Banner
+    # Banner
     banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#1e1b4b', edgecolor='none')
     ax.add_patch(banner)
     ax.text(4, 94.5, "OPERATIONAL QUALITY & DEFECT CONTROL", color='#a5b4fc', fontsize=10, fontweight='bold')
     ax.text(4, 90.5, "Daily Scrap & Defect Analytics Report", color='#ffffff', fontsize=19, fontweight='bold')
-    ax.text(4, 87.2, f"Line-Level Defect Isolation (>50 Pcs) & Action Intelligence   |   Report Date: {date_formatted}", color='#94a3b8', fontsize=9.2)
+    ax.text(4, 87.2, f"Complete Line Defect Breakdown (>50 Pcs) & Action Intelligence   |   Report Date: {date_formatted}", color='#94a3b8', fontsize=9.2)
 
     # Scrap Badge
     badge = patches.FancyBboxPatch((82.0, 86.2), 14.0, 10, boxstyle="round,pad=0.2,rounding_size=1", facecolor='#dc2626', edgecolor='none')
@@ -261,32 +261,43 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     ax.add_patch(right_card)
     ax.text(67.5, 68.5, "EXECUTIVE SUMMARY & ACTION ANALYSIS", color='#0f172a', fontsize=10.5, fontweight='bold')
 
-    # Table on Left
-    col_names = ["MC Position", "Line", "Smart Manu", "Causes", "Qty (Pcs)", "Weight (kg)"]
-    col_xs = [6.5, 13.5, 22.0, 36.5, 49.5, 57.5]
-    
-    tbl_hdr = patches.Rectangle((3.5, 63.8), 59.0, 3.2, facecolor='#0f172a', edgecolor='none')
-    ax.add_patch(tbl_hdr)
-    for name, cx in zip(col_names, col_xs):
-        ax.text(cx, 65.4, name, color='#ffffff', fontsize=7.2, fontweight='bold', ha='center', va='center')
+    # =========================================================
+    # LEFT PANEL: 2-COLUMN BALANCED TABLE (SHOWS ALL ROWS)
+    # =========================================================
+    mid_idx = (len(df_day_filtered) + 1) // 2
+    sub_a = df_day_filtered.iloc[:mid_idx]
+    sub_b = df_day_filtered.iloc[mid_idx:]
 
-    row_y = 61.2
-    row_step = 3.9
-    for r_i, (_, r) in enumerate(df_day_filtered.head(14).iterrows()):
-        bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
-        row_bg = patches.Rectangle((3.5, row_y - 1.4), 59.0, row_step, facecolor=bg_c, edgecolor='none')
-        ax.add_patch(row_bg)
-        ax.plot([3.5, 62.5], [row_y - 1.4, row_y - 1.4], color='#e2e8f0', linewidth=0.6)
+    cols = ["MC Pos", "Smart Manu", "Causes", "Qty", "kg"]
+    sub_configs = [
+        (sub_a, 3.5, [4.8, 9.8, 18.2, 26.2, 30.5], 28.5),
+        (sub_b, 33.5, [34.8, 39.8, 48.2, 56.2, 60.5], 28.5)
+    ]
 
-        ax.text(col_xs[0], row_y + 0.5, str(r["MC Position"]), color='#0f172a', fontsize=7.0, fontweight='bold', ha='center')
-        ax.text(col_xs[1], row_y + 0.5, str(r["Line"]), color='#64748b', fontsize=7.0, ha='center')
-        ax.text(col_xs[2], row_y + 0.5, str(r["Smart Manu"]), color='#0f172a', fontsize=7.0, ha='center')
-        ax.text(col_xs[3], row_y + 0.5, str(r["Causes"])[:22], color='#ef4444', fontsize=6.8, ha='center')
-        ax.text(col_xs[4], row_y + 0.5, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=7.2, fontweight='bold', ha='center')
-        ax.text(col_xs[5], row_y + 0.5, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=7.0, ha='center')
-        row_y -= row_step
+    for sub_df, left_x, col_xs, tbl_w in sub_configs:
+        tbl_hdr = patches.Rectangle((left_x, 64.2), tbl_w, 2.6, facecolor='#0f172a', edgecolor='none')
+        ax.add_patch(tbl_hdr)
+        for name, cx in zip(cols, col_xs):
+            ax.text(cx, 65.5, name, color='#ffffff', fontsize=6.5, fontweight='bold', ha='center', va='center')
 
-    # Right Panel Blocks
+        row_y = 62.0
+        row_step = 2.85
+        for r_i, (_, r) in enumerate(sub_df.iterrows()):
+            bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
+            row_bg = patches.Rectangle((left_x, row_y - 1.1), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
+            ax.add_patch(row_bg)
+            ax.plot([left_x, left_x + tbl_w], [row_y - 1.1, row_y - 1.1], color='#e2e8f0', linewidth=0.5)
+
+            ax.text(col_xs[0], row_y + 0.3, str(r["MC Position"])[:9], color='#0f172a', fontsize=6.2, fontweight='bold', ha='center')
+            ax.text(col_xs[1], row_y + 0.3, str(r["Smart Manu"])[:11], color='#64748b', fontsize=6.0, ha='center')
+            ax.text(col_xs[2], row_y + 0.3, str(r["Causes"])[:14], color='#ef4444', fontsize=5.8, ha='center')
+            ax.text(col_xs[3], row_y + 0.3, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=6.3, fontweight='bold', ha='center')
+            ax.text(col_xs[4], row_y + 0.3, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=6.0, ha='center')
+            row_y -= row_step
+
+    # =========================================================
+    # RIGHT PANEL: 3 STRUCTURED ANALYTICS BLOCKS
+    # =========================================================
     # Block 1: Approval Brief Box
     brief_box = patches.FancyBboxPatch((67.0, 50.5), 29.5, 15.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#f8fafc', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(brief_box)
@@ -423,7 +434,6 @@ def render_scrap_module():
             top_wt_mc = mc_wt_grp.idxmax() if not mc_wt_grp.empty else "-"
             top_wt_kg = float(mc_wt_grp.max()) if not mc_wt_grp.empty else 0.0
             
-            # Line distribution (GF vs FF)
             df_day["LineCode"] = df_day[mc_col].map(LINE_MAP).fillna("-")
             gf_wt = df_day[df_day["LineCode"].str.startswith("GF")][wt_col].sum()
             ff_wt = df_day[df_day["LineCode"].str.startswith("FF")][wt_col].sum()
@@ -463,7 +473,7 @@ def render_scrap_module():
             """, unsafe_allow_html=True,
         )
 
-        # 6 KPI Cards (with "LAST DAY SCRAP")
+        # 6 KPI Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_ton:.2f} T</div><div class="kpi-sub">Total Rejection</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Average</div></div>', unsafe_allow_html=True)
