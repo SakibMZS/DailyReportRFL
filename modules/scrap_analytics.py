@@ -208,7 +208,7 @@ def m2_compute_tonnage_comparison(df_prev, df_curr):
 
 
 def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton, prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count, total_day_mcs, top_cause, top_cause_pcs, top_cause_pct, top_wt_mc, top_wt_kg, top3_pct, gf_share_pct, ff_share_pct):
-    fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
+    fig, ax = plt.subplots(figsize=(16, 10.2), dpi=220)
     fig.patch.set_facecolor('#f4f7fc')
     ax.set_facecolor('#f4f7fc')
     ax.set_xlim(0, 100)
@@ -218,20 +218,20 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # Banner
-    banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#1e1b4b', edgecolor='none')
+    # 1. Compact Header Banner
+    banner = patches.FancyBboxPatch((1.5, 90.0), 97.0, 8.5, boxstyle="round,pad=0.2,rounding_size=0.8", facecolor='#1e1b4b', edgecolor='none')
     ax.add_patch(banner)
-    ax.text(4, 94.5, "OPERATIONAL QUALITY & DEFECT CONTROL", color='#a5b4fc', fontsize=10, fontweight='bold')
-    ax.text(4, 90.5, "Daily Scrap & Defect Analytics Report", color='#ffffff', fontsize=19, fontweight='bold')
-    ax.text(4, 87.2, f"Complete Line Defect Breakdown (>50 Pcs) & Action Intelligence   |   Report Date: {date_formatted}", color='#94a3b8', fontsize=9.2)
+    ax.text(3.5, 96.2, "OPERATIONAL QUALITY & DEFECT CONTROL", color='#a5b4fc', fontsize=8.2, fontweight='bold')
+    ax.text(3.5, 93.2, "Daily Scrap & Defect Analytics Report", color='#ffffff', fontsize=15.5, fontweight='bold')
+    ax.text(3.5, 91.2, f"Complete Line Defect Breakdown (>50 Pcs) & Action Intelligence   |   Report Date: {date_formatted}", color='#94a3b8', fontsize=8.0)
 
-    # Scrap Badge
-    badge = patches.FancyBboxPatch((82.0, 86.2), 14.0, 10, boxstyle="round,pad=0.2,rounding_size=1", facecolor='#dc2626', edgecolor='none')
+    # Compact Banner Badge
+    badge = patches.FancyBboxPatch((84.0, 90.8), 13.5, 6.9, boxstyle="round,pad=0.15,rounding_size=0.6", facecolor='#dc2626', edgecolor='none')
     ax.add_patch(badge)
-    ax.text(89.0, 92.2, f"{total_rej_ton:.3f}T", color='#ffffff', fontsize=21, fontweight='bold', ha='center', va='center')
-    ax.text(89.0, 88.2, "LAST DAY SCRAP TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='center', va='center')
+    ax.text(90.75, 95.0, f"{total_rej_ton:.3f}T", color='#ffffff', fontsize=16, fontweight='bold', ha='center', va='center')
+    ax.text(90.75, 92.2, "LAST DAY SCRAP TON", color='#ffffff', fontsize=6.2, fontweight='bold', ha='center', va='center')
 
-    # 6 KPI Cards
+    # 2. Compact 6 KPI Cards
     kpis = [
         ("PREV MO. TOTAL", f"{prev_total_ton:.2f} T", "Total Rejection", "#64748b"),
         ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Baseline", "#64748b"),
@@ -241,90 +241,99 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
         ("CRITICAL MC (>50)", f"{high_rej_count}", "Lines Exceeding Limit", "#8b5cf6"),
     ]
 
-    kpi_w, kpi_gap = 15.0, 1.2
+    kpi_w, kpi_gap = 15.1, 1.25
     for i, (title, val, sub, col_bar) in enumerate(kpis):
-        x0 = 2 + i * (kpi_w + kpi_gap)
-        card = patches.FancyBboxPatch((x0, 73.5), kpi_w, 9.5, boxstyle="round,pad=0.2,rounding_size=0.8", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+        x0 = 1.5 + i * (kpi_w + kpi_gap)
+        card = patches.FancyBboxPatch((x0, 82.5), kpi_w, 6.3, boxstyle="round,pad=0.15,rounding_size=0.5", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=0.8)
         ax.add_patch(card)
-        top_bar = patches.FancyBboxPatch((x0 + 0.1, 82.2), kpi_w - 0.2, 0.6, boxstyle="round,pad=0.05,rounding_size=0.3", facecolor=col_bar, edgecolor='none')
+        top_bar = patches.FancyBboxPatch((x0 + 0.1, 88.3), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor='none')
         ax.add_patch(top_bar)
-        ax.text(x0 + kpi_w/2, 80.8, title, color='#64748b', fontsize=7.5, fontweight='bold', ha='center')
-        ax.text(x0 + kpi_w/2, 77.2, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
-        ax.text(x0 + kpi_w/2, 74.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
+        ax.text(x0 + kpi_w/2, 87.2, title, color='#64748b', fontsize=6.8, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 84.8, val, color='#0f172a', fontsize=11.5, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 83.2, sub, color='#94a3b8', fontsize=6.2, ha='center')
 
-    # Left & Right Panels
-    left_card = patches.FancyBboxPatch((2, 2.5), 62.0, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+    # 3. Main Workspace Body (Expanded to 79.5% height)
+    left_card = patches.FancyBboxPatch((1.5, 1.5), 67.0, 79.5, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(4, 68.5, f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(3.5, 79.0, f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}", color='#0f172a', fontsize=10.0, fontweight='bold')
 
-    right_card = patches.FancyBboxPatch((65.5, 2.5), 32.5, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
+    right_card = patches.FancyBboxPatch((70.0, 1.5), 28.5, 79.5, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(right_card)
-    ax.text(67.5, 68.5, "EXECUTIVE SUMMARY & ACTION ANALYSIS", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(71.5, 79.0, "EXECUTIVE SUMMARY & ACTION", color='#0f172a', fontsize=10.0, fontweight='bold')
 
-    # =========================================================
-    # LEFT PANEL: 2-COLUMN BALANCED TABLE (SHOWS ALL ROWS)
-    # =========================================================
+    # Balanced 2-Subtable Display for Left Panel (All Rows Visible)
     mid_idx = (len(df_day_filtered) + 1) // 2
     sub_a = df_day_filtered.iloc[:mid_idx]
     sub_b = df_day_filtered.iloc[mid_idx:]
 
     cols = ["MC Pos", "Smart Manu", "Causes", "Qty", "kg"]
     sub_configs = [
-        (sub_a, 3.5, [4.8, 9.8, 18.2, 26.2, 30.5], 28.5),
-        (sub_b, 33.5, [34.8, 39.8, 48.2, 56.2, 60.5], 28.5)
+        (sub_a, 2.8, [4.5, 9.8, 19.5, 28.5, 33.0], 31.8),
+        (sub_b, 35.8, [37.5, 42.8, 52.5, 61.5, 66.0], 31.8)
     ]
 
     for sub_df, left_x, col_xs, tbl_w in sub_configs:
-        tbl_hdr = patches.Rectangle((left_x, 64.2), tbl_w, 2.6, facecolor='#0f172a', edgecolor='none')
+        tbl_hdr = patches.Rectangle((left_x, 75.0), tbl_w, 2.4, facecolor='#0f172a', edgecolor='none')
         ax.add_patch(tbl_hdr)
         for name, cx in zip(cols, col_xs):
-            ax.text(cx, 65.5, name, color='#ffffff', fontsize=6.5, fontweight='bold', ha='center', va='center')
+            ax.text(cx, 76.2, name, color='#ffffff', fontsize=6.4, fontweight='bold', ha='center', va='center')
 
-        row_y = 62.0
-        row_step = 2.85
+        row_y = 73.0
+        row_step = 3.55
         for r_i, (_, r) in enumerate(sub_df.iterrows()):
             bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
-            row_bg = patches.Rectangle((left_x, row_y - 1.1), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
+            row_bg = patches.Rectangle((left_x, row_y - 1.2), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
             ax.add_patch(row_bg)
-            ax.plot([left_x, left_x + tbl_w], [row_y - 1.1, row_y - 1.1], color='#e2e8f0', linewidth=0.5)
+            ax.plot([left_x, left_x + tbl_w], [row_y - 1.2, row_y - 1.2], color='#e2e8f0', linewidth=0.45)
 
-            ax.text(col_xs[0], row_y + 0.3, str(r["MC Position"])[:9], color='#0f172a', fontsize=6.2, fontweight='bold', ha='center')
-            ax.text(col_xs[1], row_y + 0.3, str(r["Smart Manu"])[:11], color='#64748b', fontsize=6.0, ha='center')
-            ax.text(col_xs[2], row_y + 0.3, str(r["Causes"])[:14], color='#ef4444', fontsize=5.8, ha='center')
-            ax.text(col_xs[3], row_y + 0.3, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=6.3, fontweight='bold', ha='center')
-            ax.text(col_xs[4], row_y + 0.3, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=6.0, ha='center')
+            ax.text(col_xs[0], row_y + 0.35, str(r["MC Position"]), color='#0f172a', fontsize=6.3, fontweight='bold', ha='center')
+            ax.text(col_xs[1], row_y + 0.35, str(r["Smart Manu"]), color='#64748b', fontsize=6.2, ha='center')
+            ax.text(col_xs[2], row_y + 0.35, str(r["Causes"])[:21], color='#ef4444', fontsize=6.0, ha='center')
+            ax.text(col_xs[3], row_y + 0.35, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=6.4, fontweight='bold', ha='center')
+            ax.text(col_xs[4], row_y + 0.35, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=6.2, ha='center')
             row_y -= row_step
 
-    # =========================================================
-    # RIGHT PANEL: 3 STRUCTURED ANALYTICS BLOCKS
-    # =========================================================
-    # Block 1: Approval Brief Box
-    brief_box = patches.FancyBboxPatch((67.0, 50.5), 29.5, 15.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#f8fafc', edgecolor='#e2e8f0', linewidth=1)
-    ax.add_patch(brief_box)
-    ax.text(68.5, 63.8, "📋 Executive Approval Summary", color='#0f172a', fontsize=8.5, fontweight='bold')
-    p1 = f"• {high_rej_count} machines in Plastic-3 exceeded 50 pcs.\n• Total Last Day Scrap: {total_rej_pcs:,} Pcs ({total_rej_ton:.3f} T).\n• Prev Mo: {prev_total_ton:.2f} T ({prev_avg_ton:.2f} T/D avg).\n• This Mo (As of {day_formatted}): {curr_as_of_total_ton:.2f} T ({curr_as_of_avg_ton:.2f} T/D avg)."
-    ax.text(68.5, 61.2, p1, color='#334155', fontsize=7.2, linespacing=1.35, va='top')
+    # Right Panel 3 Info Blocks
+    # Box 1: Executive Summary
+    b1 = patches.FancyBboxPatch((71.2, 54.0), 26.0, 22.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f8fafc', edgecolor='#e2e8f0', linewidth=0.8)
+    ax.add_patch(b1)
+    ax.text(72.5, 73.8, "> Executive Approval Summary", color='#0f172a', fontsize=7.8, fontweight='bold')
+    t1 = (
+        f"• {high_rej_count} machines in Plastic-3 exceeded 50 pcs.\n"
+        f"• Total Last Day Scrap: {total_rej_pcs:,} Pcs ({total_rej_ton:.3f} T).\n"
+        f"• Prev Mo: {prev_total_ton:.2f} T ({prev_avg_ton:.2f} T/D avg).\n"
+        f"• This Mo (As of {day_formatted}): {curr_as_of_total_ton:.2f} T ({curr_as_of_avg_ton:.2f} T/D avg)."
+    )
+    ax.text(72.5, 70.8, t1, color='#334155', fontsize=6.8, linespacing=1.45, va='top')
 
-    # Block 2: Defect Breakdown Box
-    defect_box = patches.FancyBboxPatch((67.0, 29.5), 29.5, 19.0, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#fef2f2', edgecolor='#fecaca', linewidth=1)
-    ax.add_patch(defect_box)
-    ax.text(68.5, 46.2, "⚠️ Top Defect Driver & Heavy Lines", color='#b91c1c', fontsize=8.5, fontweight='bold')
-    p2 = f"• Primary Scrap Cause: '{top_cause}'\n  generating {top_cause_pcs:,} pcs loss ({top_cause_pct:.1f}% share).\n• Heaviest Scrap Machine: Machine {top_wt_mc}\n  generating {top_wt_kg:.1f} kg scrap loss.\n• Priority process tuning required on molds\n  exhibiting repetitive short fill and flashes."
-    ax.text(68.5, 43.6, p2, color='#7f1d1d', fontsize=7.2, linespacing=1.35, va='top')
+    # Box 2: Defect Drivers
+    b2 = patches.FancyBboxPatch((71.2, 28.0), 26.0, 24.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#fef2f2', edgecolor='#fecaca', linewidth=0.8)
+    ax.add_patch(b2)
+    ax.text(72.5, 50.3, "[!] Top Defect Driver & Heavy Lines", color='#b91c1c', fontsize=7.8, fontweight='bold')
+    t2 = (
+        f"• Primary Scrap Cause: '{top_cause}'\n"
+        f"  generating {top_cause_pcs:,} pcs loss ({top_cause_pct:.1f}% share).\n"
+        f"• Secondary: 'Color Problem*'\n"
+        f"• Heaviest Scrap MC: Machine {top_wt_mc}\n"
+        f"  generating {top_wt_kg:.1f} kg scrap loss.\n"
+        f"• Repetitive short filling noted on cutlery\n"
+        f"  and multi-cavity container molds."
+    )
+    ax.text(72.5, 47.3, t2, color='#7f1d1d', fontsize=6.7, linespacing=1.4, va='top')
 
-    # Block 3: Last Day Plant Overview (All Lines Precise Summary)
-    overview_box = patches.FancyBboxPatch((67.0, 5.0), 29.5, 22.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=1)
-    ax.add_patch(overview_box)
-    ax.text(68.5, 25.2, "📊 Last Day Plant Overview (All Lines)", color='#1d4ed8', fontsize=8.5, fontweight='bold')
-    p3 = (
-        f"• Total Logged Lines: {total_day_mcs} machines active\n"
+    # Box 3: Last Day Overview
+    b3 = patches.FancyBboxPatch((71.2, 3.0), 26.0, 23.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=0.8)
+    ax.add_patch(b3)
+    ax.text(72.5, 24.3, "> Last Day Plant Overview", color='#1d4ed8', fontsize=7.8, fontweight='bold')
+    t3 = (
+        f"• Total Active Lines Logged: {total_day_mcs} machines\n"
         f"  ({high_rej_count} lines >50 pcs, {total_day_mcs - high_rej_count} minor lines <=50 pcs).\n"
         f"• Overall Factory Scrap: {total_rej_pcs:,} Pcs / {total_rej_ton:.3f} Ton.\n"
         f"• Top 3 Causes Account for: {top3_pct:.1f}% of lost pcs.\n"
-        f"• Shop Floor Distribution: GF sections generated {gf_share_pct:.1f}%\n"
-        f"  of scrap weight; FF sections generated {ff_share_pct:.1f}%."
+        f"• Shop Floor Distribution: GF sections generated\n"
+        f"  {gf_share_pct:.1f}% of scrap wt; FF sections generated {ff_share_pct:.1f}%."
     )
-    ax.text(68.5, 22.6, p3, color='#1e3a8a', fontsize=7.1, linespacing=1.35, va='top')
+    ax.text(72.5, 21.3, t3, color='#1e3a8a', fontsize=6.7, linespacing=1.4, va='top')
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
@@ -418,7 +427,7 @@ def render_scrap_module():
         pareto_df = m2_compute_pareto(df_curr)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
-        # Analytics for top defect cause & heaviest machine on selected day
+        # Top defect cause & heaviest machine metrics
         if not df_day.empty and cause_col in df_day.columns and qty_col in df_day.columns:
             cause_grp = df_day.groupby(cause_col)[qty_col].sum() * qty_factor
             top_cause = cause_grp.idxmax() if not cause_grp.empty else "General"
@@ -476,7 +485,7 @@ def render_scrap_module():
         # 6 KPI Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_ton:.2f} T</div><div class="kpi-sub">Total Rejection</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Average</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Baseline</div></div>', unsafe_allow_html=True)
         k3.markdown(f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
         k4.markdown(f'<div class="kpi-card purple"><div class="kpi-title">THIS MO. AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
         k5.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY SCRAP</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs</div></div>', unsafe_allow_html=True)
