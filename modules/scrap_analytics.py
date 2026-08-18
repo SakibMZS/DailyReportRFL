@@ -4,29 +4,75 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Machine Position Lookup
-POSITION_MAP = {
-    "IMM-280R-25": "A1-280TC", "IMM-380-5": "A2-380", "IMM-380-81": "A3-380 (PC)",
-    "IMM-380-82": "A4-380 (PC)", "IMM-380-88": "A5-380", "IMM-380-7": "A6-380",
-    "IMM-380-60": "B1-380", "IMM-380-6": "B2-380", "IMM-380-58": "B3-380",
-    "IMM-380-59": "B4-380", "IMM-380-76": "B5-380", "IMM-380-75": "B6-380",
-    "IMM-380-57": "C1-380", "IMM-380-36": "C2-380", "IMM-380-45": "C3-380",
-    "IMM-380-43": "C4-380", "IMM-380-44": "C5-380-44", "IMM-380-74": "C6-380",
-    "IMM-330-4": "D1-330", "IMM-330-3": "D2-330", "IMM-330-5": "D3-330",
-    "IMM-330-6": "D4-330", "IMM-428-2": "D5-HP-428-2", "IMM-428-4": "D6-HP-428-4",
-    "IMM-428-3": "D7-HP-428-3", "IMM-428-1": "D8-HP-428-1", "IMM-160-5": "E1-160",
-    "IMM-160-7": "E2-160", "IMM-160-8": "E3-160", "IMM-160-9": "E4-160",
-    "IMM-160-12": "E5-160", "IMM-160-14": "E6-160", "IMM-160-10": "F1-160",
-    "IMM-160-11": "F2-160", "IMM-160-13": "F3-160", "IMM-160-15": "F4-160",
-    "IMM-160-16": "F5-160", "IMM-160-6": "F6-160", "IMM-120-20": "G1-120",
-    "IMM-120-4": "G2-120", "IMM-120-19": "G3-120", "IMM-120-14": "G4-120",
-    "IMM-90-2": "G5-90", "IMM-90-1": "G6-90", "IMM-250-7": "H1-250",
-    "IMM-250-8": "H2-250", "IMM-250-6": "H3-250", "IMM-250-9": "H4-250",
-    "IMM-250-10": "H5-250", "IMM-270-1": "H6-270", "IMM-470-3": "I1-470",
-    "IMM-470-4": "I2-470", "IMM-470-5": "I3-470", "IMM-470-6": "I4-470",
-    "IMM-530-4": "I5-530", "IMM-800-1": "I6-800", "IMM-530-15": "I7-530",
-    "IMM-530-22": "I8-530", "IMM-120-46": "G7-120", "IMM-380-80": "A7-380"
-}
+# =========================================================
+# STANDARD MACHINE POSITION & LINE MAPPING
+# =========================================================
+MAPPING_DATA = [
+    ("A1-160", "FF A-B", "IMM-160-6"),
+    ("A2-120", "FF A-B", "IMM-120-20"),
+    ("A3-120", "FF A-B", "IMM-120-28"),
+    ("A4-120", "FF A-B", "IMM-120-29"),
+    ("A5-160", "FF A-B", "IMM-160-7"),
+    ("A6-160", "FF A-B", "IMM-160-12"),
+    ("A7-160", "FF A-B", "IMM-160-48"),
+    ("B1-120", "FF A-B", "IMM-120-11"),
+    ("B2-120", "FF A-B", "IMM-120-15"),
+    ("B3-120", "FF A-B", "IMM-120-14"),
+    ("B4-120", "FF A-B", "IMM-120-75"),
+    ("B5-90PC", "FF A-B", "IMM-90-8"),
+    ("B6-90PC", "FF A-B", "IMM-90-9"),
+    ("B7-120PC", "FF A-B", "IMM-120-32"),
+    ("B8-120PC", "FF A-B", "IMM-120-27"),
+    ("C1-120", "FF C-D", "IMM-120-4"),
+    ("C2-160", "FF C-D", "IMM-160-17"),
+    ("C3-120", "FF C-D", "IMM-120-22"),
+    ("C4-120PC", "FF C-D", "IMM-120-46"),
+    ("C5-90", "FF C-D", "IMM-90-4"),
+    ("C6-120", "FF C-D", "IMM-120-47"),
+    ("C7-160", "FF C-D", "IMM-160-51"),
+    ("D1-160", "FF C-D", "IMM-160-39"),
+    ("D2-160", "FF C-D", "IMM-160-79"),
+    ("D3-160", "FF C-D", "IMM-160-80"),
+    ("A1-280TC", "GF A-B", "IMM-280R-25"),
+    ("A2-380", "GF A-B", "IMM-380-5"),
+    ("A3-380 (PC)", "GF A-B", "IMM-380-81"),
+    ("A4-380", "GF A-B", "IMM-380-80"),
+    ("A5-HP-330", "GF A-B", "IMM-330-4"),
+    ("B1-470", "GF A-B", "IMM-470-5"),
+    ("B2-380", "GF A-B", "IMM-380-6"),
+    ("B3-530", "GF A-B", "IMM-530-15"),
+    ("B4-530", "GF A-B", "IMM-530-16"),
+    ("B5-530", "GF A-B", "IMM-530-22"),
+    ("B6-380", "GF A-B", "IMM-380-4"),
+    ("C1-800-30", "GF C-D", "IMM-800-30"),
+    ("C2-800-31", "GF C-D", "IMM-800-31"),
+    ("C3-270-1", "GF C-D", "IMM-270-1"),
+    ("C4-380-73", "GF C-D", "IMM-380-73"),
+    ("C5-380-44", "GF C-D", "IMM-380-44"),
+    ("C6-280TC", "GF C-D", "IMM-280R-3"),
+    ("D1-280TC", "GF C-D", "IMM-280R-24"),
+    ("D2-MA2-250", "GF C-D", "IMM-250-106"),
+    ("D3-330-1", "GF C-D", "IMM-330-1"),
+    ("D4-HP-330-5", "GF C-D", "IMM-330-5"),
+    ("D5-428-1", "GF C-D", "IMM-428-1"),
+    ("D6-HP-428-4", "GF C-D", "IMM-428-4"),
+    ("D7-HP-330", "GF C-D", "IMM-330-8"),
+    ("E1-380-90", "GF E-F", "IMM-380-90"),
+    ("E2-380-94", "GF E-F", "IMM-380-94"),
+    ("E3-380-88", "GF E-F", "IMM-380-88"),
+    ("E4-380-76", "GF E-F", "IMM-380-76"),
+    ("E5-380-62", "GF E-F", "IMM-380-62"),
+    ("E6-380-75", "GF E-F", "IMM-380-75"),
+    ("F1-380-92", "GF E-F", "IMM-380-92"),
+    ("F2-380-93", "GF E-F", "IMM-380-93"),
+    ("F3-380-98", "GF E-F", "IMM-380-98"),
+    ("F4-380-99", "GF E-F", "IMM-380-99"),
+    ("F5-380-101", "GF E-F", "IMM-380-101"),
+    ("F6-380-100", "GF E-F", "IMM-380-100"),
+]
+
+POS_MAP = {smart_manu: pos for pos, line, smart_manu in MAPPING_DATA}
+LINE_MAP = {smart_manu: line for pos, line, smart_manu in MAPPING_DATA}
 
 
 def get_col(df, candidates, default=None):
@@ -41,11 +87,10 @@ def m2_parse_workbook(file_bytes):
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
     
-    # Priority sheet detection
     sheet_name = "RejectionReport" if "RejectionReport" in xls.sheet_names else ("This Month" if "This Month" in xls.sheet_names else xls.sheet_names[0])
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
     
-    # Locate actual table header row dynamically
+    # Auto-detect table header
     header_idx = None
     for idx, row in df_raw.iterrows():
         row_str = " ".join([str(v) for v in row.values])
@@ -58,7 +103,6 @@ def m2_parse_workbook(file_bytes):
     else:
         df_clean = pd.read_excel(xls, sheet_name=sheet_name)
     
-    # Clean Column names
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
     
     date_col = get_col(df_clean, ["Added Date", "Date", "Entry Date", "AddedDate"], df_clean.columns[-1])
@@ -67,7 +111,7 @@ def m2_parse_workbook(file_bytes):
     df_clean["DateStr"] = df_clean["DateClean"].dt.strftime("%Y-%m-%d")
     df_clean["YearMonth"] = df_clean["DateClean"].dt.to_period("M")
     
-    unique_months = df_clean["YearMonth"].unique()
+    unique_months = sorted(df_clean["YearMonth"].unique())
     if len(unique_months) >= 2:
         df_prev = df_clean[df_clean["YearMonth"] == unique_months[-2]].copy()
         df_curr = df_clean[df_clean["YearMonth"] == unique_months[-1]].copy()
@@ -91,10 +135,8 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
     records = []
     for mc, grp in df_day.groupby(mc_col):
         raw_qty = pd.to_numeric(grp[qty_col], errors="coerce").fillna(0).sum() if qty_col in grp.columns else 0.0
-        # Check if ERP unit is thousands (0.10 -> 100 pcs)
         qty_factor = 1000.0 if (qty_col in grp.columns and grp[qty_col].max() < 100) else 1.0
         total_pcs = raw_qty * qty_factor
-        
         total_ton = pd.to_numeric(grp[wt_col], errors="coerce").fillna(0).sum() if wt_col in grp.columns else 0.0
         
         if cause_col in grp.columns:
@@ -104,12 +146,14 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
             causes_str = "-"
 
         mold_name = str(grp[item_col].iloc[0]) if (item_col in grp.columns and not grp[item_col].dropna().empty) else "-"
-        pos = POSITION_MAP.get(str(mc), str(grp.get("Position", pd.Series(["-"])).iloc[0] if "Position" in grp.columns else "-"))
+        pos = POS_MAP.get(str(mc), "-")
+        line = LINE_MAP.get(str(mc), "-")
         
-        if total_pcs >= min_qty:
+        if total_pcs > min_qty:
             records.append({
-                "Position": pos,
-                "Machine": str(mc),
+                "MC Position": pos,
+                "Line": line,
+                "Smart Manu": str(mc),
                 "Causes": causes_str,
                 "Qty (Pcs)": int(round(total_pcs)),
                 "Weight (Ton)": round(total_ton, 4),
@@ -132,7 +176,6 @@ def m2_compute_pareto(df_curr):
         return pd.DataFrame()
     
     qty_factor = 1000.0 if (qty_col and df_curr[qty_col].max() < 100) else 1.0
-    
     pareto = df_curr.groupby(cause_col).agg(
         Rejection_Pcs=(qty_col, lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor))) if qty_col else ("DateClean", "count"),
         Rejection_Ton=(wt_col, lambda x: pd.to_numeric(x, errors="coerce").fillna(0).sum()) if wt_col else ("DateClean", "count")
@@ -164,7 +207,7 @@ def m2_compute_tonnage_comparison(df_prev, df_curr):
     return pd.merge(t_prev, t_curr, on="Day", how="outer").sort_values("Day").fillna(0.0)
 
 
-def m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_ton, top_cause, mtd_ton, prev_avg_ton, high_rej_count):
+def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton, prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count):
     fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
     fig.patch.set_facecolor('#f4f7fc')
     ax.set_facecolor('#f4f7fc')
@@ -172,12 +215,15 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_to
     ax.set_ylim(0, 100)
     ax.axis('off')
 
+    date_formatted = sel_date_obj.strftime("%B %d, %Y")
+    day_formatted = sel_date_obj.strftime("%B %d")
+
     # Banner
     banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#1e1b4b', edgecolor='none')
     ax.add_patch(banner)
     ax.text(4, 94.5, "OPERATIONAL QUALITY & DEFECT CONTROL", color='#a5b4fc', fontsize=10, fontweight='bold')
     ax.text(4, 90.5, "Daily Scrap & Defect Analytics Report", color='#ffffff', fontsize=19, fontweight='bold')
-    ax.text(4, 87.2, f"Line-Level Defect Isolation (>50 Pcs Threshold) & Pareto Distribution   |   Report Date: {sel_date}", color='#94a3b8', fontsize=9.2)
+    ax.text(4, 87.2, f"Line-Level Defect Isolation (>50 Pcs Threshold)   |   Report Date: {date_formatted}", color='#94a3b8', fontsize=9.2)
 
     # Scrap Badge
     badge = patches.FancyBboxPatch((82.0, 86.2), 14.0, 10, boxstyle="round,pad=0.2,rounding_size=1", facecolor='#dc2626', edgecolor='none')
@@ -187,12 +233,12 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_to
 
     # 6 KPI Cards
     kpis = [
-        ("TOTAL REJ PCS", f"{total_rej_pcs:,}", "Pieces Lost", "#dc2626"),
-        ("DAILY SCRAP TON", f"{total_rej_ton:.3f} T", f"{total_rej_ton*1000:.1f} kg", "#f59e0b"),
-        ("CRITICAL MC (>50)", f"{high_rej_count}", "Lines Over Limit", "#8b5cf6"),
-        ("TOP DEFECT CAUSE", str(top_cause)[:15], "Primary Scrap Driver", "#2563eb"),
-        ("MTD TOTAL SCRAP", f"{mtd_ton:.2f} T", "Month-To-Date", "#06b6d4"),
-        ("PREV MO. AVG", f"{prev_avg_ton:.3f} T", "Daily Baseline", "#64748b"),
+        ("PREV MO. TOTAL", f"{prev_total_ton:.2f} T", "Total Rejection", "#64748b"),
+        ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Average", "#64748b"),
+        ("THIS MO. AS OF", f"{curr_as_of_total_ton:.2f} T", "Cumulative To Date", "#2563eb"),
+        ("THIS MO. AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "As Of Average", "#2563eb"),
+        ("DAILY TOTAL PCS", f"{total_rej_pcs:,}", f"{total_rej_ton:.3f} Ton", "#dc2626"),
+        ("CRITICAL MC (>50)", f"{high_rej_count}", "Lines Exceeding Limit", "#8b5cf6"),
     ]
 
     kpi_w, kpi_gap = 15.0, 1.2
@@ -202,26 +248,26 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_to
         ax.add_patch(card)
         top_bar = patches.FancyBboxPatch((x0 + 0.1, 82.2), kpi_w - 0.2, 0.6, boxstyle="round,pad=0.05,rounding_size=0.3", facecolor=col_bar, edgecolor='none')
         ax.add_patch(top_bar)
-        ax.text(x0 + kpi_w/2, 80.8, title, color='#64748b', fontsize=7.6, fontweight='bold', ha='center')
-        ax.text(x0 + kpi_w/2, 77.2, val, color='#0f172a', fontsize=13.5, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 80.8, title, color='#64748b', fontsize=7.5, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 77.2, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 74.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
     # Left & Right Panels
     left_card = patches.FancyBboxPatch((2, 2.5), 62.0, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(4, 68.5, "MACHINE WISE CRITICAL REJECTION LOG (>50 Pcs)", color='#0f172a', fontsize=11, fontweight='bold')
+    ax.text(4, 68.5, f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}", color='#0f172a', fontsize=10.5, fontweight='bold')
 
     right_card = patches.FancyBboxPatch((65.5, 2.5), 32.5, 69.0, boxstyle="round,pad=0.3,rounding_size=1", facecolor='#ffffff', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(right_card)
-    ax.text(67.5, 68.5, "DEFECT ANALYSIS & CORRECTIVE FOCUS", color='#0f172a', fontsize=11, fontweight='bold')
+    ax.text(67.5, 68.5, "EXECUTIVE APPROVAL BRIEF", color='#0f172a', fontsize=11, fontweight='bold')
 
-    col_names = ["Position", "Machine", "Causes", "Rej Pcs", "Weight (kg)"]
-    col_xs = [6.0, 16.0, 34.0, 49.0, 58.0]
+    col_names = ["MC Position", "Line", "Smart Manu", "Causes", "Qty (Pcs)", "Weight (kg)"]
+    col_xs = [6.5, 13.5, 22.0, 36.5, 49.5, 57.5]
     
     tbl_hdr = patches.Rectangle((3.5, 63.8), 59.0, 3.2, facecolor='#0f172a', edgecolor='none')
     ax.add_patch(tbl_hdr)
     for name, cx in zip(col_names, col_xs):
-        ax.text(cx, 65.4, name, color='#ffffff', fontsize=7.5, fontweight='bold', ha='center', va='center')
+        ax.text(cx, 65.4, name, color='#ffffff', fontsize=7.2, fontweight='bold', ha='center', va='center')
 
     row_y = 61.2
     row_step = 3.9
@@ -231,27 +277,28 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_to
         ax.add_patch(row_bg)
         ax.plot([3.5, 62.5], [row_y - 1.4, row_y - 1.4], color='#e2e8f0', linewidth=0.6)
 
-        ax.text(col_xs[0], row_y + 0.5, str(r["Position"])[:10], color='#0f172a', fontsize=7.2, fontweight='bold', ha='center')
-        ax.text(col_xs[1], row_y + 0.5, str(r["Machine"]), color='#0f172a', fontsize=7.2, ha='center')
-        ax.text(col_xs[2], row_y + 0.5, str(r["Causes"])[:28], color='#ef4444', fontsize=7.0, ha='center')
-        ax.text(col_xs[3], row_y + 0.5, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=7.4, fontweight='bold', ha='center')
-        ax.text(col_xs[4], row_y + 0.5, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=7.2, ha='center')
+        ax.text(col_xs[0], row_y + 0.5, str(r["MC Position"]), color='#0f172a', fontsize=7.0, fontweight='bold', ha='center')
+        ax.text(col_xs[1], row_y + 0.5, str(r["Line"]), color='#64748b', fontsize=7.0, ha='center')
+        ax.text(col_xs[2], row_y + 0.5, str(r["Smart Manu"]), color='#0f172a', fontsize=7.0, ha='center')
+        ax.text(col_xs[3], row_y + 0.5, str(r["Causes"])[:22], color='#ef4444', fontsize=6.8, ha='center')
+        ax.text(col_xs[4], row_y + 0.5, f"{int(r['Qty (Pcs)']):,}", color='#0f172a', fontsize=7.2, fontweight='bold', ha='center')
+        ax.text(col_xs[5], row_y + 0.5, f"{r['Weight (kg)']:.1f}", color='#0f172a', fontsize=7.0, ha='center')
         row_y -= row_step
 
+    # Narrative on Right Panel
     narr_y = 64.0
-    ax.text(67.5, narr_y, "Daily Scrap Performance", color='#0f172a', fontsize=9.5, fontweight='bold')
-    narr_y -= 2.4
-    ax.text(67.5, narr_y, f"Total line scrap recorded was {total_rej_pcs:,} Pcs\n({total_rej_ton:.3f} Tons). A total of {high_rej_count} machines\nexceeded the 50 pcs rejection threshold.", color='#475569', fontsize=7.8, linespacing=1.4, va='top')
+    ax.text(67.5, narr_y, "Sir,", color='#0f172a', fontsize=9.5, fontweight='bold')
+    narr_y -= 4.0
+    narr_p1 = f"These are the machines from Plastic-3 that had a\nrejection count of more than 50 pieces on {day_formatted}."
+    ax.text(67.5, narr_y, narr_p1, color='#334155', fontsize=8.0, linespacing=1.45, va='top')
 
-    narr_y -= 7.5
-    ax.text(67.5, narr_y, "Primary Defect Driver", color='#0f172a', fontsize=9.5, fontweight='bold')
-    narr_y -= 2.4
-    ax.text(67.5, narr_y, f"Highest contributing defect was '{top_cause}'.\nImmediate process tuning and mold maintenance\nare required on primary affected lines.", color='#475569', fontsize=7.8, linespacing=1.4, va='top')
+    narr_y -= 10.0
+    narr_p2 = f"Last month, we recorded {prev_total_ton:.2f} tons of rejection with\nan average of {prev_avg_ton:.2f} tons/day, whereas this month we\nhave recorded {curr_as_of_total_ton:.2f} tons as of today with\n{curr_as_of_avg_ton:.2f} tons/day."
+    ax.text(67.5, narr_y, narr_p2, color='#334155', fontsize=8.0, linespacing=1.45, va='top')
 
-    narr_y -= 7.5
-    ax.text(67.5, narr_y, "Month-to-Date Comparison", color='#0f172a', fontsize=9.5, fontweight='bold')
-    narr_y -= 2.4
-    ax.text(67.5, narr_y, f"Cumulative MTD Scrap: {mtd_ton:.2f} Tons\nBaseline Daily Average: {prev_avg_ton:.3f} Tons/Day.", color='#475569', fontsize=7.8, linespacing=1.4, va='top')
+    narr_y -= 14.0
+    narr_p3 = "Need your approval, please, to send to rejection."
+    ax.text(67.5, narr_y, narr_p3, color='#0f172a', fontsize=8.2, fontweight='bold', va='top')
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
@@ -300,44 +347,66 @@ def render_scrap_module():
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_cut, c_snap = st.columns([1.5, 1.2, 1.3], gap="small")
         with c_date:
-            sel_date = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
+            sel_date_str = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
         with c_cut:
             min_cutoff = st.number_input("🔢 **Min Cutoff (Pcs)**", min_value=1, value=50, step=10)
             
-        df_day = df_curr[df_curr["DateStr"] == sel_date].copy()
-        df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
-        pareto_df = m2_compute_pareto(df_curr)
-        df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
+        sel_date_obj = pd.to_datetime(sel_date_str)
+        sel_day_num = sel_date_obj.day
+        day_formatted = sel_date_obj.strftime("%B %d")
 
+        # 1. Day records & filter
+        df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
+        df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
+        
+        # 2. Previous Month Stats (Full Month)
+        prev_wt_col = get_col(df_prev, ["Weight", "Rejection Ton"], None)
+        if not df_prev.empty and prev_wt_col:
+            prev_total_ton = float(pd.to_numeric(df_prev[prev_wt_col], errors="coerce").fillna(0).sum())
+            prev_days_count = df_prev["DateClean"].dt.days_in_month.iloc[0] if not df_prev.empty else 31
+            prev_avg_ton = prev_total_ton / prev_days_count
+        else:
+            prev_total_ton, prev_avg_ton = 0.0, 0.0
+
+        # 3. Present Month Stats (As of selected date)
+        curr_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
+        df_curr_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num]
+        if not df_curr_as_of.empty and curr_wt_col:
+            curr_as_of_total_ton = float(pd.to_numeric(df_curr_as_of[curr_wt_col], errors="coerce").fillna(0).sum())
+            curr_as_of_avg_ton = curr_as_of_total_ton / sel_day_num
+        else:
+            curr_as_of_total_ton, curr_as_of_avg_ton = 0.0, 0.0
+
+        # 4. Daily Totals
         qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs"], None)
         wt_col = get_col(df_day, ["Weight", "Rejection Ton"], None)
-
         qty_factor = 1000.0 if (qty_col and df_day[qty_col].max() < 100) else 1.0
         total_rej_pcs = int(round(pd.to_numeric(df_day[qty_col], errors="coerce").fillna(0).sum() * qty_factor)) if (qty_col and not df_day.empty) else 0
         total_rej_ton = float(pd.to_numeric(df_day[wt_col], errors="coerce").fillna(0).sum()) if (wt_col and not df_day.empty) else 0.0
         high_rej_count = len(df_day_filtered)
-        top_cause = pareto_df.iloc[0]["Cause"] if not pareto_df.empty else "None"
-        
-        mtd_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
-        mtd_ton = float(pd.to_numeric(df_curr[mtd_wt_col], errors="coerce").fillna(0).sum()) if (mtd_wt_col and not df_curr.empty) else 0.0
-        
-        prev_wt_col = get_col(df_prev, ["Weight", "Rejection Ton"], None)
-        prev_avg_ton = (float(pd.to_numeric(df_prev[prev_wt_col], errors="coerce").fillna(0).sum()) / df_prev["DateStr"].nunique()) if (prev_wt_col and not df_prev.empty and df_prev["DateStr"].nunique() > 0) else (df_trend["Prev_Month_Ton"].mean() if not df_trend.empty else 0.0)
 
-        jpg_bytes = m2_generate_scrap_jpg(df_day_filtered, sel_date, total_rej_pcs, total_rej_ton, top_cause, mtd_ton, prev_avg_ton, high_rej_count)
+        pareto_df = m2_compute_pareto(df_curr)
+        df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
+
+        # 5. Visual Export
+        jpg_bytes = m2_generate_scrap_jpg(
+            df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton,
+            prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count
+        )
 
         with c_snap:
             st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
-            st.download_button(label="📸 Download 1-Page JPG", data=jpg_bytes, file_name=f"Daily_Scrap_Report_{sel_date}.jpg", mime="image/jpeg", use_container_width=True)
+            st.download_button(label="📸 Download 1-Page JPG", data=jpg_bytes, file_name=f"Daily_Scrap_Report_{sel_date_str}.jpg", mime="image/jpeg", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # Header Banner
         st.markdown(
             f"""
             <div class="report-header-banner" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);">
                 <div>
                     <span style="color: #a5b4fc; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">✦ QUALITY & SCRAP ANALYTICS</span>
                     <h2>Daily Scrap & Defect Summary</h2>
-                    <p>Line-level rejection isolation (&ge;{min_cutoff} Pcs) & Monthly Pareto Analysis &nbsp;|&nbsp; 📅 <b>Report Date:</b> {sel_date}</p>
+                    <p>Plastic-3 Rejections (&gt;{min_cutoff} Pcs) & Month-over-Month Baseline Tracking &nbsp;|&nbsp; 📅 <b>Report Date:</b> {sel_date_str}</p>
                 </div>
                 <div class="efficiency-badge-large" style="background: #dc2626;">
                     <div class="value">{total_rej_ton:.3f}T</div>
@@ -347,41 +416,58 @@ def render_scrap_module():
             """, unsafe_allow_html=True,
         )
 
+        # 6 KPI Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL REJ PCS</div><div class="kpi-val">{total_rej_pcs:,}</div><div class="kpi-sub">Total Pcs Lost</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="kpi-card pink"><div class="kpi-title">DAILY SCRAP TON</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_ton*1000:.1f} kg</div></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="kpi-card purple"><div class="kpi-title">CRITICAL MC (>{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Lines Over Limit</div></div>', unsafe_allow_html=True)
-        k4.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">TOP DEFECT CAUSE</div><div class="kpi-val" style="font-size:1.05rem;">{top_cause[:14]}</div><div class="kpi-sub">Primary Scrap Driver</div></div>', unsafe_allow_html=True)
-        k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">MTD TOTAL SCRAP</div><div class="kpi-val">{mtd_ton:.2f} T</div><div class="kpi-sub">Month-to-Date</div></div>', unsafe_allow_html=True)
-        k6.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.3f} T</div><div class="kpi-sub">Daily Benchmark</div></div>', unsafe_allow_html=True)
+        k1.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_ton:.2f} T</div><div class="kpi-sub">Total Rejection</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Average</div></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
+        k4.markdown(f'<div class="kpi-card purple"><div class="kpi-title">THIS MO. AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
+        k5.markdown(f'<div class="kpi-card pink"><div class="kpi-title">DAILY SCRAP</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs</div></div>', unsafe_allow_html=True)
+        k6.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Lines Over Limit</div></div>', unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
 
-        col_left, col_right = st.columns([1.5, 1.0], gap="medium")
+        # Mid Section
+        col_left, col_right = st.columns([1.55, 0.95], gap="medium")
         with col_left:
-            st.markdown(f'<div class="panel-card"><h4>⚙️ MACHINE WISE CRITICAL DEFECT LOG (&ge;{min_cutoff} Pcs)</h4>', unsafe_allow_html=True)
+            st.markdown(f'<div class="panel-card"><h4>⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs)</h4>', unsafe_allow_html=True)
             if not df_day_filtered.empty:
-                st.dataframe(df_day_filtered[["Position", "Machine", "Causes", "Qty (Pcs)", "Weight (kg)", "Mold"]], use_container_width=True, hide_index=True, height=420)
+                st.dataframe(
+                    df_day_filtered[["MC Position", "Line", "Smart Manu", "Causes", "Qty (Pcs)", "Weight (kg)", "Mold"]],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=420
+                )
             else:
                 st.success("✅ No machines exceeded the rejection cutoff threshold today!")
             st.markdown("</div>", unsafe_allow_html=True)
 
         with col_right:
-            st.markdown('<div class="panel-card"><h4>📊 MTD DEFECT PARETO (TOP CAUSES)</h4>', unsafe_allow_html=True)
-            st.dataframe(pareto_df.head(6), use_container_width=True, hide_index=True, height=180)
-            
-            whatsapp_scrap_text = f"""Dear Sir,
+            approval_text = f"""Sir,
 
-🚨 *Daily Scrap & Defect Report ({sel_date})*
-• *Total Rejection Output:* {total_rej_pcs:,} Pcs ({total_rej_ton:.3f} Tons)
-• *Critical Lines (>{min_cutoff} Pcs):* {high_rej_count} Machines
-• *Top Scrap Cause:* {top_cause}
-• *MTD Scrap Total:* {mtd_ton:.2f} Tons (Prev Month Avg: {prev_avg_ton:.3f} T/Day)"""
+These are the machines from Plastic-3 that had a rejection count of more than 50 pieces on {day_formatted}.
 
-            with st.expander("📋 Copy Plain Text Scrap Brief"):
-                st.text_area("WhatsApp Scrap Brief", value=whatsapp_scrap_text, height=140, label_visibility="collapsed")
-            st.markdown("</div>", unsafe_allow_html=True)
+Last month, we recorded {prev_total_ton:.2f} tons of rejection with an average of {prev_avg_ton:.2f} tons/day, whereas this month we have recorded {curr_as_of_total_ton:.2f} tons as of today with {curr_as_of_avg_ton:.2f} tons/day.
 
+Need your approval, please, to send to rejection."""
+
+            st.markdown(
+                f"""<div class="panel-card">
+                    <h4>📝 EXECUTIVE APPROVAL TEXT</h4>
+                    <div class="narrative-block" style="font-size: 0.88rem; line-height: 1.6;">
+                        <p style="margin: 0 0 0.75rem 0;"><b>Sir,</b></p>
+                        <p>These are the machines from <b>Plastic-3</b> that had a rejection count of more than 50 pieces on <b>{day_formatted}</b>.</p>
+                        <p>Last month, we recorded <b>{prev_total_ton:.2f} tons</b> of rejection with an average of <b>{prev_avg_ton:.2f} tons/day</b>, whereas this month we have recorded <b>{curr_as_of_total_ton:.2f} tons</b> as of today with <b>{curr_as_of_avg_ton:.2f} tons/day</b>.</p>
+                        <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">Need your approval, please, to send to rejection.</p>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+
+            with st.expander("📋 Copy Plain Text for Approval / WhatsApp"):
+                st.text_area("Approval Text", value=approval_text, height=160, label_visibility="collapsed")
+
+        # Bottom Section
         st.markdown('<div class="panel-card"><h4>📅 MONTH-OVER-MONTH DAILY SCRAP TONNAGE TREND</h4>', unsafe_allow_html=True)
         trend_display = df_trend.rename(columns={"Day": "Day of Month", "Prev_Month_Ton": "Previous Month Scrap (Tons)", "Curr_Month_Ton": "Current Month Scrap (Tons)"})
         st.dataframe(trend_display, use_container_width=True, hide_index=True)
