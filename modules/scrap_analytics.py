@@ -305,16 +305,16 @@ def m2_generate_scrap_jpg(
         98.4,
         "DAILY REJECTION & DEFECT ANALYTICS REPORT",
         color="#0f172a",
-        fontsize=15.0,
+        fontsize=16.0,
         fontweight="bold",
         va="top",
     )
     ax.text(
         1.5,
-        96.0,
+        95.8,
         f"Plastic-3 Machine Rejection Log (>50 Pcs) & Plant Summary  |  Report Date: {date_formatted}",
         color="#64748b",
-        fontsize=8.2,
+        fontsize=8.8,
         va="top",
     )
     ax.text(
@@ -322,7 +322,7 @@ def m2_generate_scrap_jpg(
         97.2,
         "PLASTIC-3 OPERATIONS",
         color="#2563eb",
-        fontsize=8.0,
+        fontsize=8.8,
         fontweight="bold",
         ha="right",
         va="top",
@@ -360,17 +360,17 @@ def m2_generate_scrap_jpg(
         )
         ax.add_patch(top_bar)
         ax.text(
-            x0 + kpi_w / 2, 92.5, title, color="#64748b", fontsize=7.2, fontweight="bold", ha="center"
+            x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.6, fontweight="bold", ha="center"
         )
         ax.text(
-            x0 + kpi_w / 2, 89.8, val, color="#0f172a", fontsize=12.5, fontweight="bold", ha="center"
+            x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=13.0, fontweight="bold", ha="center"
         )
-        ax.text(x0 + kpi_w / 2, 88.0, sub, color="#94a3b8", fontsize=6.5, ha="center")
+        ax.text(x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center")
 
     # 3. Main Workspace Containers (Height = 84.0)
     left_card = patches.FancyBboxPatch(
         (1.5, 1.5),
-        75.0,
+        74.0,
         84.0,
         boxstyle="round,pad=0.25,rounding_size=0.8",
         facecolor="#ffffff",
@@ -380,24 +380,24 @@ def m2_generate_scrap_jpg(
     ax.add_patch(left_card)
     ax.text(
         3.5,
-        83.6,
+        83.5,
         f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}",
         color="#0f172a",
-        fontsize=10.5,
+        fontsize=11.0,
         fontweight="bold",
     )
     ax.text(
-        74.5,
-        83.6,
+        73.5,
+        83.5,
         f"{high_rej_count} Machines Active Above Threshold",
         color="#64748b",
-        fontsize=7.5,
+        fontsize=8.0,
         ha="right",
     )
 
     right_card = patches.FancyBboxPatch(
-        (78.0, 1.5),
-        20.5,
+        (76.5, 1.5),
+        22.0,
         84.0,
         boxstyle="round,pad=0.25,rounding_size=0.8",
         facecolor="#ffffff",
@@ -405,7 +405,7 @@ def m2_generate_scrap_jpg(
         linewidth=1,
     )
     ax.add_patch(right_card)
-    ax.text(79.5, 83.6, "EXECUTIVE ANALYSIS", color="#0f172a", fontsize=10.5, fontweight="bold")
+    ax.text(78.0, 83.5, "EXECUTIVE ANALYSIS", color="#0f172a", fontsize=11.0, fontweight="bold")
 
     # =========================================================
     # DYNAMIC TABLE RENDERING (<=30 vs >30 MACHINES)
@@ -413,16 +413,15 @@ def m2_generate_scrap_jpg(
     n_count = len(df_day_filtered)
 
     if n_count <= 30:
-        # Case A: 1 Single Wide Table
         left_x = 2.6
-        tbl_w = 72.8
+        tbl_w = 71.8
         tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor="#1e293b", edgecolor="none")
         ax.add_patch(tbl_hdr)
-        ax.text(left_x + 1.0, 80.8, "POSITION", color="#ffffff", fontsize=6.8, fontweight="bold", va="center")
-        ax.text(left_x + 8.5, 80.8, "MACHINE", color="#ffffff", fontsize=6.8, fontweight="bold", va="center")
-        ax.text(left_x + 18.0, 80.8, "DEFECT CAUSES", color="#ffffff", fontsize=6.8, fontweight="bold", va="center")
-        ax.text(left_x + 44.0, 80.8, "QTY", color="#ffffff", fontsize=6.8, fontweight="bold", ha="right", va="center")
-        ax.text(left_x + 46.0, 80.8, "MOLD / ITEM", color="#ffffff", fontsize=6.8, fontweight="bold", va="center")
+        ax.text(left_x + 1.0, 80.8, "POSITION", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+        ax.text(left_x + 8.5, 80.8, "MACHINE", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+        ax.text(left_x + 18.0, 80.8, "DEFECT CAUSES", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+        ax.text(left_x + 44.0, 80.8, "QTY", color="#ffffff", fontsize=7.2, fontweight="bold", ha="right", va="center")
+        ax.text(left_x + 46.0, 80.8, "MOLD / ITEM", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
 
         row_y = 77.2
         row_step = min(3.8, 74.0 / max(1, n_count))
@@ -432,34 +431,33 @@ def m2_generate_scrap_jpg(
             ax.add_patch(row_bg)
             ax.plot([left_x, left_x + tbl_w], [row_y - 1.2, row_y - 1.2], color="#e2e8f0", linewidth=0.45)
 
-            ax.text(left_x + 1.0, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.5, fontweight="bold", va="center")
-            ax.text(left_x + 8.5, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.4, va="center")
+            ax.text(left_x + 1.0, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.8, fontweight="bold", va="center")
+            ax.text(left_x + 8.5, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.6, va="center")
 
             cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=38))
-            ax.text(left_x + 18.0, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.0, va="center")
+            ax.text(left_x + 18.0, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.4, va="center")
 
-            ax.text(left_x + 44.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=6.6, fontweight="bold", ha="right", va="center")
+            ax.text(left_x + 44.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=7.0, fontweight="bold", ha="right", va="center")
 
             mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=38))
-            ax.text(left_x + 46.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.0, va="center")
+            ax.text(left_x + 46.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.4, va="center")
             row_y -= row_step
 
     else:
-        # Case B: 2 Balanced Sub-Tables Side-by-Side (>30 Machines)
         mid_idx = (n_count + 1) // 2
         sub_a = df_day_filtered.iloc[:mid_idx]
         sub_b = df_day_filtered.iloc[mid_idx:]
 
-        sub_configs = [(sub_a, 2.6, 36.3), (sub_b, 39.5, 36.3)]
+        sub_configs = [(sub_a, 2.6, 35.8), (sub_b, 39.0, 35.8)]
 
         for sub_df, left_x, tbl_w in sub_configs:
             tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor="#1e293b", edgecolor="none")
             ax.add_patch(tbl_hdr)
-            ax.text(left_x + 0.8, 80.8, "POS", color="#ffffff", fontsize=6.5, fontweight="bold", va="center")
-            ax.text(left_x + 4.6, 80.8, "MACHINE", color="#ffffff", fontsize=6.5, fontweight="bold", va="center")
-            ax.text(left_x + 10.0, 80.8, "DEFECT CAUSES", color="#ffffff", fontsize=6.5, fontweight="bold", va="center")
-            ax.text(left_x + 23.2, 80.8, "QTY", color="#ffffff", fontsize=6.5, fontweight="bold", ha="right", va="center")
-            ax.text(left_x + 24.2, 80.8, "MOLD / ITEM", color="#ffffff", fontsize=6.5, fontweight="bold", va="center")
+            ax.text(left_x + 0.8, 80.8, "POS", color="#ffffff", fontsize=7.0, fontweight="bold", va="center")
+            ax.text(left_x + 4.8, 80.8, "MACHINE", color="#ffffff", fontsize=7.0, fontweight="bold", va="center")
+            ax.text(left_x + 10.4, 80.8, "DEFECT CAUSES", color="#ffffff", fontsize=7.0, fontweight="bold", va="center")
+            ax.text(left_x + 23.0, 80.8, "QTY", color="#ffffff", fontsize=7.0, fontweight="bold", ha="right", va="center")
+            ax.text(left_x + 24.0, 80.8, "MOLD / ITEM", color="#ffffff", fontsize=7.0, fontweight="bold", va="center")
 
             row_y = 77.2
             row_step = 3.75
@@ -469,31 +467,30 @@ def m2_generate_scrap_jpg(
                 ax.add_patch(row_bg)
                 ax.plot([left_x, left_x + tbl_w], [row_y - 1.2, row_y - 1.2], color="#e2e8f0", linewidth=0.45)
 
-                ax.text(left_x + 0.8, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.2, fontweight="bold", va="center")
-                ax.text(left_x + 4.6, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.0, va="center")
+                ax.text(left_x + 0.8, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.7, fontweight="bold", va="center")
+                ax.text(left_x + 4.8, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.5, va="center")
 
-                cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=22))
-                ax.text(left_x + 10.0, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=5.6, va="center")
+                cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=20))
+                ax.text(left_x + 10.4, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.2, va="center")
 
-                ax.text(left_x + 23.2, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=6.4, fontweight="bold", ha="right", va="center")
+                ax.text(left_x + 23.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=6.8, fontweight="bold", ha="right", va="center")
 
-                mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=22))
-                ax.text(left_x + 24.2, row_y + 0.35, mold_wrap, color="#334155", fontsize=5.6, va="center")
+                mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=20))
+                ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards
-    # Card 1: Rejection Pareto & Top Causes
+    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
     c1 = patches.FancyBboxPatch(
-        (78.8, 43.0),
-        18.8,
-        38.0,
+        (77.5, 42.5),
+        20.0,
+        39.0,
         boxstyle="round,pad=0.2,rounding_size=0.5",
         facecolor="#fff7f7",
         edgecolor="#fecaca",
         linewidth=0.8,
     )
     ax.add_patch(c1)
-    ax.text(79.8, 78.5, "Rejection Pareto & Top Causes", color="#b91c1c", fontsize=8.2, fontweight="bold")
+    ax.text(78.6, 78.8, "Rejection Pareto & Top Causes", color="#b91c1c", fontsize=9.6, fontweight="bold")
 
     top3_lines = "\n".join([f"  {idx+1}. {c}: {p:,} pcs ({pct:.1f}%)" for idx, (c, p, pct) in enumerate(top3_summary_list)])
     t1 = (
@@ -507,20 +504,19 @@ def m2_generate_scrap_jpg(
         f"  Color change purging requires\n"
         f"  strict standardization."
     )
-    ax.text(79.8, 75.0, t1, color="#7f1d1d", fontsize=7.0, linespacing=1.45, va="top")
+    ax.text(78.6, 75.2, t1, color="#7f1d1d", fontsize=8.2, linespacing=1.45, va="top")
 
-    # Card 2: Shop Floor & Output Distribution
     c2 = patches.FancyBboxPatch(
-        (78.8, 3.0),
-        18.8,
-        38.0,
+        (77.5, 2.5),
+        20.0,
+        38.5,
         boxstyle="round,pad=0.2,rounding_size=0.5",
         facecolor="#f0fdf4",
         edgecolor="#bbf7d0",
         linewidth=0.8,
     )
     ax.add_patch(c2)
-    ax.text(79.8, 38.5, "Shop Floor & Plant Distribution", color="#15803d", fontsize=8.2, fontweight="bold")
+    ax.text(78.6, 38.2, "Shop Floor & Plant Distribution", color="#15803d", fontsize=9.6, fontweight="bold")
     t2 = (
         f"• Total Plant Logged: {total_day_mcs} MCs\n"
         f"  - {high_rej_count} Lines > 50 pcs (Critical)\n"
@@ -533,7 +529,7 @@ def m2_generate_scrap_jpg(
         f"• Monthly Rejection Pace:\n"
         f"  {curr_as_of_avg_ton:.2f} T/Day (vs {prev_avg_ton:.2f} Prev Mo)."
     )
-    ax.text(79.8, 35.0, t2, color="#166534", fontsize=7.0, linespacing=1.45, va="top")
+    ax.text(78.6, 34.6, t2, color="#166534", fontsize=8.2, linespacing=1.45, va="top")
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
