@@ -434,12 +434,12 @@ def m2_generate_scrap_jpg(
 
             ax.text(left_x + 1.0, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.5, fontweight="bold", va="center")
             ax.text(left_x + 8.5, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.4, va="center")
-            
+
             cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=38))
             ax.text(left_x + 18.0, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.0, va="center")
-            
+
             ax.text(left_x + 44.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=6.6, fontweight="bold", ha="right", va="center")
-            
+
             mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=38))
             ax.text(left_x + 46.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.0, va="center")
             row_y -= row_step
@@ -494,7 +494,7 @@ def m2_generate_scrap_jpg(
     )
     ax.add_patch(c1)
     ax.text(79.8, 78.5, "Rejection Pareto & Top Causes", color="#b91c1c", fontsize=8.2, fontweight="bold")
-    
+
     top3_lines = "\n".join([f"  {idx+1}. {c}: {p:,} pcs ({pct:.1f}%)" for idx, (c, p, pct) in enumerate(top3_summary_list)])
     t1 = (
         f"• Top 3 Causes ({top3_pct:.1f}% of loss):\n"
@@ -649,13 +649,19 @@ def render_scrap_module():
             top_cause = cause_grp.idxmax() if not cause_grp.empty else "General"
             top_cause_pcs = int(round(cause_grp.max())) if not cause_grp.empty else 0
             top_cause_pct = (top_cause_pcs / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0
-            
+
             top3_sorted = cause_grp.sort_values(ascending=False).head(3)
             top3_pcs = top3_sorted.sum()
             top3_pct = (top3_pcs / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0
             for c_name, c_qty in top3_sorted.items():
                 c_clean = str(c_name).replace("*", "").strip()
-                top3_summary_list.append((c_clean, int(round(c_qty)), (c_qty / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0))
+                top3_summary_list.append(
+                    (
+                        c_clean,
+                        int(round(c_qty)),
+                        (c_qty / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0,
+                    )
+                )
         else:
             top_cause, top_cause_pcs, top_cause_pct, top3_pct = "General", 0, 0.0, 0.0
 
@@ -755,22 +761,29 @@ def render_scrap_module():
             st.markdown("</div>", unsafe_allow_html=True)
 
         with col_right:
-            approval_text = f"""Sir,
+            approval_text = f"""📋 *PLASTIC-3 DAILY SCRAP & REJECTION BRIEF*
+📅 *Date:* {day_formatted}
 
-These are the machines from Plastic-3 that had a rejection count of more than 50 pieces on {day_formatted}.
+Dear Sir,
 
-Last month, we recorded {prev_total_ton:.2f} tons of rejection with an average of {prev_avg_ton:.2f} tons/day, whereas this month we have recorded {curr_as_of_total_ton:.2f} tons as of today with {curr_as_of_avg_ton:.2f} tons/day.
+These are the line records from *Plastic-3* where rejection exceeded *50 pieces*:
 
-Need your approval, please, to send to rejection."""
+🔹 *Prev. Month Total:* {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)
+🔹 *Present Month (As of Today):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
+
+📌 *Please grant your approval to send these items for rejection clearance.*"""
 
             st.markdown(
                 f"""<div class="panel-card">
                     <h4>📝 EXECUTIVE APPROVAL TEXT</h4>
                     <div class="narrative-block" style="font-size: 0.88rem; line-height: 1.6;">
-                        <p style="margin: 0 0 0.75rem 0;"><b>Sir,</b></p>
-                        <p>These are the machines from <b>Plastic-3</b> that had a rejection count of more than 50 pieces on <b>{day_formatted}</b>.</p>
-                        <p>Last month, we recorded <b>{prev_total_ton:.2f} tons</b> of rejection with an average of <b>{prev_avg_ton:.2f} tons/day</b>, whereas this month we have recorded <b>{curr_as_of_total_ton:.2f} tons</b> as of today with <b>{curr_as_of_avg_ton:.2f} tons/day</b>.</p>
-                        <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">Need your approval, please, to send to rejection.</p>
+                        <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
+                        <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
+                        <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
+                        <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>50 pieces</b>:</p>
+                        <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
+                        <p style="margin: 0 0 0.75rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                        <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
                     </div>
                 </div>""",
                 unsafe_allow_html=True,
