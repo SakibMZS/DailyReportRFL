@@ -201,44 +201,97 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
     return df_res
 
 
-def m2_compute_pareto(df_curr):
-    cause_col = get_col(df_curr, ["Cause", "Causes", "Defect", "Reason"], None)
-    qty_col = get_col(df_curr, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
-    wt_col = get_col(df_curr, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
-
-    if df_curr.empty or not cause_col:
+def m2_compute_cause_breakdown(df_scope):
+    if df_scope.empty:
         return pd.DataFrame()
+    qty_col = get_col(df_scope, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
+    wt_col = get_col(df_scope, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
+    cause_col = get_col(df_scope, ["Cause", "Causes", "Defect", "Reason"], "Cause")
+    mc_col = get_col(df_scope, ["Machine", "MC SL"], "Machine")
 
-    qty_factor = 1000.0 if (qty_col and df_curr[qty_col].max() < 100) else 1.0
+    qty_factor = 1000.0 if (qty_col and df_scope[qty_col].max() < 100) else 1.0
 
-    pareto = (
-        df_curr.groupby(cause_col)
+    res = (
+        df_scope.groupby(cause_col)
         .agg(
-            Rejection_Pcs=(
+            Rej_Pcs=(
                 qty_col,
-                lambda x: int(
-                    round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor)
-                ),
+                lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor)),
             )
             if qty_col
-            else ("DateClean", "count"),
-            Rejection_Ton=(
+            else (cause_col, "count"),
+            Rej_Kg=(
                 wt_col,
-                lambda x: pd.to_numeric(x, errors="coerce").fillna(0).sum(),
+                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * 1000.0, 1),
             )
             if wt_col
-            else ("DateClean", "count"),
+            else (cause_col, "count"),
+            Rej_Ton=(
+                wt_col,
+                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum(), 4),
+            )
+            if wt_col
+            else (cause_col, "count"),
+            Entries_Count=(cause_col, "count"),
+            MC_Count=(mc_col, "nunique") if mc_col in df_scope.columns else (cause_col, "count"),
         )
         .reset_index()
     )
 
-    pareto = pareto.rename(columns={cause_col: "Cause"})
-    total_pcs = pareto["Rejection_Pcs"].sum()
-    pareto["% Share"] = (
-        (pareto["Rejection_Pcs"] / total_pcs * 100).round(2) if total_pcs > 0 else 0.0
+    res["Cause"] = res[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
+    tot_pcs = res["Rej_Pcs"].sum()
+    res["% Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
+    res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
+    return res[["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]]
+
+
+def m2_compute_lineman_breakdown(df_scope):
+    if df_scope.empty:
+        return pd.DataFrame()
+    lineman_col = get_col(df_scope, ["Added By", "AddedBy", "Lineman", "Operator", "Added_By"], None)
+    if not lineman_col or lineman_col not in df_scope.columns:
+        return pd.DataFrame()
+
+    qty_col = get_col(df_scope, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
+    wt_col = get_col(df_scope, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
+    mc_col = get_col(df_scope, ["Machine", "MC SL"], "Machine")
+
+    qty_factor = 1000.0 if (qty_col and df_scope[qty_col].max() < 100) else 1.0
+
+    res = (
+        df_scope.groupby(lineman_col)
+        .agg(
+            Rej_Pcs=(
+                qty_col,
+                lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor)),
+            )
+            if qty_col
+            else (lineman_col, "count"),
+            Rej_Kg=(
+                wt_col,
+                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * 1000.0, 1),
+            )
+            if wt_col
+            else (lineman_col, "count"),
+            Rej_Ton=(
+                wt_col,
+                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum(), 4),
+            )
+            if wt_col
+            else (lineman_col, "count"),
+            Logged_Entries=(lineman_col, "count"),
+            Machines_Covered=(mc_col, "nunique") if mc_col in df_scope.columns else (lineman_col, "count"),
+        )
+        .reset_index()
     )
-    pareto = pareto.sort_values("Rejection_Pcs", ascending=False).reset_index(drop=True)
-    return pareto
+
+    tot_pcs = res["Rej_Pcs"].sum()
+    tot_ton = res["Rej_Ton"].sum()
+    res["% Pcs Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
+    res["% Ton Share"] = (res["Rej_Ton"] / tot_ton * 100.0).round(1) if tot_ton > 0 else 0.0
+    res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
+    res = res.rename(columns={lineman_col: "Lineman (Added By)"})
+    return res
 
 
 def m2_compute_tonnage_comparison(df_prev, df_curr):
@@ -595,6 +648,7 @@ def render_scrap_module():
 
         # 1. Day records & filter
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
+        df_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num].copy()
         df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
 
         # 2. Previous Month Stats (Full Month)
@@ -608,9 +662,8 @@ def render_scrap_module():
 
         # 3. Present Month Stats (As of selected date)
         curr_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
-        df_curr_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num]
-        if not df_curr_as_of.empty and curr_wt_col:
-            curr_as_of_total_ton = float(pd.to_numeric(df_curr_as_of[curr_wt_col], errors="coerce").fillna(0).sum())
+        if not df_as_of.empty and curr_wt_col:
+            curr_as_of_total_ton = float(pd.to_numeric(df_as_of[curr_wt_col], errors="coerce").fillna(0).sum())
             curr_as_of_avg_ton = curr_as_of_total_ton / sel_day_num
         else:
             curr_as_of_total_ton, curr_as_of_avg_ton = 0.0, 0.0
@@ -649,7 +702,11 @@ def render_scrap_module():
         high_rej_count = len(df_day_filtered)
         total_day_mcs = df_day[mc_col].nunique() if mc_col in df_day.columns else high_rej_count
 
-        pareto_df = m2_compute_pareto(df_curr)
+        # Compute breakdowns
+        df_cause_day = m2_compute_cause_breakdown(df_day)
+        df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
+        df_lineman_day = m2_compute_lineman_breakdown(df_day)
+        df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
         # Top defect causes list & heaviest machine
@@ -752,11 +809,11 @@ def render_scrap_module():
 
         st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
 
-        # Mid Section
+        # Mid Section: Rejection Log Table & WhatsApp Note
         col_left, col_right = st.columns([1.55, 0.95], gap="medium")
         with col_left:
             st.markdown(
-                f'<div class="panel-card"><h4>⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs)</h4>',
+                f'<div class="panel-card"><h4>⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}</h4>',
                 unsafe_allow_html=True,
             )
             if not df_day_filtered.empty:
@@ -764,7 +821,7 @@ def render_scrap_module():
                     df_day_filtered[["Position", "Machine", "Causes", "Qty", "Weight (kg)", "Mold"]],
                     use_container_width=True,
                     hide_index=True,
-                    height=420,
+                    height=380,
                 )
             else:
                 st.success("✅ No machines exceeded the rejection cutoff threshold today!")
@@ -806,7 +863,31 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
                     "Approval Text", value=approval_text, height=180, label_visibility="collapsed"
                 )
 
-        # Bottom Section
+        # Bottom Section A: Cause-Wise Rejection Analysis (Date-wise & As-of MTD)
+        st.markdown('<div class="panel-card"><h4>🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS</h4>', unsafe_allow_html=True)
+        tab_cause_day, tab_cause_asof = st.tabs([f"📅 Selected Date ({day_formatted})", f"📈 As of Month-to-Date (Day 1 – {sel_day_num})"])
+        with tab_cause_day:
+            st.dataframe(df_cause_day, use_container_width=True, hide_index=True)
+        with tab_cause_asof:
+            st.dataframe(df_cause_as_of, use_container_width=True, hide_index=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Bottom Section B: Lineman-Wise Analysis (Column I - Added By)
+        st.markdown('<div class="panel-card"><h4>👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)</h4>', unsafe_allow_html=True)
+        tab_line_day, tab_line_asof = st.tabs([f"📅 Selected Date Linemen ({day_formatted})", f"📈 As of Month-to-Date Linemen (Day 1 – {sel_day_num})"])
+        with tab_line_day:
+            if not df_lineman_day.empty:
+                st.dataframe(df_lineman_day, use_container_width=True, hide_index=True)
+            else:
+                st.info("No lineman data logged for this date.")
+        with tab_line_asof:
+            if not df_lineman_as_of.empty:
+                st.dataframe(df_lineman_as_of, use_container_width=True, hide_index=True)
+            else:
+                st.info("No lineman data logged for current month.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Bottom Section C: Month-over-Month Daily Trend
         st.markdown(
             '<div class="panel-card"><h4>📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND</h4>',
             unsafe_allow_html=True,
