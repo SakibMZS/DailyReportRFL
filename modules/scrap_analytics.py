@@ -228,54 +228,56 @@ def m2_generate_scrap_jpg(
     ff_share_pct,
 ):
     """
-    Generate a professional one-page JPG management report.
+    Professional management-ready JPG report.
 
-    Design:
-    - Compact title area
-    - 6 KPI cards
-    - ONE full-width rejection table
-    - No Line column
-    - Causes are wrapped, never truncated
-    - Dynamic row heights
-    - Dynamic image height based on number of machines
-    - Executive summary/action cards below the table
+    Design principles:
+    - One full-width rejection table.
+    - No Line column.
+    - Causes receive maximum practical width.
+    - Cause text is wrapped, never intentionally truncated.
+    - Dynamic row height.
+    - No oversized decorative header.
+    - Compact KPI strip.
+    - Compact management-insight strip.
+    - No fixed oversized summary boxes.
+    - Report height grows only when required by table content.
     """
 
-    import math
+    import io
     import textwrap
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
 
-    # ---------------------------------------------------------
-    # BASIC PREPARATION
-    # ---------------------------------------------------------
+    # =========================================================
+    # 1. DATA PREPARATION
+    # =========================================================
+
     df_report = df_day_filtered.copy()
 
-    # Ensure stable ordering by rejection quantity.
     if not df_report.empty and "Qty (Pcs)" in df_report.columns:
-        df_report = df_report.sort_values(
-            "Qty (Pcs)",
-            ascending=False
-        ).reset_index(drop=True)
+        df_report = (
+            df_report
+            .sort_values("Qty (Pcs)", ascending=False)
+            .reset_index(drop=True)
+        )
 
     n_rows = len(df_report)
 
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # ---------------------------------------------------------
-    # WRAPPING SETTINGS
-    # ---------------------------------------------------------
-    # Causes receive the majority of the table width.
+    # =========================================================
+    # 2. TEXT WRAPPING
+    # =========================================================
     #
-    # The value is deliberately based on characters rather than
-    # pixels so that the same logic works for different report
-    # sizes.
-    CAUSE_WRAP = 52
+    # Causes now occupy ~50% of the usable table width.
+    # This is deliberately generous because the Line column
+    # has been removed.
+    # =========================================================
 
-    def wrap_cause(value):
-        """
-        Wrap cause text without cutting it.
-        Removes '*' because the report is intended for management.
-        """
+    CAUSE_WRAP = 62
+
+    def clean_text(value):
         if value is None:
             return "-"
 
@@ -285,9 +287,12 @@ def m2_generate_scrap_jpg(
             return "-"
 
         text = text.replace("*", "")
-
-        # Clean repeated spaces.
         text = " ".join(text.split())
+
+        return text
+
+    def wrap_cause(value):
+        text = clean_text(value)
 
         return "\n".join(
             textwrap.wrap(
@@ -298,64 +303,81 @@ def m2_generate_scrap_jpg(
             )
         )
 
-    # ---------------------------------------------------------
-    # DETERMINE ROW HEIGHT
-    # ---------------------------------------------------------
-    # Most rows will be one line.
-    # Long cause descriptions become two or three lines.
+    # =========================================================
+    # 3. DYNAMIC ROW HEIGHT
+    # =========================================================
+
     row_line_counts = []
 
-    if not df_report.empty:
-        for _, row in df_report.iterrows():
-            wrapped = wrap_cause(row.get("Causes", "-"))
-            line_count = max(1, wrapped.count("\n") + 1)
-            row_line_counts.append(line_count)
+    for _, row in df_report.iterrows():
+        wrapped = wrap_cause(row.get("Causes", "-"))
+        line_count = max(1, wrapped.count("\n") + 1)
+        row_line_counts.append(line_count)
 
-    # Minimum row height.
-    BASE_ROW_HEIGHT = 0.62
-
-    # Additional height for wrapped cause lines.
-    EXTRA_LINE_HEIGHT = 0.30
+    # Compact but readable.
+    BASE_ROW_HEIGHT = 0.52
+    EXTRA_LINE_HEIGHT = 0.24
 
     row_heights = [
-        BASE_ROW_HEIGHT + max(0, lines - 1) * EXTRA_LINE_HEIGHT
+        BASE_ROW_HEIGHT
+        + max(0, lines - 1) * EXTRA_LINE_HEIGHT
         for lines in row_line_counts
     ]
 
-    # If there are no rows, still reserve some table space.
     if not row_heights:
-        row_heights = [0.70]
+        row_heights = [0.65]
 
-    table_height = sum(row_heights) + 0.72
+    # =========================================================
+    # 4. REPORT DIMENSIONS
+    # =========================================================
 
-    # ---------------------------------------------------------
-    # EXECUTIVE SUMMARY AREA
-    # ---------------------------------------------------------
-    summary_height = 4.15
+    # Fixed horizontal canvas.
+    FIG_WIDTH = 18.0
 
-    # ---------------------------------------------------------
-    # TOTAL REPORT HEIGHT
-    # ---------------------------------------------------------
-    #
-    # Top title       ~1.15
-    # KPI row         ~1.45
-    # spacing         ~0.25
-    # table           dynamic
-    # summary        ~4.15
-    #
-    # This makes the image taller when many machines qualify
-    # instead of shrinking the table text.
-    # ---------------------------------------------------------
-    top_area = 3.0
+    # Proper table geometry.
+    TITLE_H = 0.52
+    HEADER_H = 0.58
+    TITLE_TO_HEADER = 0.12
+    TABLE_BOTTOM_PAD = 0.18
 
-    fig_height = max(
-        11.5,
-        top_area + table_height + summary_height
+    table_content_h = sum(row_heights)
+
+    table_height = (
+        TITLE_H
+        + TITLE_TO_HEADER
+        + HEADER_H
+        + table_content_h
+        + TABLE_BOTTOM_PAD
     )
 
+    # Compact management strip.
+    MANAGEMENT_H = 2.05
+
+    # Top area:
+    # title + subtitle + KPI cards.
+    TOP_AREA = 2.55
+
+    # Space between major sections.
+    SECTION_GAP = 0.38
+
+    # Bottom margin.
+    BOTTOM_MARGIN = 0.25
+
+    fig_height = (
+        TOP_AREA
+        + SECTION_GAP
+        + table_height
+        + SECTION_GAP
+        + MANAGEMENT_H
+        + BOTTOM_MARGIN
+    )
+
+    # Never allow an excessively short report.
+    fig_height = max(fig_height, 10.5)
+
     fig, ax = plt.subplots(
-        figsize=(18, fig_height),
-        dpi=220
+        figsize=(FIG_WIDTH, fig_height),
+        dpi=220,
     )
 
     fig.patch.set_facecolor("#f4f7fb")
@@ -365,49 +387,65 @@ def m2_generate_scrap_jpg(
     ax.set_ylim(0, fig_height)
     ax.axis("off")
 
-    # ---------------------------------------------------------
-    # COORDINATE SYSTEM
-    # ---------------------------------------------------------
-    y_top = fig_height - 0.55
+    # =========================================================
+    # 5. GLOBAL COORDINATES
+    # =========================================================
 
-    # ---------------------------------------------------------
-    # COMPACT REPORT TITLE
-    # ---------------------------------------------------------
+    LEFT = 2.0
+    RIGHT = 98.0
+    WIDTH = 96.0
+
+    y = fig_height - 0.35
+
+    # =========================================================
+    # 6. COMPACT REPORT TITLE
+    # =========================================================
+
     ax.text(
-        2.0,
-        y_top,
-        "DAILY SCRAP & DEFECT ANALYTICS REPORT",
+        LEFT,
+        y,
+        "DAILY SCRAP & DEFECT ANALYTICS",
         color="#111827",
-        fontsize=17,
+        fontsize=16.5,
         fontweight="bold",
         va="top",
     )
 
     ax.text(
-        2.0,
-        y_top - 0.48,
-        f"Plastic-3  |  Report Date: {date_formatted}  |  "
-        f"Rejection Threshold: >{50} Pcs",
+        LEFT,
+        y - 0.42,
+        f"Plastic-3 Machine Rejection Log  |  "
+        f"Report Date: {date_formatted}  |  "
+        f"Threshold: >{50} Pcs",
         color="#64748b",
-        fontsize=8.5,
+        fontsize=8.0,
         va="top",
     )
 
-    # Small report identifier on right.
+    # Small report classification.
     ax.text(
-        98.0,
-        y_top - 0.08,
-        "OPERATIONAL QUALITY & DEFECT CONTROL",
-        color="#6366f1",
-        fontsize=7.2,
+        RIGHT,
+        y - 0.02,
+        "OPERATIONAL QUALITY CONTROL",
+        color="#4f46e5",
+        fontsize=7.0,
         fontweight="bold",
         ha="right",
         va="top",
     )
 
-    # ---------------------------------------------------------
-    # KPI CARDS
-    # ---------------------------------------------------------
+    # =========================================================
+    # 7. KPI STRIP
+    # =========================================================
+
+    kpi_top = y - 0.78
+    kpi_h = 1.10
+
+    gap = 0.55
+    kpi_w = (
+        WIDTH - gap * 5
+    ) / 6
+
     kpis = [
         (
             "PREV MO. TOTAL",
@@ -442,44 +480,34 @@ def m2_generate_scrap_jpg(
         (
             f"CRITICAL MC (>{50})",
             f"{high_rej_count}",
-            "Lines Exceeding Limit",
-            "#8b5cf6",
+            "Machines > Limit",
+            "#7c3aed",
         ),
     ]
 
-    kpi_y = y_top - 1.35
-    kpi_h = 1.12
-    gap = 0.65
-    left_margin = 2.0
-    total_width = 96.0
-
-    kpi_w = (
-        total_width - gap * (len(kpis) - 1)
-    ) / len(kpis)
-
     for i, (title, value, subtitle, accent) in enumerate(kpis):
 
-        x = left_margin + i * (kpi_w + gap)
+        x = LEFT + i * (kpi_w + gap)
 
         card = patches.FancyBboxPatch(
-            (x, kpi_y - kpi_h),
+            (x, kpi_top - kpi_h),
             kpi_w,
             kpi_h,
-            boxstyle="round,pad=0.10,rounding_size=0.18",
+            boxstyle="round,pad=0.08,rounding_size=0.16",
             facecolor="#ffffff",
-            edgecolor="#dbe2ea",
-            linewidth=0.8,
+            edgecolor="#d8e0ea",
+            linewidth=0.75,
         )
 
         ax.add_patch(card)
 
-        # Accent line.
+        # Accent bar.
         ax.add_patch(
             patches.FancyBboxPatch(
-                (x + 0.12, kpi_y - 0.13),
+                (x + 0.12, kpi_top - 0.12),
                 kpi_w - 0.24,
-                0.09,
-                boxstyle="round,pad=0.01,rounding_size=0.04",
+                0.075,
+                boxstyle="round,pad=0.01,rounding_size=0.03",
                 facecolor=accent,
                 edgecolor="none",
             )
@@ -487,10 +515,10 @@ def m2_generate_scrap_jpg(
 
         ax.text(
             x + kpi_w / 2,
-            kpi_y - 0.32,
+            kpi_top - 0.31,
             title,
             color="#64748b",
-            fontsize=6.7,
+            fontsize=6.5,
             fontweight="bold",
             ha="center",
             va="center",
@@ -498,10 +526,10 @@ def m2_generate_scrap_jpg(
 
         ax.text(
             x + kpi_w / 2,
-            kpi_y - 0.62,
+            kpi_top - 0.62,
             value,
             color="#111827",
-            fontsize=12.2,
+            fontsize=11.5,
             fontweight="bold",
             ha="center",
             va="center",
@@ -509,93 +537,102 @@ def m2_generate_scrap_jpg(
 
         ax.text(
             x + kpi_w / 2,
-            kpi_y - 0.91,
+            kpi_top - 0.91,
             subtitle,
             color="#94a3b8",
-            fontsize=6.2,
+            fontsize=6.0,
             ha="center",
             va="center",
         )
 
-    # ---------------------------------------------------------
-    # TABLE POSITION
-    # ---------------------------------------------------------
-    table_top = kpi_y - kpi_h - 0.55
+    # =========================================================
+    # 8. TABLE GEOMETRY
+    # =========================================================
 
-    table_left = 2.0
-    table_width = 96.0
+    table_top = kpi_top - kpi_h - SECTION_GAP
 
-    # Header height.
-    header_h = 0.72
+    table_left = LEFT
+    table_width = WIDTH
 
     table_bottom = table_top - table_height
 
-    # Outer table container.
+    # Outer table card.
     table_card = patches.FancyBboxPatch(
         (table_left, table_bottom),
         table_width,
         table_height,
-        boxstyle="round,pad=0.12,rounding_size=0.20",
+        boxstyle="round,pad=0.10,rounding_size=0.16",
         facecolor="#ffffff",
-        edgecolor="#dbe2ea",
+        edgecolor="#d6dee8",
         linewidth=0.8,
     )
 
     ax.add_patch(table_card)
 
-    # ---------------------------------------------------------
-    # TABLE TITLE
-    # ---------------------------------------------------------
+    # =========================================================
+    # 9. TABLE TITLE
+    # =========================================================
+
     ax.text(
-        table_left + 1.0,
-        table_top - 0.42,
+        table_left + 0.9,
+        table_top - 0.32,
         f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}",
         color="#111827",
-        fontsize=9.8,
+        fontsize=9.2,
         fontweight="bold",
         va="center",
     )
 
-    # ---------------------------------------------------------
-    # TABLE HEADER
-    # ---------------------------------------------------------
-    header_y = table_top - 0.82
+    ax.text(
+        table_left + table_width - 0.9,
+        table_top - 0.32,
+        f"{n_rows} machines above threshold",
+        color="#64748b",
+        fontsize=6.7,
+        ha="right",
+        va="center",
+    )
 
-    header = patches.FancyBboxPatch(
-        (table_left + 0.8, header_y - header_h),
-        table_width - 1.6,
-        header_h,
-        boxstyle="round,pad=0.02,rounding_size=0.06",
-        facecolor="#0f172a",
+    # =========================================================
+    # 10. TABLE HEADER
+    # =========================================================
+
+    table_x = table_left + 0.75
+    table_w = table_width - 1.50
+
+    header_y = table_top - TITLE_H - TITLE_TO_HEADER
+
+    header = patches.Rectangle(
+        (
+            table_x,
+            header_y - HEADER_H,
+        ),
+        table_w,
+        HEADER_H,
+        facecolor="#111827",
         edgecolor="none",
     )
 
     ax.add_patch(header)
 
     # ---------------------------------------------------------
-    # COLUMN DEFINITIONS
-    # ---------------------------------------------------------
+    # COLUMN WIDTHS
+    #
+    # MC Position : 15%
+    # Smart Manu  : 18%
+    # Causes      : 49%
+    # Qty         : 9%
+    # Weight      : 9%
     #
     # No Line column.
-    #
-    # Causes gets the largest share of the width.
-    #
-    # MC Position     13%
-    # Smart Manu      18%
-    # Causes          49%
-    # Qty             10%
-    # Weight          10%
     # ---------------------------------------------------------
 
-    table_x = table_left + 0.8
-    table_w = table_width - 1.6
-
     col_widths = [
-        0.13,
+        0.15,
         0.18,
         0.49,
-        0.10,
-        0.10,
+        0.09,
+        0.09,
     ]
 
     col_x = [table_x]
@@ -606,16 +643,17 @@ def m2_generate_scrap_jpg(
         )
 
     headers = [
-        "MC Position",
-        "Smart Manu",
-        "Causes",
-        "Qty (Pcs)",
-        "Weight (kg)",
+        "MC POSITION",
+        "SMART MANU",
+        "CAUSES",
+        "QTY (PCS)",
+        "WEIGHT (KG)",
     ]
 
     for i, title in enumerate(headers):
 
         x0 = col_x[i]
+
         x1 = (
             col_x[i + 1]
             if i < len(col_x) - 1
@@ -624,33 +662,34 @@ def m2_generate_scrap_jpg(
 
         ax.text(
             (x0 + x1) / 2,
-            header_y - header_h / 2,
+            header_y - HEADER_H / 2,
             title,
             color="#ffffff",
-            fontsize=6.8,
+            fontsize=6.7,
             fontweight="bold",
             ha="center",
             va="center",
         )
 
-    # ---------------------------------------------------------
-    # TABLE ROWS
-    # ---------------------------------------------------------
+    # =========================================================
+    # 11. TABLE ROWS
+    # =========================================================
+
     if df_report.empty:
 
         ax.text(
             table_left + table_width / 2,
-            header_y - header_h - 0.65,
+            header_y - HEADER_H - 0.45,
             "No machines exceeded the rejection threshold.",
             color="#64748b",
-            fontsize=8.5,
+            fontsize=8.0,
             ha="center",
             va="center",
         )
 
     else:
 
-        current_y = header_y - header_h
+        current_y = header_y - HEADER_H
 
         for row_idx, (_, row) in enumerate(df_report.iterrows()):
 
@@ -658,8 +697,12 @@ def m2_generate_scrap_jpg(
 
             row_top = current_y
             row_bottom = current_y - row_h
+            center_y = (row_top + row_bottom) / 2
 
-            # Alternating row background.
+            # -------------------------------------------------
+            # Alternating background
+            # -------------------------------------------------
+
             row_bg = (
                 "#ffffff"
                 if row_idx % 2 == 0
@@ -668,10 +711,7 @@ def m2_generate_scrap_jpg(
 
             ax.add_patch(
                 patches.Rectangle(
-                    (
-                        table_x,
-                        row_bottom,
-                    ),
+                    (table_x, row_bottom),
                     table_w,
                     row_h,
                     facecolor=row_bg,
@@ -679,7 +719,10 @@ def m2_generate_scrap_jpg(
                 )
             )
 
-            # Bottom separator.
+            # -------------------------------------------------
+            # Bottom separator
+            # -------------------------------------------------
+
             ax.plot(
                 [table_x, table_x + table_w],
                 [row_bottom, row_bottom],
@@ -688,13 +731,14 @@ def m2_generate_scrap_jpg(
             )
 
             # -------------------------------------------------
-            # VALUES
+            # Data
             # -------------------------------------------------
-            mc_position = str(
+
+            mc_position = clean_text(
                 row.get("MC Position", "-")
             )
 
-            smart_manu = str(
+            smart_manu = clean_text(
                 row.get("Smart Manu", "-")
             )
 
@@ -703,7 +747,6 @@ def m2_generate_scrap_jpg(
             )
 
             qty = row.get("Qty (Pcs)", 0)
-
             weight = row.get("Weight (kg)", 0)
 
             try:
@@ -717,24 +760,15 @@ def m2_generate_scrap_jpg(
                 weight_text = str(weight)
 
             # -------------------------------------------------
-            # VERTICAL CENTERING
-            # -------------------------------------------------
-            center_y = (
-                row_top + row_bottom
-            ) / 2
-
-            # -------------------------------------------------
             # MC POSITION
             # -------------------------------------------------
-            x0 = col_x[0]
-            x1 = col_x[1]
 
             ax.text(
-                (x0 + x1) / 2,
+                (col_x[0] + col_x[1]) / 2,
                 center_y,
                 mc_position,
                 color="#111827",
-                fontsize=6.5,
+                fontsize=6.35,
                 fontweight="bold",
                 ha="center",
                 va="center",
@@ -743,15 +777,13 @@ def m2_generate_scrap_jpg(
             # -------------------------------------------------
             # SMART MANU
             # -------------------------------------------------
-            x0 = col_x[1]
-            x1 = col_x[2]
 
             ax.text(
-                (x0 + x1) / 2,
+                (col_x[1] + col_x[2]) / 2,
                 center_y,
                 smart_manu,
                 color="#64748b",
-                fontsize=6.3,
+                fontsize=6.15,
                 ha="center",
                 va="center",
             )
@@ -759,32 +791,28 @@ def m2_generate_scrap_jpg(
             # -------------------------------------------------
             # CAUSES
             # -------------------------------------------------
-            x0 = col_x[2]
-            x1 = col_x[3]
 
             ax.text(
-                x0 + 0.55,
+                col_x[2] + 0.45,
                 center_y,
                 causes,
-                color="#dc4b4b",
-                fontsize=6.3,
+                color="#c24141",
+                fontsize=6.15,
                 ha="left",
                 va="center",
-                linespacing=1.15,
+                linespacing=1.18,
             )
 
             # -------------------------------------------------
             # QUANTITY
             # -------------------------------------------------
-            x0 = col_x[3]
-            x1 = col_x[4]
 
             ax.text(
-                (x0 + x1) / 2,
+                (col_x[3] + col_x[4]) / 2,
                 center_y,
                 qty_text,
                 color="#111827",
-                fontsize=6.5,
+                fontsize=6.4,
                 fontweight="bold",
                 ha="center",
                 va="center",
@@ -793,195 +821,198 @@ def m2_generate_scrap_jpg(
             # -------------------------------------------------
             # WEIGHT
             # -------------------------------------------------
-            x0 = col_x[4]
-            x1 = table_x + table_w
 
             ax.text(
-                (x0 + x1) / 2,
+                (
+                    col_x[4]
+                    + table_x
+                    + table_w
+                ) / 2,
                 center_y,
                 weight_text,
                 color="#111827",
-                fontsize=6.3,
+                fontsize=6.25,
                 ha="center",
                 va="center",
             )
 
             current_y = row_bottom
 
-    # ---------------------------------------------------------
-    # EXECUTIVE SUMMARY SECTION
-    # ---------------------------------------------------------
-    summary_top = table_bottom - 0.55
+    # =========================================================
+    # 12. MANAGEMENT INSIGHTS
+    # =========================================================
+    #
+    # IMPORTANT:
+    # These are deliberately compact.
+    # No oversized 3.15-unit boxes.
+    # =========================================================
 
-    # Section title.
+    summary_top = table_bottom - SECTION_GAP
+
     ax.text(
-        2.0,
+        LEFT,
         summary_top,
-        "EXECUTIVE SUMMARY & ACTION ANALYSIS",
+        "MANAGEMENT INSIGHTS",
         color="#111827",
-        fontsize=9.8,
+        fontsize=9.2,
         fontweight="bold",
         va="top",
     )
 
-    box_gap = 1.0
-    box_y = summary_top - 0.48
-    box_h = 3.15
+    # Three compact insight cards.
+    insight_top = summary_top - 0.34
+    insight_gap = 0.75
+    insight_w = (
+        WIDTH - insight_gap * 2
+    ) / 3
 
-    box_w = (
-        (96.0 - 2 * box_gap) / 3
-    )
+    insight_h = MANAGEMENT_H - 0.35
 
-    # ---------------------------------------------------------
-    # SUMMARY BOX 1
-    # ---------------------------------------------------------
-    x1 = 2.0
+    # =========================================================
+    # INSIGHT 1 — EXECUTIVE SNAPSHOT
+    # =========================================================
+
+    x1 = LEFT
 
     box1 = patches.FancyBboxPatch(
-        (x1, box_y - box_h),
-        box_w,
-        box_h,
-        boxstyle="round,pad=0.14,rounding_size=0.18",
-        facecolor="#f8fafc",
+        (x1, insight_top - insight_h),
+        insight_w,
+        insight_h,
+        boxstyle="round,pad=0.10,rounding_size=0.15",
+        facecolor="#ffffff",
         edgecolor="#dbe2ea",
-        linewidth=0.8,
+        linewidth=0.75,
     )
 
     ax.add_patch(box1)
 
     ax.text(
-        x1 + 0.8,
-        box_y - 0.48,
-        "EXECUTIVE SUMMARY",
+        x1 + 0.65,
+        insight_top - 0.34,
+        "EXECUTIVE SNAPSHOT",
         color="#111827",
-        fontsize=7.3,
+        fontsize=7.0,
         fontweight="bold",
         va="center",
     )
 
-    summary_text = (
-        f"• {high_rej_count} machines in Plastic-3\n"
-        f"  exceeded 50 pcs.\n"
-        f"• Last Day: {total_rej_pcs:,} pcs "
-        f"({total_rej_ton:.3f} T).\n"
-        f"• Previous Month: {prev_total_ton:.2f} T "
-        f"({prev_avg_ton:.2f} T/Day).\n"
-        f"• Current Month as of {day_formatted}: "
-        f"{curr_as_of_total_ton:.2f} T "
-        f"({curr_as_of_avg_ton:.2f} T/Day)."
+    snapshot_text = (
+        f"• {high_rej_count} machines exceeded 50 pcs.\n"
+        f"• Last day: {total_rej_pcs:,} pcs / "
+        f"{total_rej_ton:.3f} T.\n"
+        f"• Current month: {curr_as_of_total_ton:.2f} T "
+        f"({curr_as_of_avg_ton:.2f} T/day)."
     )
 
     ax.text(
-        x1 + 0.8,
-        box_y - 0.95,
-        summary_text,
+        x1 + 0.65,
+        insight_top - 0.70,
+        snapshot_text,
         color="#334155",
-        fontsize=6.5,
-        linespacing=1.45,
+        fontsize=6.35,
+        linespacing=1.40,
         va="top",
     )
 
-    # ---------------------------------------------------------
-    # SUMMARY BOX 2
-    # ---------------------------------------------------------
-    x2 = x1 + box_w + box_gap
+    # =========================================================
+    # INSIGHT 2 — DEFECT DRIVER
+    # =========================================================
+
+    x2 = x1 + insight_w + insight_gap
 
     box2 = patches.FancyBboxPatch(
-        (x2, box_y - box_h),
-        box_w,
-        box_h,
-        boxstyle="round,pad=0.14,rounding_size=0.18",
-        facecolor="#fef2f2",
+        (x2, insight_top - insight_h),
+        insight_w,
+        insight_h,
+        boxstyle="round,pad=0.10,rounding_size=0.15",
+        facecolor="#fff7f7",
         edgecolor="#fecaca",
-        linewidth=0.8,
+        linewidth=0.75,
     )
 
     ax.add_patch(box2)
 
     ax.text(
-        x2 + 0.8,
-        box_y - 0.48,
-        "TOP DEFECT DRIVER & HEAVY LINE",
+        x2 + 0.65,
+        insight_top - 0.34,
+        "DEFECT DRIVER & HEAVY SCRAP",
         color="#b91c1c",
-        fontsize=7.3,
+        fontsize=7.0,
         fontweight="bold",
         va="center",
     )
 
+    driver_name = clean_text(top_cause)
+
     driver_text = (
-        f"• Primary Scrap Cause: "
-        f"'{str(top_cause).replace('*', '')}'\n"
-        f"  generating {top_cause_pcs:,} pcs "
-        f"({top_cause_pct:.1f}% share).\n"
-        f"• Heaviest Scrap Machine: "
-        f"{top_wt_mc}\n"
-        f"  generating {top_wt_kg:.1f} kg scrap.\n"
-        f"• Top 3 Causes account for "
-        f"{top3_pct:.1f}% of rejected pieces."
+        f"• Primary cause: {driver_name}\n"
+        f"  {top_cause_pcs:,} pcs ({top_cause_pct:.1f}%).\n"
+        f"• Highest-weight MC: {clean_text(top_wt_mc)}\n"
+        f"  {top_wt_kg:.1f} kg scrap.\n"
+        f"• Top 3 causes: {top3_pct:.1f}% of lost pcs."
     )
 
     ax.text(
-        x2 + 0.8,
-        box_y - 0.95,
+        x2 + 0.65,
+        insight_top - 0.70,
         driver_text,
         color="#7f1d1d",
-        fontsize=6.5,
-        linespacing=1.45,
+        fontsize=6.35,
+        linespacing=1.36,
         va="top",
     )
 
-    # ---------------------------------------------------------
-    # SUMMARY BOX 3
-    # ---------------------------------------------------------
-    x3 = x2 + box_w + box_gap
+    # =========================================================
+    # INSIGHT 3 — PLANT OVERVIEW / ACTION
+    # =========================================================
+
+    x3 = x2 + insight_w + insight_gap
 
     box3 = patches.FancyBboxPatch(
-        (x3, box_y - box_h),
-        box_w,
-        box_h,
-        boxstyle="round,pad=0.14,rounding_size=0.18",
-        facecolor="#eff6ff",
+        (x3, insight_top - insight_h),
+        insight_w,
+        insight_h,
+        boxstyle="round,pad=0.10,rounding_size=0.15",
+        facecolor="#f5f9ff",
         edgecolor="#bfdbfe",
-        linewidth=0.8,
+        linewidth=0.75,
     )
 
     ax.add_patch(box3)
 
     ax.text(
-        x3 + 0.8,
-        box_y - 0.48,
-        "LAST DAY PLANT OVERVIEW",
+        x3 + 0.65,
+        insight_top - 0.34,
+        "PLANT OVERVIEW & ACTION",
         color="#1d4ed8",
-        fontsize=7.3,
+        fontsize=7.0,
         fontweight="bold",
         va="center",
     )
 
     overview_text = (
-        f"• Total Logged Lines: {total_day_mcs} machines\n"
-        f"  ({high_rej_count} >50 pcs; "
-        f"{max(total_day_mcs - high_rej_count, 0)} ≤50 pcs).\n"
-        f"• Overall Factory Scrap: "
-        f"{total_rej_pcs:,} pcs / {total_rej_ton:.3f} T.\n"
-        f"• Top 3 Causes: {top3_pct:.1f}% "
-        f"of lost pieces.\n"
-        f"• Floor Split: GF {gf_share_pct:.1f}% "
-        f"vs FF {ff_share_pct:.1f}% scrap weight."
+        f"• {total_day_mcs} machines logged; "
+        f"{high_rej_count} above limit.\n"
+        f"• Scrap split: GF {gf_share_pct:.1f}% / "
+        f"FF {ff_share_pct:.1f}%.\n"
+        f"• Priority: investigate {driver_name} "
+        f"and {clean_text(top_wt_mc)}."
     )
 
     ax.text(
-        x3 + 0.8,
-        box_y - 0.95,
+        x3 + 0.65,
+        insight_top - 0.70,
         overview_text,
         color="#1e3a8a",
-        fontsize=6.5,
-        linespacing=1.45,
+        fontsize=6.35,
+        linespacing=1.40,
         va="top",
     )
 
-    # ---------------------------------------------------------
-    # FINAL LAYOUT
-    # ---------------------------------------------------------
+    # =========================================================
+    # 13. FINAL RENDER
+    # =========================================================
+
     plt.subplots_adjust(
         left=0,
         right=1,
@@ -1006,7 +1037,7 @@ def m2_generate_scrap_jpg(
     buf.seek(0)
 
     return buf.getvalue()
-
+    
 def render_scrap_module():
     c_back, c_title, c_act = st.columns([1.2, 3, 1.2], vertical_alignment="center")
     with c_back:
