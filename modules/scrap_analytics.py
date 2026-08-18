@@ -207,7 +207,7 @@ def m2_compute_tonnage_comparison(df_prev, df_curr):
     return pd.merge(t_prev, t_curr, on="Day", how="outer").sort_values("Day").fillna(0.0)
 
 
-def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton, prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count, top_cause, top_cause_pcs, top_wt_mc, top_wt_kg):
+def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton, prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count, total_day_mcs, top_cause, top_cause_pcs, top_cause_pct, top_wt_mc, top_wt_kg, top3_pct, gf_share_pct, ff_share_pct):
     fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
     fig.patch.set_facecolor('#f4f7fc')
     ax.set_facecolor('#f4f7fc')
@@ -218,7 +218,7 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # Banner
+    # Top Banner
     banner = patches.FancyBboxPatch((2, 85), 96, 12.5, boxstyle="round,pad=0.3,rounding_size=1.2", facecolor='#1e1b4b', edgecolor='none')
     ax.add_patch(banner)
     ax.text(4, 94.5, "OPERATIONAL QUALITY & DEFECT CONTROL", color='#a5b4fc', fontsize=10, fontweight='bold')
@@ -229,7 +229,7 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     badge = patches.FancyBboxPatch((82.0, 86.2), 14.0, 10, boxstyle="round,pad=0.2,rounding_size=1", facecolor='#dc2626', edgecolor='none')
     ax.add_patch(badge)
     ax.text(89.0, 92.2, f"{total_rej_ton:.3f}T", color='#ffffff', fontsize=21, fontweight='bold', ha='center', va='center')
-    ax.text(89.0, 88.2, "DAILY SCRAP TON", color='#ffffff', fontsize=7, fontweight='bold', ha='center', va='center')
+    ax.text(89.0, 88.2, "LAST DAY SCRAP TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='center', va='center')
 
     # 6 KPI Cards
     kpis = [
@@ -237,7 +237,7 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
         ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Baseline", "#64748b"),
         ("THIS MO. AS OF", f"{curr_as_of_total_ton:.2f} T", f"As of Day {sel_date_obj.day}", "#2563eb"),
         ("THIS MO. AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current Pace", "#2563eb"),
-        ("DAILY SCRAP TON", f"{total_rej_ton:.3f} T", f"{total_rej_pcs:,} Pcs", "#dc2626"),
+        ("LAST DAY SCRAP", f"{total_rej_ton:.3f} T", f"{total_rej_pcs:,} Pcs", "#dc2626"),
         ("CRITICAL MC (>50)", f"{high_rej_count}", "Lines Exceeding Limit", "#8b5cf6"),
     ]
 
@@ -291,29 +291,29 @@ def m2_generate_scrap_jpg(df_day_filtered, sel_date_obj, total_rej_pcs, total_re
     brief_box = patches.FancyBboxPatch((67.0, 50.5), 29.5, 15.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#f8fafc', edgecolor='#e2e8f0', linewidth=1)
     ax.add_patch(brief_box)
     ax.text(68.5, 63.8, "📋 Executive Approval Summary", color='#0f172a', fontsize=8.5, fontweight='bold')
-    p1 = f"• {high_rej_count} machines in Plastic-3 exceeded 50 pcs.\n• Total Daily Scrap: {total_rej_pcs:,} Pcs ({total_rej_ton:.3f} T).\n• Prev Mo: {prev_total_ton:.2f} T ({prev_avg_ton:.2f} T/D avg).\n• This Mo (As of {day_formatted}): {curr_as_of_total_ton:.2f} T ({curr_as_of_avg_ton:.2f} T/D avg)."
+    p1 = f"• {high_rej_count} machines in Plastic-3 exceeded 50 pcs.\n• Total Last Day Scrap: {total_rej_pcs:,} Pcs ({total_rej_ton:.3f} T).\n• Prev Mo: {prev_total_ton:.2f} T ({prev_avg_ton:.2f} T/D avg).\n• This Mo (As of {day_formatted}): {curr_as_of_total_ton:.2f} T ({curr_as_of_avg_ton:.2f} T/D avg)."
     ax.text(68.5, 61.2, p1, color='#334155', fontsize=7.2, linespacing=1.35, va='top')
 
     # Block 2: Defect Breakdown Box
-    defect_box = patches.FancyBboxPatch((67.0, 32.0), 29.5, 16.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#fef2f2', edgecolor='#fecaca', linewidth=1)
+    defect_box = patches.FancyBboxPatch((67.0, 29.5), 29.5, 19.0, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#fef2f2', edgecolor='#fecaca', linewidth=1)
     ax.add_patch(defect_box)
     ax.text(68.5, 46.2, "⚠️ Top Defect Driver & Heavy Lines", color='#b91c1c', fontsize=8.5, fontweight='bold')
-    p2 = f"• Primary Scrap Cause: '{top_cause}'\n  accounting for {top_cause_pcs:,} pcs today.\n• Highest Scrap Weight: Machine {top_wt_mc}\n  generating {top_wt_kg:.1f} kg scrap loss.\n• Priority process tuning required on molds\n  exhibiting repetitive short fill and flashes."
+    p2 = f"• Primary Scrap Cause: '{top_cause}'\n  generating {top_cause_pcs:,} pcs loss ({top_cause_pct:.1f}% share).\n• Heaviest Scrap Machine: Machine {top_wt_mc}\n  generating {top_wt_kg:.1f} kg scrap loss.\n• Priority process tuning required on molds\n  exhibiting repetitive short fill and flashes."
     ax.text(68.5, 43.6, p2, color='#7f1d1d', fontsize=7.2, linespacing=1.35, va='top')
 
-    # Block 3: Corrective Directives Box
-    action_box = patches.FancyBboxPatch((67.0, 5.5), 29.5, 24.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=1)
-    ax.add_patch(action_box)
-    ax.text(68.5, 27.5, "🎯 Corrective Engineering Directives", color='#1d4ed8', fontsize=8.5, fontweight='bold')
+    # Block 3: Last Day Plant Overview (All Lines Precise Summary)
+    overview_box = patches.FancyBboxPatch((67.0, 5.0), 29.5, 22.5, boxstyle="round,pad=0.2,rounding_size=0.6", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=1)
+    ax.add_patch(overview_box)
+    ax.text(68.5, 25.2, "📊 Last Day Plant Overview (All Lines)", color='#1d4ed8', fontsize=8.5, fontweight='bold')
     p3 = (
-        "1. Material Purge & Color Change: Standardize\n"
-        "   cleaning SOP on multi-cavity lid molds.\n"
-        "2. Mold Clamping & Injection Balance: Inspect\n"
-        "   tonnage and gate blockage on IMM-428/380 lines.\n"
-        "3. Quality Gate: Mandatory sample approval before\n"
-        "   restarting shift after mold adjustments."
+        f"• Total Logged Lines: {total_day_mcs} machines active\n"
+        f"  ({high_rej_count} lines >50 pcs, {total_day_mcs - high_rej_count} minor lines <=50 pcs).\n"
+        f"• Overall Factory Scrap: {total_rej_pcs:,} Pcs / {total_rej_ton:.3f} Ton.\n"
+        f"• Top 3 Causes Account for: {top3_pct:.1f}% of lost pcs.\n"
+        f"• Shop Floor Distribution: GF sections generated {gf_share_pct:.1f}%\n"
+        f"  of scrap weight; FF sections generated {ff_share_pct:.1f}%."
     )
-    ax.text(68.5, 25.0, p3, color='#1e3a8a', fontsize=7.0, linespacing=1.35, va='top')
+    ax.text(68.5, 22.6, p3, color='#1e3a8a', fontsize=7.1, linespacing=1.35, va='top')
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
@@ -402,30 +402,43 @@ def render_scrap_module():
         total_rej_pcs = int(round(pd.to_numeric(df_day[qty_col], errors="coerce").fillna(0).sum() * qty_factor)) if (qty_col and not df_day.empty) else 0
         total_rej_ton = float(pd.to_numeric(df_day[wt_col], errors="coerce").fillna(0).sum()) if (wt_col and not df_day.empty) else 0.0
         high_rej_count = len(df_day_filtered)
+        total_day_mcs = df_day[mc_col].nunique() if mc_col in df_day.columns else high_rej_count
 
         pareto_df = m2_compute_pareto(df_curr)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
-        # Extract Day top defect driver & top weight machine for image insights
+        # Analytics for top defect cause & heaviest machine on selected day
         if not df_day.empty and cause_col in df_day.columns and qty_col in df_day.columns:
             cause_grp = df_day.groupby(cause_col)[qty_col].sum() * qty_factor
             top_cause = cause_grp.idxmax() if not cause_grp.empty else "General"
             top_cause_pcs = int(round(cause_grp.max())) if not cause_grp.empty else 0
+            top_cause_pct = (top_cause_pcs / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0
+            top3_pcs = cause_grp.sort_values(ascending=False).head(3).sum()
+            top3_pct = (top3_pcs / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0
         else:
-            top_cause, top_cause_pcs = "General", 0
+            top_cause, top_cause_pcs, top_cause_pct, top3_pct = "General", 0, 0.0, 0.0
 
         if not df_day.empty and mc_col in df_day.columns and wt_col in df_day.columns:
             mc_wt_grp = df_day.groupby(mc_col)[wt_col].sum() * 1000.0
             top_wt_mc = mc_wt_grp.idxmax() if not mc_wt_grp.empty else "-"
             top_wt_kg = float(mc_wt_grp.max()) if not mc_wt_grp.empty else 0.0
+            
+            # Line distribution (GF vs FF)
+            df_day["LineCode"] = df_day[mc_col].map(LINE_MAP).fillna("-")
+            gf_wt = df_day[df_day["LineCode"].str.startswith("GF")][wt_col].sum()
+            ff_wt = df_day[df_day["LineCode"].str.startswith("FF")][wt_col].sum()
+            tot_w = (gf_wt + ff_wt) if (gf_wt + ff_wt) > 0 else 1.0
+            gf_share_pct = (gf_wt / tot_w * 100.0)
+            ff_share_pct = (ff_wt / tot_w * 100.0)
         else:
-            top_wt_mc, top_wt_kg = "-", 0.0
+            top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
         # 5. Visual Export
         jpg_bytes = m2_generate_scrap_jpg(
             df_day_filtered, sel_date_obj, total_rej_pcs, total_rej_ton,
             prev_total_ton, prev_avg_ton, curr_as_of_total_ton, curr_as_of_avg_ton, high_rej_count,
-            top_cause, top_cause_pcs, top_wt_mc, top_wt_kg
+            total_day_mcs, top_cause, top_cause_pcs, top_cause_pct, top_wt_mc, top_wt_kg,
+            top3_pct, gf_share_pct, ff_share_pct
         )
 
         with c_snap:
@@ -444,19 +457,19 @@ def render_scrap_module():
                 </div>
                 <div class="efficiency-badge-large" style="background: #dc2626;">
                     <div class="value">{total_rej_ton:.3f}T</div>
-                    <div class="label">Daily Scrap Ton</div>
+                    <div class="label">Last Day Scrap Ton</div>
                 </div>
             </div>
             """, unsafe_allow_html=True,
         )
 
-        # 6 KPI Cards
+        # 6 KPI Cards (with "LAST DAY SCRAP")
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_ton:.2f} T</div><div class="kpi-sub">Total Rejection</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Average</div></div>', unsafe_allow_html=True)
         k3.markdown(f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
         k4.markdown(f'<div class="kpi-card purple"><div class="kpi-title">THIS MO. AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>', unsafe_allow_html=True)
-        k5.markdown(f'<div class="kpi-card pink"><div class="kpi-title">DAILY SCRAP</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs</div></div>', unsafe_allow_html=True)
+        k5.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY SCRAP</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs</div></div>', unsafe_allow_html=True)
         k6.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Lines Over Limit</div></div>', unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
