@@ -615,6 +615,20 @@ def render_scrap_module():
         else:
             curr_as_of_total_ton, curr_as_of_avg_ton = 0.0, 0.0
 
+        # Calculate Variance Metrics
+        diff_ton = curr_as_of_avg_ton - prev_avg_ton
+        pct_diff = (diff_ton / prev_avg_ton * 100.0) if prev_avg_ton > 0 else 0.0
+
+        if diff_ton > 0:
+            variance_line_plain = f"⚠️ Variance: Unfortunately, we are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to last month."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> Unfortunately, we are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to last month.</p>'
+        elif diff_ton < 0:
+            variance_line_plain = f"✅ Variance: We are producing {abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%) less rejection compared to last month."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #16a34a; font-size: 0.85rem;">✅ <b>Variance:</b> We are producing <b>{abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%)</b> less rejection compared to last month.</p>'
+        else:
+            variance_line_plain = "ℹ️ Variance: Daily rejection rate is on par with last month's baseline."
+            variance_line_html = '<p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.85rem;">ℹ️ <b>Variance:</b> Daily rejection rate is on par with last month\'s baseline.</p>'
+
         # 4. Daily Totals & Drivers
         qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs"], None)
         wt_col = get_col(df_day, ["Weight", "Rejection Ton"], None)
@@ -766,6 +780,7 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
 🔹 *Prev. Month Total:* {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)
 🔹 *Present Month (As of Today):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
+{variance_line_plain}
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
 
@@ -778,7 +793,8 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
                         <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
                         <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>50 pieces</b>:</p>
                         <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
-                        <p style="margin: 0 0 0.75rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                        <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                        {variance_line_html}
                         <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
                     </div>
                 </div>""",
@@ -787,7 +803,7 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
             with st.expander("📋 Copy Plain Text for Approval / WhatsApp"):
                 st.text_area(
-                    "Approval Text", value=approval_text, height=160, label_visibility="collapsed"
+                    "Approval Text", value=approval_text, height=180, label_visibility="collapsed"
                 )
 
         # Bottom Section
