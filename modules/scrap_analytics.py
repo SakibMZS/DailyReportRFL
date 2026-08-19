@@ -352,7 +352,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Clean Top Header
+    # 1. Header
     ax.text(
         1.5,
         98.4,
@@ -381,7 +381,7 @@ def m2_generate_scrap_jpg(
         va="top",
     )
 
-    # 2. KPI Cards Row (Height = 7.2)
+    # 2. KPI Cards Row
     kpis = [
         ("PREV MO. TOTAL", f"{prev_total_ton:.2f} T", "Total Rejection", "#64748b"),
         ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Baseline", "#64748b"),
@@ -420,7 +420,7 @@ def m2_generate_scrap_jpg(
         )
         ax.text(x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center")
 
-    # 3. Main Workspace Containers (Height = 84.0)
+    # 3. Main Workspace Containers
     left_card = patches.FancyBboxPatch(
         (1.5, 1.5),
         74.0,
@@ -460,9 +460,7 @@ def m2_generate_scrap_jpg(
     ax.add_patch(right_card)
     ax.text(78.0, 83.5, "EXECUTIVE ANALYSIS", color="#0f172a", fontsize=11.0, fontweight="bold")
 
-    # =========================================================
-    # DYNAMIC TABLE RENDERING (<=30 vs >30 MACHINES)
-    # =========================================================
+    # Dynamic Table
     n_count = len(df_day_filtered)
 
     if n_count <= 30:
@@ -532,7 +530,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
+    # Right Executive Brief: 2 Full-Height Cards
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -746,7 +744,7 @@ def render_scrap_module():
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # 5. Visual Export
+        # 5. Visual Export Button
         jpg_bytes = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
@@ -812,10 +810,7 @@ def render_scrap_module():
         # Mid Section: Rejection Log Table & WhatsApp Note
         col_left, col_right = st.columns([1.55, 0.95], gap="medium")
         with col_left:
-            st.markdown(
-                f'<div class="panel-card"><h4>⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}</h4>',
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"### ⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
             if not df_day_filtered.empty:
                 st.dataframe(
                     df_day_filtered[["Position", "Machine", "Causes", "Qty", "Weight (kg)", "Mold"]],
@@ -825,7 +820,6 @@ def render_scrap_module():
                 )
             else:
                 st.success("✅ No machines exceeded the rejection cutoff threshold today!")
-            st.markdown("</div>", unsafe_allow_html=True)
 
         with col_right:
             approval_text = f"""📋 *PLASTIC-3 DAILY SCRAP & REJECTION BRIEF*
@@ -841,19 +835,17 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
 
+            st.markdown("### 📝 EXECUTIVE APPROVAL TEXT")
             st.markdown(
-                f"""<div class="panel-card">
-                    <h4>📝 EXECUTIVE APPROVAL TEXT</h4>
-                    <div class="narrative-block" style="font-size: 0.88rem; line-height: 1.6;">
-                        <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
-                        <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
-                        <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
-                        <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>50 pieces</b>:</p>
-                        <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
-                        <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
-                        {variance_line_html}
-                        <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
-                    </div>
+                f"""<div class="narrative-block" style="font-size: 0.88rem; line-height: 1.6;">
+                    <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
+                    <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
+                    <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
+                    <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>50 pieces</b>:</p>
+                    <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                    {variance_line_html}
+                    <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -863,35 +855,42 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
                     "Approval Text", value=approval_text, height=180, label_visibility="collapsed"
                 )
 
-        # Bottom Section A: Cause-Wise Rejection Analysis (Date-wise & As-of MTD)
-        st.markdown('<div class="panel-card"><h4>🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS</h4>', unsafe_allow_html=True)
-        tab_cause_day, tab_cause_asof = st.tabs([f"📅 Selected Date ({day_formatted})", f"📈 As of Month-to-Date (Day 1 – {sel_day_num})"])
+        st.divider()
+
+        # Section 3: Cause-Wise Rejection Defect Analysis
+        st.markdown("### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
+        tab_cause_day, tab_cause_asof = st.tabs([
+            f"📅 Selected Date Breakdown ({day_formatted})",
+            f"📈 As of Month-to-Date Defect Pareto (Day 1 – {sel_day_num})",
+        ])
         with tab_cause_day:
             st.dataframe(df_cause_day, use_container_width=True, hide_index=True)
         with tab_cause_asof:
             st.dataframe(df_cause_as_of, use_container_width=True, hide_index=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        # Bottom Section B: Lineman-Wise Analysis (Column I - Added By)
-        st.markdown('<div class="panel-card"><h4>👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)</h4>', unsafe_allow_html=True)
-        tab_line_day, tab_line_asof = st.tabs([f"📅 Selected Date Linemen ({day_formatted})", f"📈 As of Month-to-Date Linemen (Day 1 – {sel_day_num})"])
+        st.divider()
+
+        # Section 4: Lineman-Wise Analysis (Column I - Added By)
+        st.markdown("### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
+        tab_line_day, tab_line_asof = st.tabs([
+            f"📅 Selected Date Linemen Activity ({day_formatted})",
+            f"📈 As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
+        ])
         with tab_line_day:
             if not df_lineman_day.empty:
                 st.dataframe(df_lineman_day, use_container_width=True, hide_index=True)
             else:
-                st.info("No lineman data logged for this date.")
+                st.info("No lineman entries logged for this date.")
         with tab_line_asof:
             if not df_lineman_as_of.empty:
                 st.dataframe(df_lineman_as_of, use_container_width=True, hide_index=True)
             else:
-                st.info("No lineman data logged for current month.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.info("No lineman entries logged for the current month.")
 
-        # Bottom Section C: Month-over-Month Daily Trend
-        st.markdown(
-            '<div class="panel-card"><h4>📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND</h4>',
-            unsafe_allow_html=True,
-        )
+        st.divider()
+
+        # Section 5: Month-over-Month Daily Trend
+        st.markdown("### 📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
         trend_display = df_trend.rename(
             columns={
                 "Day": "Day of Month",
@@ -900,4 +899,3 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
             }
         )
         st.dataframe(trend_display, use_container_width=True, hide_index=True)
-        st.markdown("</div>", unsafe_allow_html=True)
