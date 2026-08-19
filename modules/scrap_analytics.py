@@ -240,9 +240,10 @@ def m2_compute_cause_breakdown(df_scope):
 
     res["Cause"] = res[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
     tot_pcs = res["Rej_Pcs"].sum()
-    res["% Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
+    res["% Share Raw"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
-    return res[["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]]
+    res["% Share"] = res["% Share Raw"].apply(lambda x: f"{x:.1f}%")
+    return res
 
 
 def m2_compute_lineman_breakdown(df_scope):
@@ -287,8 +288,8 @@ def m2_compute_lineman_breakdown(df_scope):
 
     tot_pcs = res["Rej_Pcs"].sum()
     tot_ton = res["Rej_Ton"].sum()
-    res["% Pcs Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
-    res["% Ton Share"] = (res["Rej_Ton"] / tot_ton * 100.0).round(1) if tot_ton > 0 else 0.0
+    res["% Pcs Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).apply(lambda x: f"{x:.1f}%") if tot_pcs > 0 else "0.0%"
+    res["% Ton Share"] = (res["Rej_Ton"] / tot_ton * 100.0).apply(lambda x: f"{x:.1f}%") if tot_ton > 0 else "0.0%"
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
     res = res.rename(columns={lineman_col: "Lineman (Added By)"})
     return res
@@ -352,7 +353,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Top Header
+    # 1. Clean Top Header
     ax.text(
         1.5,
         98.4,
@@ -530,7 +531,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
+    # Right Executive Brief: 2 Full-Height Cards
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -590,8 +591,156 @@ def m2_generate_scrap_jpg(
     return buf.getvalue()
 
 
+def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
+    """
+    Dedicated 1-Page JPG visual report for Month-to-Date Cause-Wise Rejection Pareto Analytics
+    """
+    fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
+    fig.patch.set_facecolor('#f1f5f9')
+    ax.set_facecolor('#f1f5f9')
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+
+    month_name = sel_date_obj.strftime("%B")
+    year_num = sel_date_obj.year
+    span_text = f"{month_name} 01 – {month_name} {sel_day_num:02d}, {year_num}"
+
+    tot_pcs = df_cause["Rej_Pcs"].sum()
+    tot_ton = df_cause["Rej_Ton"].sum()
+    tot_entries = df_cause["Entries_Count"].sum()
+    tot_causes = len(df_cause)
+
+    # 1. Clean Top Header & Span Badge
+    ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, "Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
+    
+    # Span Badge
+    span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    ax.add_patch(span_badge)
+    ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+
+    # 2. KPI Cards Row
+    top_driver_name = df_cause.iloc[0]["Cause"] if not df_cause.empty else "-"
+    top_driver_pct = df_cause.iloc[0]["% Share Raw"] if not df_cause.empty else 0.0
+
+    kpis = [
+        ("CUMULATIVE REJECTION", f"{tot_pcs:,} Pcs", f"{tot_ton:.3f} Metric Tons", "#dc2626"),
+        ("TOTAL DEFECT LOGS", f"{tot_entries:,} Logs", "Entries Across Lines", "#2563eb"),
+        ("ACTIVE DEFECT TYPES", f"{tot_causes} Causes", "Distinct Rejection Modes", "#7c3aed"),
+        ("TOP DEFECT DRIVER", f"{top_driver_name[:16]}", f"{top_driver_pct:.1f}% of Total Rejection", "#f59e0b"),
+    ]
+    kpi_w, kpi_gap = 23.0, 1.33
+    for i, (title, val, sub, col_bar) in enumerate(kpis):
+        x0 = 1.5 + i * (kpi_w + kpi_gap)
+        card = patches.FancyBboxPatch((x0, 87.0), kpi_w, 7.2, boxstyle="round,pad=0.15,rounding_size=0.5", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=0.8)
+        ax.add_patch(card)
+        top_bar = patches.FancyBboxPatch((x0 + 0.1, 93.75), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor='none')
+        ax.add_patch(top_bar)
+        ax.text(x0 + kpi_w/2, 92.4, title, color='#64748b', fontsize=7.6, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
+
+    # 3. Main Workspace Containers
+    left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
+    ax.add_patch(left_card)
+    ax.text(3.5, 83.5, f"CAUSE-WISE DEFECT VOLUME & TONNAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(73.0, 83.5, f"{tot_causes} Defect Modes Logged", color='#64748b', fontsize=7.8, ha='right')
+
+    right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
+    ax.add_patch(right_card)
+    ax.text(78.0, 83.5, "PARETO INTELLIGENCE", color='#0f172a', fontsize=10.5, fontweight='bold')
+
+    # Dual sub-tables inside Left Card
+    mid_idx = (len(df_cause) + 1) // 2
+    sub_a = df_cause.iloc[:mid_idx].copy()
+    sub_b = df_cause.iloc[mid_idx:].copy()
+
+    sub_configs = [(sub_a, 2.6, 35.6, 1), (sub_b, 38.6, 35.6, mid_idx + 1)]
+
+    for sub_df, left_x, tbl_w, start_rank in sub_configs:
+        tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
+        ax.add_patch(tbl_hdr)
+        ax.text(left_x + 0.8, 80.8, "#", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+        ax.text(left_x + 2.5, 80.8, "DEFECT CAUSE MODE", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+        ax.text(left_x + 19.5, 80.8, "PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+        ax.text(left_x + 25.5, 80.8, "TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+        ax.text(left_x + 30.0, 80.8, "MCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+        ax.text(left_x + 34.8, 80.8, "SHARE", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+
+        row_y = 77.2
+        row_step = min(3.8, 74.0 / max(1, len(sub_df)))
+        for r_i, (_, r) in enumerate(sub_df.iterrows()):
+            bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
+            row_bg = patches.Rectangle((left_x, row_y - 1.2), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
+            ax.add_patch(row_bg)
+            ax.plot([left_x, left_x + tbl_w], [row_y - 1.2, row_y - 1.2], color='#e2e8f0', linewidth=0.45)
+
+            rank_num = start_rank + r_i
+            ax.text(left_x + 0.8, row_y + 0.35, f"{rank_num}", color='#64748b', fontsize=6.4, va='center')
+            ax.text(left_x + 2.5, row_y + 0.35, str(r["Cause"])[:22], color='#0f172a', fontsize=6.6, fontweight='bold', va='center')
+            ax.text(left_x + 19.5, row_y + 0.35, f"{int(r['Rej_Pcs']):,}", color='#0f172a', fontsize=6.6, ha='right', va='center')
+            ax.text(left_x + 25.5, row_y + 0.35, f"{r['Rej_Ton']:.3f}", color='#0f172a', fontsize=6.4, ha='right', va='center')
+            ax.text(left_x + 30.0, row_y + 0.35, f"{int(r['MC_Count'])}", color='#64748b', fontsize=6.4, ha='right', va='center')
+            
+            share_val = r["% Share Raw"]
+            ax.text(left_x + 34.8, row_y + 0.35, f"{share_val:.1f}%", color='#b91c1c' if share_val >= 10 else '#0f172a', fontsize=6.6, fontweight='bold' if share_val >= 10 else 'normal', ha='right', va='center')
+            row_y -= row_step
+
+    # 4. Right Side 2 Action Cards
+    cum_share = 0.0
+    vital_few = []
+    for _, r in df_cause.iterrows():
+        cum_share += r["% Share Raw"]
+        vital_few.append(f"{r['Cause']} ({r['% Share Raw']:.1f}%)")
+        if cum_share >= 75.0 or len(vital_few) >= 4:
+            break
+
+    c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#fff7f7', edgecolor='#fecaca', linewidth=0.8)
+    ax.add_patch(c1)
+    ax.text(78.6, 78.8, "Pareto 80/20 Vital Few", color='#b91c1c', fontsize=9.6, fontweight='bold')
+
+    vital_text = "\n".join([f"  {idx+1}. {item}" for idx, item in enumerate(vital_few)])
+    t1 = (
+        f"• Vital Defect Modes ({cum_share:.1f}% Loss):\n"
+        f"{vital_text}\n\n"
+        f"• Critical Focus:\n"
+        f"  Over 70% of factory rejection\n"
+        f"  is concentrated in just {len(vital_few)}\n"
+        f"  defect categories.\n\n"
+        f"• Primary Action Directives:\n"
+        f"  - Mold Fill / Cushion Tuning\n"
+        f"  - Purging standardization\n"
+        f"  - Temperature nozzle balance."
+    )
+    ax.text(78.6, 75.2, t1, color='#7f1d1d', fontsize=8.0, linespacing=1.45, va='top')
+
+    c2 = patches.FancyBboxPatch((77.5, 2.5), 20.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f0fdf4', edgecolor='#bbf7d0', linewidth=0.8)
+    ax.add_patch(c2)
+    ax.text(78.6, 38.2, "Cumulative Span Summary", color='#15803d', fontsize=9.6, fontweight='bold')
+    t2 = (
+        f"• Monitoring Period:\n"
+        f"  {span_text}\n"
+        f"  (Total {sel_day_num} Days Recorded).\n\n"
+        f"• Total Volume Impact:\n"
+        f"  - Output Lost: {tot_pcs:,} Pcs\n"
+        f"  - Total Rejection: {tot_ton:.3f} Tons\n"
+        f"  - Avg Loss: {tot_ton/sel_day_num:.2f} Tons/Day.\n\n"
+        f"• Shop Floor Quality Gate:\n"
+        f"  Strict line inspection on all\n"
+        f"  high-volume running molds."
+    )
+    ax.text(78.6, 34.6, t2, color='#166534', fontsize=8.0, linespacing=1.45, va='top')
+
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="jpg", facecolor=fig.get_facecolor(), edgecolor="none", dpi=220)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def render_scrap_module():
-    # Top Navigation Breadcrumb Bar with wide column proportions
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
         if st.button("⬅️ Back to Operations Hub", use_container_width=True):
@@ -746,8 +895,8 @@ def render_scrap_module():
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # 5. Visual Export Button (Clean prominent download bar)
-        jpg_bytes = m2_generate_scrap_jpg(
+        # 5. Visual Export Button (Daily Report)
+        jpg_bytes_daily = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
             total_rej_pcs,
@@ -769,11 +918,18 @@ def render_scrap_module():
             top3_summary_list,
         )
 
+        # 6. Visual Export Button (MTD Cause Pareto Report)
+        jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
+            df_cause_as_of,
+            sel_date_obj,
+            sel_day_num,
+        )
+
         with c_snap:
             st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
             st.download_button(
                 label="📸 Download 1-Page JPG Report",
-                data=jpg_bytes,
+                data=jpg_bytes_daily,
                 file_name=f"Daily_Rejection_Report_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
@@ -859,16 +1015,29 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
         st.divider()
 
-        # Section 3: Cause-Wise Rejection Defect Analysis
-        st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
+        # Section 3: Cause-Wise Rejection Defect Analysis with Top-Right Download Button
+        c_cause_hdr, c_cause_btn = st.columns([3, 1.2], vertical_alignment="center")
+        with c_cause_hdr:
+            st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
+        with c_cause_btn:
+            st.download_button(
+                label="📸 Download MTD Cause Pareto Report (JPG)",
+                data=jpg_bytes_cause_pareto,
+                file_name=f"MTD_Cause_Pareto_Report_AsOf_{sel_date_str}.jpg",
+                mime="image/jpeg",
+                use_container_width=True,
+            )
+
         tab_cause_day, tab_cause_asof = st.tabs([
             f"📅 Selected Date ({day_formatted})",
             f"📈 As of Month-to-Date Defect Pareto (Day 1 – {sel_day_num})",
         ])
+        
+        display_cause_cols = ["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]
         with tab_cause_day:
-            st.dataframe(df_cause_day, use_container_width=True, hide_index=True)
+            st.dataframe(df_cause_day[display_cause_cols], use_container_width=True, hide_index=True)
         with tab_cause_asof:
-            st.dataframe(df_cause_as_of, use_container_width=True, hide_index=True)
+            st.dataframe(df_cause_as_of[display_cause_cols], use_container_width=True, hide_index=True)
 
         st.divider()
 
