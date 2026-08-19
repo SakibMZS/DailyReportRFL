@@ -11,7 +11,6 @@
     --text-muted: #64748b;
     --border-color: #e2e8f0;
     --blue-accent: #2563eb;
-    --green-accent: #10b981;
 }
 
 .stApp {
@@ -34,51 +33,51 @@ header[data-testid="stHeader"], footer, section[data-testid="stSidebar"] {
 }
 
 /* ---------------------------------------------------------
-   BUTTON STYLING (Crisp, High Contrast, Fully Legible)
+   BUTTONS (Clean White Cards & Dark Primary Action)
    --------------------------------------------------------- */
-div.stButton > button, 
-div.stDownloadButton > button {
-    background: #ffffff !important;
+div.stButton > button {
+    background-color: #ffffff !important;
     color: #0f172a !important;
     border: 1.5px solid #cbd5e1 !important;
     border-radius: 8px !important;
-    padding: 0.55rem 1.1rem !important;
+    padding: 0.5rem 1.2rem !important;
     font-weight: 700 !important;
-    font-size: 0.85rem !important;
-    letter-spacing: 0.01em !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+    font-size: 0.86rem !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
     transition: all 0.15s ease-in-out !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 0.4rem !important;
-    height: 42px !important;
+    min-height: 42px !important;
 }
 
-div.stButton > button:hover, 
-div.stDownloadButton > button:hover {
-    background: #f1f5f9 !important;
+div.stButton > button:hover {
+    background-color: #f1f5f9 !important;
     border-color: #94a3b8 !important;
-    color: #0284c7 !important;
-    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.1) !important;
+    color: #2563eb !important;
     transform: translateY(-1px) !important;
 }
 
-/* Primary Accent Buttons (Download / Action) */
 div.stDownloadButton > button {
-    background: #0f172a !important;
+    background-color: #0f172a !important;
     color: #ffffff !important;
     border: 1.5px solid #0f172a !important;
+    border-radius: 8px !important;
+    padding: 0.5rem 1.2rem !important;
+    font-weight: 700 !important;
+    font-size: 0.86rem !important;
+    min-height: 42px !important;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12) !important;
 }
 
 div.stDownloadButton > button:hover {
-    background: #2563eb !important;
+    background-color: #2563eb !important;
     border-color: #2563eb !important;
     color: #ffffff !important;
 }
 
 /* ---------------------------------------------------------
-   CONTROL BAR & FORM INPUTS
+   CONTROL BAR & FORM INPUTS (Light & Crisp)
    --------------------------------------------------------- */
 .control-bar-card {
     background: #ffffff;
@@ -96,10 +95,10 @@ div[data-baseweb="base-input"] {
     color: #0f172a !important;
     border-color: #cbd5e1 !important;
     border-radius: 8px !important;
-    font-weight: 600 !important;
 }
 
 div[data-baseweb="input"] input {
+    background-color: #ffffff !important;
     color: #0f172a !important;
     font-weight: 700 !important;
     font-size: 0.9rem !important;
@@ -108,13 +107,79 @@ div[data-baseweb="input"] input {
 label[data-testid="stWidgetLabel"] p {
     color: #475569 !important;
     font-weight: 700 !important;
-    font-size: 0.82rem !important;
-    margin-bottom: 0.2rem !important;
+    font-size: 0.84rem !important;
+    margin-bottom: 0.25rem !important;
 }
 
 /* ---------------------------------------------------------
-   KPI METRIC CARDS
+   TAB NAVIGATION STYLING (Pill Tabs)
    --------------------------------------------------------- */
+div[data-testid="stTabs"] {
+    margin-top: 0.4rem !important;
+    margin-bottom: 0.8rem !important;
+}
+
+div[data-testid="stTabs"] div[role="tablist"] {
+    gap: 0.6rem !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    padding-bottom: 0.2rem !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"] {
+    background-color: #f1f5f9 !important;
+    color: #64748b !important;
+    border-radius: 8px !important;
+    padding: 0.45rem 1rem !important;
+    font-weight: 700 !important;
+    font-size: 0.84rem !important;
+    border: 1px solid #e2e8f0 !important;
+    transition: all 0.15s ease !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"]:hover {
+    background-color: #e2e8f0 !important;
+    color: #0f172a !important;
+}
+
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #2563eb !important;
+}
+
+/* ---------------------------------------------------------
+   LIGHT DATAFRAME TABLES
+   --------------------------------------------------------- */
+[data-testid="stDataFrame"] {
+    background-color: #ffffff !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* ---------------------------------------------------------
+   EXPANDER (Approval Box)
+   --------------------------------------------------------- */
+div[data-testid="stExpander"] {
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+}
+
+/* ---------------------------------------------------------
+   NARRATIVE CARDS
+   --------------------------------------------------------- */
+.narrative-block {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.2rem 1.4rem;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: #1e293b;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+}
+
 .kpi-card {
     background: #ffffff;
     border-radius: 12px;
@@ -153,60 +218,4 @@ label[data-testid="stWidgetLabel"] p {
     color: #94a3b8;
     margin-top: 0.2rem;
     font-weight: 600;
-}
-
-/* ---------------------------------------------------------
-   PANELS & NARRATIVE CARDS
-   --------------------------------------------------------- */
-.panel-card {
-    background: #ffffff;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    padding: 1.3rem 1.5rem;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.4rem;
-}
-
-.panel-card h4 {
-    font-size: 1.05rem !important;
-    font-weight: 800 !important;
-    margin-bottom: 1rem !important;
-    color: #0f172a;
-}
-
-.narrative-block {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 1.2rem 1.4rem;
-    font-size: 0.88rem;
-    line-height: 1.6;
-    color: #1e293b;
-}
-
-/* ---------------------------------------------------------
-   DATAFRAME TABLE STYLING
-   --------------------------------------------------------- */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--border-color) !important;
-    border-radius: 10px !important;
-    overflow: hidden !important;
-}
-
-[data-testid="stDataFrame"] * {
-    font-size: 0.80rem !important;
-}
-
-/* ---------------------------------------------------------
-   TABS STYLING
-   --------------------------------------------------------- */
-div[data-testid="stTabs"] button {
-    font-weight: 700 !important;
-    font-size: 0.86rem !important;
-    color: #475569 !important;
-}
-
-div[data-testid="stTabs"] button[aria-selected="true"] {
-    color: #2563eb !important;
-    border-bottom: 2px solid #2563eb !important;
 }
