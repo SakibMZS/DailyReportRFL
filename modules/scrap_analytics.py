@@ -288,8 +288,10 @@ def m2_compute_lineman_breakdown(df_scope):
 
     tot_pcs = res["Rej_Pcs"].sum()
     tot_ton = res["Rej_Ton"].sum()
-    res["% Pcs Share"] = (res["Rej_Pcs"] / tot_pcs * 100.0).apply(lambda x: f"{x:.1f}%") if tot_pcs > 0 else "0.0%"
-    res["% Ton Share"] = (res["Rej_Ton"] / tot_ton * 100.0).apply(lambda x: f"{x:.1f}%") if tot_ton > 0 else "0.0%"
+    res["% Pcs Share Raw"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
+    res["% Ton Share Raw"] = (res["Rej_Ton"] / tot_ton * 100.0).round(1) if tot_ton > 0 else 0.0
+    res["% Pcs Share"] = res["% Pcs Share Raw"].apply(lambda x: f"{x:.1f}%")
+    res["% Ton Share"] = res["% Ton Share Raw"].apply(lambda x: f"{x:.1f}%")
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
     res = res.rename(columns={lineman_col: "Lineman (Added By)"})
     return res
@@ -531,7 +533,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards
+    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -740,6 +742,151 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     return buf.getvalue()
 
 
+def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
+    """
+    Dedicated 1-Page JPG visual report for Month-to-Date Lineman-Wise Activity & Quality Logging
+    """
+    fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
+    fig.patch.set_facecolor('#f1f5f9')
+    ax.set_facecolor('#f1f5f9')
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.axis('off')
+
+    month_name = sel_date_obj.strftime("%B")
+    year_num = sel_date_obj.year
+    span_text = f"{month_name} 01 – {month_name} {sel_day_num:02d}, {year_num}"
+
+    tot_pcs = df_lineman["Rej_Pcs"].sum()
+    tot_ton = df_lineman["Rej_Ton"].sum()
+    tot_entries = df_lineman["Logged_Entries"].sum()
+    tot_linemen = len(df_lineman)
+
+    # 1. Clean Top Header & Span Badge
+    ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, "Line-Level Quality Logging Activity & Tonnage Accountability  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
+    
+    # Span Badge
+    span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    ax.add_patch(span_badge)
+    ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+
+    # 2. KPI Cards Row (Height = 7.2)
+    top_lineman_name = df_lineman.iloc[0]["Lineman (Added By)"] if not df_lineman.empty else "-"
+    top_lineman_pcs = df_lineman.iloc[0]["Rej_Pcs"] if not df_lineman.empty else 0
+    top_lineman_pct = df_lineman.iloc[0]["% Pcs Share Raw"] if not df_lineman.empty else 0.0
+
+    kpis = [
+        ("TOTAL LOGGED SCRAP", f"{tot_pcs:,} Pcs", f"{tot_ton:.3f} Metric Tons", "#dc2626"),
+        ("LOGGED TRANSACTIONS", f"{tot_entries:,} Entries", "Audit Records Recorded", "#2563eb"),
+        ("ACTIVE LINEMEN", f"{tot_linemen} Personnel", "Logging Rejection on Floor", "#7c3aed"),
+        ("HIGHEST LOGGED VOLUME", f"{top_lineman_name.split('(')[0].strip()}", f"{top_lineman_pcs:,} Pcs ({top_lineman_pct:.1f}%)", "#f59e0b"),
+    ]
+    kpi_w, kpi_gap = 23.0, 1.33
+    for i, (title, val, sub, col_bar) in enumerate(kpis):
+        x0 = 1.5 + i * (kpi_w + kpi_gap)
+        card = patches.FancyBboxPatch((x0, 87.0), kpi_w, 7.2, boxstyle="round,pad=0.15,rounding_size=0.5", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=0.8)
+        ax.add_patch(card)
+        top_bar = patches.FancyBboxPatch((x0 + 0.1, 93.75), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor='none')
+        ax.add_patch(top_bar)
+        ax.text(x0 + kpi_w/2, 92.4, title, color='#64748b', fontsize=7.6, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
+
+    # 3. Main Workspace Containers (Height = 84.0)
+    left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
+    ax.add_patch(left_card)
+    ax.text(3.5, 83.5, f"LINEMAN REJECTION LOGGING & COVERAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(73.0, 83.5, f"{tot_linemen} Active Logging Personnel", color='#64748b', fontsize=7.8, ha='right')
+
+    right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
+    ax.add_patch(right_card)
+    ax.text(78.0, 83.5, "OPERATIONAL AUDIT", color='#0f172a', fontsize=10.5, fontweight='bold')
+
+    # Table rendering in Left Card
+    left_x = 2.6
+    tbl_w = 71.3
+    tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
+    ax.add_patch(tbl_hdr)
+    ax.text(left_x + 1.0, 80.8, "#", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+    ax.text(left_x + 3.0, 80.8, "LINEMAN PERSONNEL (ADDED BY)", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+    ax.text(left_x + 34.0, 80.8, "REJ PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 42.0, 80.8, "REJ TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 50.5, 80.8, "ENTRIES", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 58.5, 80.8, "MCS COVERED", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 65.0, 80.8, "PCS %", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 70.2, 80.8, "TON %", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+
+    row_y = 77.0
+    row_step = min(4.4, 73.0 / max(1, tot_linemen))
+    for r_i, (_, r) in enumerate(df_lineman.iterrows()):
+        bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
+        row_bg = patches.Rectangle((left_x, row_y - 1.4), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
+        ax.add_patch(row_bg)
+        ax.plot([left_x, left_x + tbl_w], [row_y - 1.4, row_y - 1.4], color='#e2e8f0', linewidth=0.45)
+
+        ax.text(left_x + 1.0, row_y + 0.35, f"{r_i + 1}", color='#64748b', fontsize=6.6, va='center')
+        ax.text(left_x + 3.0, row_y + 0.35, str(r["Lineman (Added By)"]), color='#0f172a', fontsize=6.8, fontweight='bold', va='center')
+        ax.text(left_x + 34.0, row_y + 0.35, f"{int(r['Rej_Pcs']):,}", color='#0f172a', fontsize=6.8, ha='right', va='center')
+        ax.text(left_x + 42.0, row_y + 0.35, f"{r['Rej_Ton']:.3f}", color='#0f172a', fontsize=6.6, ha='right', va='center')
+        ax.text(left_x + 50.5, row_y + 0.35, f"{int(r['Logged_Entries']):,}", color='#64748b', fontsize=6.6, ha='right', va='center')
+        ax.text(left_x + 58.5, row_y + 0.35, f"{int(r['Machines_Covered'])}", color='#64748b', fontsize=6.6, ha='right', va='center')
+        
+        pcs_share = r["% Pcs Share Raw"]
+        ax.text(left_x + 65.0, row_y + 0.35, f"{pcs_share:.1f}%", color='#b91c1c' if pcs_share >= 12 else '#0f172a', fontsize=6.8, fontweight='bold' if pcs_share >= 12 else 'normal', ha='right', va='center')
+        
+        ton_share = r["% Ton Share Raw"]
+        ax.text(left_x + 70.2, row_y + 0.35, f"{ton_share:.1f}%", color='#2563eb' if ton_share >= 12 else '#0f172a', fontsize=6.8, fontweight='bold' if ton_share >= 12 else 'normal', ha='right', va='center')
+        row_y -= row_step
+
+    # 4. Right Side 2 Action Cards
+    top_3_linemen = df_lineman.head(3)
+    top_3_pcs_sum = top_3_linemen["% Pcs Share Raw"].sum()
+    c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f8fafc', edgecolor='#cbd5e1', linewidth=0.8)
+    ax.add_patch(c1)
+    ax.text(78.6, 78.8, "Shift Accountability Summary", color='#0f172a', fontsize=9.6, fontweight='bold')
+
+    top3_lines = "\n".join([f"  {idx+1}. {r['Lineman (Added By)'].split('(')[0].strip()}: {r['% Pcs Share Raw']:.1f}% ({r['Rej_Ton']:.2f} T)" for idx, (_, r) in enumerate(top_3_linemen.iterrows())])
+    t1 = (
+        f"• Top 3 Logging Personnel:\n"
+        f"{top3_lines}\n\n"
+        f"• Volume Concentration:\n"
+        f"  Top 3 contributors logged\n"
+        f"  {top_3_pcs_sum:.1f}% of total rejected\n"
+        f"  pieces across the floor.\n\n"
+        f"• Operational Compliance:\n"
+        f"  Ensure timely entry of mold\n"
+        f"  change scrap & purge weight\n"
+        f"  during shift handover."
+    )
+    ax.text(78.6, 75.2, t1, color='#334155', fontsize=8.0, linespacing=1.45, va='top')
+
+    c2 = patches.FancyBboxPatch((77.5, 2.5), 20.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=0.8)
+    ax.add_patch(c2)
+    ax.text(78.6, 38.2, "Logging Coverage Audit", color='#1d4ed8', fontsize=9.6, fontweight='bold')
+    t2 = (
+        f"• Audit Period:\n"
+        f"  {span_text}\n"
+        f"  ({sel_day_num} Days Monitored).\n\n"
+        f"• Transaction Volume:\n"
+        f"  - {tot_entries:,} Rejection entries\n"
+        f"  - {tot_ton:.3f} Metric tons total\n"
+        f"  - {tot_linemen} Active operators.\n\n"
+        f"• Quality Protocol:\n"
+        f"  Daily random verification of\n"
+        f"  logged rejection pieces vs\n"
+        f"  physical scrap bins."
+    )
+    ax.text(78.6, 34.6, t2, color='#1e3a8a', fontsize=8.0, linespacing=1.45, va='top')
+
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="jpg", facecolor=fig.get_facecolor(), edgecolor="none", dpi=220)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def render_scrap_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
@@ -895,7 +1042,7 @@ def render_scrap_module():
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # 5. Visual Export Button (Daily Report)
+        # 5. Visual Export Buttons
         jpg_bytes_daily = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
@@ -918,9 +1065,14 @@ def render_scrap_module():
             top3_summary_list,
         )
 
-        # 6. Visual Export Button (MTD Cause Pareto Report)
         jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
             df_cause_as_of,
+            sel_date_obj,
+            sel_day_num,
+        )
+
+        jpg_bytes_lineman = m2_generate_lineman_report_jpg(
+            df_lineman_as_of,
             sel_date_obj,
             sel_day_num,
         )
@@ -1015,8 +1167,8 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
         st.divider()
 
-        # Section 3: Cause-Wise Rejection Defect Analysis with Top-Right Download Button
-        c_cause_hdr, c_cause_btn = st.columns([3, 1.2], vertical_alignment="center")
+        # Section 3: Cause-Wise Rejection Defect Analysis with Download Button
+        c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
         with c_cause_btn:
@@ -1041,20 +1193,33 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
         st.divider()
 
-        # Section 4: Lineman-Wise Analysis (Column I - Added By)
-        st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
+        # Section 4: Lineman-Wise Analysis with Download Button
+        c_line_hdr, c_line_btn = st.columns([3, 1.4], vertical_alignment="center")
+        with c_line_hdr:
+            st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
+        with c_line_btn:
+            st.download_button(
+                label="📸 Download MTD Lineman Report (JPG)",
+                data=jpg_bytes_lineman,
+                file_name=f"MTD_Lineman_Report_AsOf_{sel_date_str}.jpg",
+                mime="image/jpeg",
+                use_container_width=True,
+            )
+
         tab_line_day, tab_line_asof = st.tabs([
             f"📅 Selected Date Linemen Activity ({day_formatted})",
             f"📈 As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
         ])
+        
+        display_lineman_cols = ["Lineman (Added By)", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Logged_Entries", "Machines_Covered", "% Pcs Share", "% Ton Share"]
         with tab_line_day:
             if not df_lineman_day.empty:
-                st.dataframe(df_lineman_day, use_container_width=True, hide_index=True)
+                st.dataframe(df_lineman_day[display_lineman_cols], use_container_width=True, hide_index=True)
             else:
                 st.info("No lineman entries logged for this date.")
         with tab_line_asof:
             if not df_lineman_as_of.empty:
-                st.dataframe(df_lineman_as_of, use_container_width=True, hide_index=True)
+                st.dataframe(df_lineman_as_of[display_lineman_cols], use_container_width=True, hide_index=True)
             else:
                 st.info("No lineman entries logged for the current month.")
 
