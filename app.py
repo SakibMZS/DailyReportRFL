@@ -2,11 +2,16 @@
 # OPERATIONS CONSOLE — FULL-WIDTH ENTERPRISE PLATFORM
 # =========================================================
 import os
+import importlib
 import streamlit as st
 
 # Import isolated modules
-from modules.size_wise import render_size_wise_module
-from modules.scrap_analytics import render_scrap_module
+import modules.size_wise as size_wise
+import modules.scrap_analytics as scrap_analytics
+
+# Force Streamlit to always execute the latest code from modules
+importlib.reload(size_wise)
+importlib.reload(scrap_analytics)
 
 st.set_page_config(
     page_title="Operations Console | Daily Report RFL",
@@ -139,14 +144,14 @@ if st.session_state["active_view"] == "hub_home":
 # VIEW 2: MODULE 1 — SIZE-WISE PERFORMANCE & HR
 # ---------------------------------------------------------
 elif st.session_state["active_view"] == "mod_size_wise":
-    render_size_wise_module()
+    size_wise.render_size_wise_module()
 
 
 # ---------------------------------------------------------
 # VIEW 3: MODULE 2 — DAILY SCRAP & DEFECT ANALYTICS
 # ---------------------------------------------------------
 elif st.session_state["active_view"] == "mod_scrap":
-    render_scrap_module()
+    scrap_analytics.render_scrap_module()
 
 
 # ---------------------------------------------------------
