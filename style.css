@@ -1,11 +1,11 @@
 /* =========================================================
-   OPERATIONS CONSOLE — FULL-WIDTH ENTERPRISE STYLING
+   OPERATIONS CONSOLE — ENTERPRISE CLEAN STYLING
    ========================================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-    --bg: #f4f7fb;
+    --bg: #f8fafc;
     --surface: #ffffff;
     --text-main: #0f172a;
     --text-muted: #64748b;
@@ -20,257 +20,193 @@
     color: var(--text-main) !important;
 }
 
-/* Hide Streamlit default headers, sidebars, and footers */
+/* Hide default streamlit clutter */
 header[data-testid="stHeader"], footer, section[data-testid="stSidebar"] {
     display: none !important;
 }
 
 .block-container {
-    max-width: 1640px !important;
-    padding-top: 1rem !important;
+    max-width: 1680px !important;
+    padding-top: 1.2rem !important;
     padding-bottom: 3.5rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
 }
 
-/* Top Navigation Bar */
-.top-nav-bar {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 0.75rem 1.4rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.25rem;
+/* ---------------------------------------------------------
+   BUTTON STYLING (Crisp, High Contrast, Fully Legible)
+   --------------------------------------------------------- */
+div.stButton > button, 
+div.stDownloadButton > button {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 0.55rem 1.1rem !important;
+    font-weight: 700 !important;
+    font-size: 0.85rem !important;
+    letter-spacing: 0.01em !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06) !important;
+    transition: all 0.15s ease-in-out !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.4rem !important;
+    height: 42px !important;
 }
 
-/* Hub Landing Cards */
-.hub-card {
-    background: #ffffff;
-    border-radius: 14px;
-    padding: 1.6rem 1.75rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+div.stButton > button:hover, 
+div.stDownloadButton > button:hover {
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #0284c7 !important;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.1) !important;
+    transform: translateY(-1px) !important;
 }
 
-.hub-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+/* Primary Accent Buttons (Download / Action) */
+div.stDownloadButton > button {
+    background: #0f172a !important;
+    color: #ffffff !important;
+    border: 1.5px solid #0f172a !important;
 }
 
-.hub-card h3 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.2rem;
-    font-weight: 800;
-    color: #0f172a;
+div.stDownloadButton > button:hover {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    color: #ffffff !important;
 }
 
-.hub-card p {
-    color: #64748b;
-    font-size: 0.88rem;
-    line-height: 1.55;
-    margin: 0 0 1.25rem 0;
-}
-
-/* Control Bar Card */
+/* ---------------------------------------------------------
+   CONTROL BAR & FORM INPUTS
+   --------------------------------------------------------- */
 .control-bar-card {
     background: #ffffff;
     border-radius: 12px;
-    padding: 0.9rem 1.25rem 0.5rem 1.25rem;
+    padding: 1rem 1.4rem 0.8rem 1.4rem;
     border: 1px solid var(--border-color);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.2rem;
+    margin-bottom: 1.25rem;
 }
 
-/* Form Inputs */
 div[data-baseweb="input"], 
 div[data-baseweb="select"],
-div[data-baseweb="input"] input,
 div[data-baseweb="base-input"] {
     background-color: #ffffff !important;
     color: #0f172a !important;
     border-color: #cbd5e1 !important;
     border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+div[data-baseweb="input"] input {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
 }
 
 label[data-testid="stWidgetLabel"] p {
-    color: #334155 !important;
+    color: #475569 !important;
     font-weight: 700 !important;
     font-size: 0.82rem !important;
+    margin-bottom: 0.2rem !important;
 }
 
-/* Header Banner Card */
-.report-header-banner {
-    background: linear-gradient(135deg, #091e3a 0%, #102a4e 100%);
-    border-radius: 14px;
-    padding: 1.25rem 1.75rem;
-    color: #ffffff !important;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.15rem;
-    box-shadow: 0 10px 25px rgba(9, 30, 58, 0.12);
-}
-
-.report-header-banner h2 {
-    color: #ffffff !important;
-    font-size: 1.65rem !important;
-    font-weight: 800 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-.report-header-banner p {
-    color: #94a3b8 !important;
-    font-size: 0.85rem !important;
-    margin: 0.2rem 0 0 0 !important;
-}
-
-.efficiency-badge-large {
-    background: #10b981;
-    border-radius: 12px;
-    padding: 0.75rem 1.5rem;
-    text-align: center;
-    color: #ffffff;
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
-}
-
-.efficiency-badge-large .value {
-    font-size: 1.9rem;
-    font-weight: 900;
-    line-height: 1;
-}
-
-.efficiency-badge-large .label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-top: 0.2rem;
-}
-
-/* Metric Row Cards */
+/* ---------------------------------------------------------
+   KPI METRIC CARDS
+   --------------------------------------------------------- */
 .kpi-card {
     background: #ffffff;
     border-radius: 12px;
-    padding: 0.85rem 0.9rem;
+    padding: 0.9rem 1rem;
     border: 1px solid var(--border-color);
     box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
     text-align: center;
     border-top: 4px solid var(--blue-accent);
 }
 
-.kpi-card.blue { border-top-color: #2563eb; }
-.kpi-card.purple { border-top-color: #8b5cf6; }
-.kpi-card.yellow { border-top-color: #f59e0b; }
 .kpi-card.indigo { border-top-color: #6366f1; }
-.kpi-card.teal { border-top-color: #06b6d4; }
-.kpi-card.pink { border-top-color: #ec4899; }
+.kpi-card.teal   { border-top-color: #06b6d4; }
+.kpi-card.blue   { border-top-color: #2563eb; }
+.kpi-card.purple { border-top-color: #8b5cf6; }
+.kpi-card.pink   { border-top-color: #dc2626; }
+.kpi-card.yellow { border-top-color: #f59e0b; }
 
 .kpi-title {
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-size: 0.72rem;
+    font-weight: 800;
     color: #64748b;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.2rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.25rem;
 }
 
 .kpi-val {
-    font-size: 1.4rem;
-    font-weight: 800;
+    font-size: 1.45rem;
+    font-weight: 900;
     color: #0f172a;
     line-height: 1.2;
 }
 
 .kpi-sub {
-    font-size: 0.72rem;
+    font-size: 0.74rem;
     color: #94a3b8;
-    margin-top: 0.15rem;
+    margin-top: 0.2rem;
+    font-weight: 600;
 }
 
-/* Panels */
+/* ---------------------------------------------------------
+   PANELS & NARRATIVE CARDS
+   --------------------------------------------------------- */
 .panel-card {
     background: #ffffff;
     border-radius: 14px;
     border: 1px solid var(--border-color);
-    padding: 1.25rem 1.4rem;
+    padding: 1.3rem 1.5rem;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.4rem;
 }
 
 .panel-card h4 {
-    font-size: 1.02rem !important;
+    font-size: 1.05rem !important;
     font-weight: 800 !important;
-    margin-bottom: 0.85rem !important;
+    margin-bottom: 1rem !important;
     color: #0f172a;
 }
 
-/* Narrative Statement */
 .narrative-block {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
-    padding: 1.1rem 1.25rem;
-    font-size: 0.85rem;
-    line-height: 1.55;
+    padding: 1.2rem 1.4rem;
+    font-size: 0.88rem;
+    line-height: 1.6;
     color: #1e293b;
 }
 
-.narrative-block h5 {
-    font-size: 0.9rem;
-    font-weight: 700;
-    margin: 0.75rem 0 0.2rem 0;
-    color: #0f172a;
-}
-
-.narrative-block h5:first-child {
-    margin-top: 0;
-}
-
-/* Bottom Callout Cards */
-.callout-card {
-    border-radius: 12px;
-    padding: 1.1rem 1.25rem;
-    font-size: 0.85rem;
-    line-height: 1.55;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
-}
-
-.callout-card.green {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-left: 5px solid #16a34a;
-}
-
-.callout-card.red {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-left: 5px solid #dc2626;
-}
-
-.callout-card h5 {
-    font-size: 0.95rem !important;
-    font-weight: 800 !important;
-    margin: 0 0 0.4rem 0 !important;
-}
-
-.callout-card.green h5 { color: #15803d !important; }
-.callout-card.red h5 { color: #b91c1c !important; }
-
-/* Tables */
+/* ---------------------------------------------------------
+   DATAFRAME TABLE STYLING
+   --------------------------------------------------------- */
 [data-testid="stDataFrame"] {
     border: 1px solid var(--border-color) !important;
     border-radius: 10px !important;
+    overflow: hidden !important;
 }
 
 [data-testid="stDataFrame"] * {
-    font-size: 0.77rem !important;
+    font-size: 0.80rem !important;
+}
+
+/* ---------------------------------------------------------
+   TABS STYLING
+   --------------------------------------------------------- */
+div[data-testid="stTabs"] button {
+    font-weight: 700 !important;
+    font-size: 0.86rem !important;
+    color: #475569 !important;
+}
+
+div[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #2563eb !important;
+    border-bottom: 2px solid #2563eb !important;
 }
