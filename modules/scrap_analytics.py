@@ -352,7 +352,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Header
+    # 1. Top Header
     ax.text(
         1.5,
         98.4,
@@ -530,7 +530,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards
+    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -591,7 +591,8 @@ def m2_generate_scrap_jpg(
 
 
 def render_scrap_module():
-    c_back, c_title, c_act = st.columns([1.2, 3, 1.2], vertical_alignment="center")
+    # Top Navigation Breadcrumb Bar with wide column proportions
+    c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
         if st.button("⬅️ Back to Operations Hub", use_container_width=True):
             st.session_state["active_view"] = "hub_home"
@@ -633,8 +634,9 @@ def render_scrap_module():
         df_prev, df_curr, df_full = m2_parse_workbook(st.session_state["m2_file_bytes"])
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
 
+        # Control Bar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_cut, c_snap = st.columns([1.5, 1.2, 1.3], gap="small")
+        c_date, c_cut, c_snap = st.columns([1.5, 1.2, 1.5], gap="medium")
         with c_date:
             sel_date_str = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
         with c_cut:
@@ -744,7 +746,7 @@ def render_scrap_module():
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # 5. Visual Export Button
+        # 5. Visual Export Button (Clean prominent download bar)
         jpg_bytes = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
@@ -768,9 +770,9 @@ def render_scrap_module():
         )
 
         with c_snap:
-            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label="📸 Download 1-Page JPG",
+                label="📸 Download 1-Page JPG Report",
                 data=jpg_bytes,
                 file_name=f"Daily_Rejection_Report_{sel_date_str}.jpg",
                 mime="image/jpeg",
@@ -805,18 +807,18 @@ def render_scrap_module():
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
         # Mid Section: Rejection Log Table & WhatsApp Note
-        col_left, col_right = st.columns([1.55, 0.95], gap="medium")
+        col_left, col_right = st.columns([1.55, 0.95], gap="large")
         with col_left:
-            st.markdown(f"### ⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
+            st.markdown(f"#### ⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
             if not df_day_filtered.empty:
                 st.dataframe(
                     df_day_filtered[["Position", "Machine", "Causes", "Qty", "Weight (kg)", "Mold"]],
                     use_container_width=True,
                     hide_index=True,
-                    height=380,
+                    height=390,
                 )
             else:
                 st.success("✅ No machines exceeded the rejection cutoff threshold today!")
@@ -835,9 +837,9 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
 
-            st.markdown("### 📝 EXECUTIVE APPROVAL TEXT")
+            st.markdown("#### 📝 EXECUTIVE APPROVAL TEXT")
             st.markdown(
-                f"""<div class="narrative-block" style="font-size: 0.88rem; line-height: 1.6;">
+                f"""<div class="narrative-block">
                     <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
@@ -858,9 +860,9 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
         st.divider()
 
         # Section 3: Cause-Wise Rejection Defect Analysis
-        st.markdown("### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
+        st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
         tab_cause_day, tab_cause_asof = st.tabs([
-            f"📅 Selected Date Breakdown ({day_formatted})",
+            f"📅 Selected Date ({day_formatted})",
             f"📈 As of Month-to-Date Defect Pareto (Day 1 – {sel_day_num})",
         ])
         with tab_cause_day:
@@ -871,7 +873,7 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
         st.divider()
 
         # Section 4: Lineman-Wise Analysis (Column I - Added By)
-        st.markdown("### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
+        st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
         tab_line_day, tab_line_asof = st.tabs([
             f"📅 Selected Date Linemen Activity ({day_formatted})",
             f"📈 As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
@@ -890,7 +892,7 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
         st.divider()
 
         # Section 5: Month-over-Month Daily Trend
-        st.markdown("### 📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
+        st.markdown("#### 📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
         trend_display = df_trend.rename(
             columns={
                 "Day": "Day of Month",
