@@ -23,9 +23,40 @@ def m1_parse_workbook(file_bytes):
 
 
 def m1_compute_size_summary(df_day_details):
+    df_day = df_day_details.copy()
+    
+    # Generate helper key if missing
+    if "Helper" not in df_day.columns:
+        df_day["Helper"] = df_day["MC SL"].astype(str) + "|" + df_day["DateClean"].astype(str)
+        
+    s_col = df_day["A Shift Runtime"].fillna(0)
+    t_col = df_day["B Shift Runtime"].fillna(0)
+    k_col = df_day["STD Cap/Shift"].fillna(0)
+    
+    # Machine-shift total runtimes
+    sum_s_map = df_day.groupby("Helper")["A Shift Runtime"].transform("sum")
+    sum_t_map = df_day.groupby("Helper")["B Shift Runtime"].transform("sum")
+    
+    # Shift A normalized capacity (Accounts for sequential changeover vs simultaneous family mold)
+    cap_a = np.where(
+        sum_s_map > 0,
+        np.where(sum_s_map > 12.01, k_col * (s_col > 0).astype(float), k_col * (s_col / sum_s_map)),
+        0.0
+    )
+    
+    # Shift B normalized capacity
+    cap_b = np.where(
+        sum_t_map > 0,
+        np.where(sum_t_map > 12.01, k_col * (t_col > 0).astype(float), k_col * (t_col / sum_t_map)),
+        0.0
+    )
+    
+    df_day["Norm_Cap_Pcs"] = cap_a + cap_b
+    df_day["Norm_Cap_Ton"] = (df_day["Norm_Cap_Pcs"] * df_day.get("Unit Wt", 0.0)) / 1000.0
+
     records = []
     for sz in EXCEL_SIZES:
-        grp = df_day_details[df_day_details["Size"].astype(str).str.replace(".0", "", regex=False) == sz]
+        grp = df_day[df_day["Size"].astype(str).str.replace(".0", "", regex=False) == sz]
         if grp.empty:
             records.append({
                 "MC Size": sz,
@@ -50,16 +81,9 @@ def m1_compute_size_summary(df_day_details):
         else:
             avg_ct = grp["CT"].mean()
 
-        def calc_row_cap(r):
-            active_shifts = (1.0 if pd.notna(r.get("A Good")) and r.get("A Good", 0) > 0 else 0.0) + \
-                            (1.0 if pd.notna(r.get("B Good")) and r.get("B Good", 0) > 0 else 0.0)
-            if active_shifts == 0 and (r.get("T-Bad", 0) > 0):
-                active_shifts = 1.0
-            return r.get("STD Cap/Shift", 0) * active_shifts
-
-        tot_cap_pcs = grp.apply(calc_row_cap, axis=1).sum()
+        tot_cap_pcs = grp["Norm_Cap_Pcs"].sum()
         tot_prod_pcs = grp["T-Good"].sum()
-        cap_ton = ((grp.apply(calc_row_cap, axis=1) * grp.get("Unit Wt", 0)) / 1000.0).sum()
+        cap_ton = grp["Norm_Cap_Ton"].sum()
         prod_ton = ((grp["T-Good"] * grp.get("Unit Wt", 0)) / 1000.0).sum()
 
         ach_pct = (tot_prod_pcs / tot_cap_pcs * 100) if tot_cap_pcs > 0 else 0.0
