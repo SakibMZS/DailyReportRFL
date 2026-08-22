@@ -344,6 +344,7 @@ def m2_generate_scrap_jpg(
     gf_share_pct,
     ff_share_pct,
     top3_summary_list,
+    min_cutoff=50,
 ):
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
     fig.patch.set_facecolor("#f1f5f9")
@@ -355,7 +356,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Clean Top Header
+    # 1. Clean Dynamic Top Header
     ax.text(
         1.5,
         98.4,
@@ -368,7 +369,7 @@ def m2_generate_scrap_jpg(
     ax.text(
         1.5,
         95.8,
-        f"Plastic-3 Machine Rejection Log (>50 Pcs) & Plant Summary  |  Report Date: {date_formatted}",
+        f"Plastic-3 Machine Rejection Log (>{min_cutoff} Pcs) & Plant Summary  |  Report Date: {date_formatted}",
         color="#64748b",
         fontsize=8.8,
         va="top",
@@ -384,14 +385,14 @@ def m2_generate_scrap_jpg(
         va="top",
     )
 
-    # 2. KPI Cards Row
+    # 2. Dynamic KPI Cards Row
     kpis = [
         ("PREV MO. TOTAL", f"{prev_total_ton:.2f} T", "Total Rejection", "#64748b"),
         ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Baseline", "#64748b"),
         ("THIS MO. AS OF", f"{curr_as_of_total_ton:.2f} T", f"As of {day_formatted}", "#2563eb"),
         ("THIS MO. AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current MTD Pace", "#2563eb"),
         ("LAST DAY REJECTION", f"{total_rej_ton:.3f} T", f"{total_rej_pcs:,} Pcs Lost", "#dc2626"),
-        ("CRITICAL MC (>50)", f"{high_rej_count} MCs", "Lines Exceeding Limit", "#7c3aed"),
+        (f"CRITICAL MC (>{min_cutoff})", f"{high_rej_count} MCs", "Lines Exceeding Limit", "#7c3aed"),
     ]
     kpi_w, kpi_gap = 15.1, 1.25
     for i, (title, val, sub, col_bar) in enumerate(kpis):
@@ -437,7 +438,7 @@ def m2_generate_scrap_jpg(
     ax.text(
         3.5,
         83.5,
-        f"PLASTIC-3 MACHINE REJECTION LOG (>50 Pcs) — {day_formatted}",
+        f"PLASTIC-3 MACHINE REJECTION LOG (>{min_cutoff} Pcs) — {day_formatted}",
         color="#0f172a",
         fontsize=11.0,
         fontweight="bold",
@@ -533,7 +534,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Full-Height Cards with Enriched Typography
+    # Right Executive Brief: 2 Cards with Enriched Typography
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -573,8 +574,8 @@ def m2_generate_scrap_jpg(
     ax.text(78.6, 38.2, "Shop Floor & Plant Distribution", color="#15803d", fontsize=9.6, fontweight="bold")
     t2 = (
         f"• Total Plant Logged: {total_day_mcs} MCs\n"
-        f"  - {high_rej_count} Lines > 50 pcs (Critical)\n"
-        f"  - {total_day_mcs - high_rej_count} Lines <= 50 pcs (Controlled)\n\n"
+        f"  - {high_rej_count} Lines > {min_cutoff} pcs (Critical)\n"
+        f"  - {total_day_mcs - high_rej_count} Lines <= {min_cutoff} pcs (Controlled)\n\n"
         f"• Last Day Output Lost:\n"
         f"  {total_rej_pcs:,} Pcs / {total_rej_ton:.3f} Ton.\n\n"
         f"• Weight Share by Shop Floor:\n"
@@ -594,9 +595,6 @@ def m2_generate_scrap_jpg(
 
 
 def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
-    """
-    Dedicated 1-Page JPG visual report for Month-to-Date Cause-Wise Rejection Pareto Analytics
-    """
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
@@ -743,9 +741,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
 
 
 def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
-    """
-    Dedicated 1-Page JPG visual report for Month-to-Date Lineman-Wise Activity & Quality Logging
-    """
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
@@ -771,7 +766,7 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
-    # 2. KPI Cards Row (Height = 7.2)
+    # 2. KPI Cards Row
     top_lineman_name = df_lineman.iloc[0]["Lineman (Added By)"] if not df_lineman.empty else "-"
     top_lineman_pcs = df_lineman.iloc[0]["Rej_Pcs"] if not df_lineman.empty else 0
     top_lineman_pct = df_lineman.iloc[0]["% Pcs Share Raw"] if not df_lineman.empty else 0.0
@@ -793,7 +788,7 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
         ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
-    # 3. Main Workspace Containers (Height = 84.0)
+    # 3. Main Workspace Containers
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
     ax.text(3.5, 83.5, f"LINEMAN REJECTION LOGGING & COVERAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
@@ -1063,6 +1058,7 @@ def render_scrap_module():
             gf_share_pct,
             ff_share_pct,
             top3_summary_list,
+            min_cutoff=min_cutoff,
         )
 
         jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
@@ -1137,7 +1133,7 @@ def render_scrap_module():
 
 Dear Sir,
 
-These are the line records from *Plastic-3* where rejection exceeded *50 pieces*:
+These are the line records from *Plastic-3* where rejection exceeded *{min_cutoff} pieces*:
 
 🔹 *Prev. Month Total:* {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)
 🔹 *Present Month (As of Today):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
@@ -1151,7 +1147,7 @@ These are the line records from *Plastic-3* where rejection exceeded *50 pieces*
                     <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
-                    <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>50 pieces</b>:</p>
+                    <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
                     <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
                     <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
                     {variance_line_html}
