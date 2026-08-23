@@ -17,8 +17,10 @@ def m1_parse_workbook(file_bytes):
 
     if "Date" in df.columns:
         df["DateClean"] = pd.to_datetime(df["Date"], errors="coerce").dt.strftime("%d-%m-%Y")
+        df["DateObj"] = pd.to_datetime(df["Date"], errors="coerce")
     else:
         df["DateClean"] = "Default"
+        df["DateObj"] = pd.to_datetime("2026-08-01")
     return df
 
 
@@ -206,7 +208,7 @@ def m1_compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
     return pd.DataFrame(records)
 
 
-def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_hr, day_hr, night_hr, hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct, stopped_mcs, low_hr_mcs, high_ach_mcs):
+def m1_generate_executive_jpg(df_size, last_day_ton, as_of_ton, total_prod, active_mc, total_hr, day_hr, night_hr, hr_output, hr_per_mc, overall_eff, sel_date, sel_day_num, top_row, share_pct, stopped_mcs, low_hr_mcs, high_ach_mcs):
     fig, ax = plt.subplots(figsize=(16, 9.8), dpi=220)
     fig.patch.set_facecolor('#f4f7fc')
     ax.set_facecolor('#f4f7fc')
@@ -227,13 +229,13 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
     ax.text(89.0, 92.2, f"{overall_eff:.0f}%", color='#ffffff', fontsize=23, fontweight='bold', ha='center', va='center')
     ax.text(89.0, 88.2, "OVERALL EFFICIENCY", color='#ffffff', fontsize=7, fontweight='bold', ha='center', va='center')
 
-    # KPI Cards
+    # KPI Cards (First two updated to Last Day Tonnage and Month-To-Date As of Tonnage)
     kpi_data = [
-        ("TOTAL PROD", f"{total_prod:,}", "Pcs Output", "#2563eb"),
-        ("TOTAL CAP", f"{total_cap:,}", "Target Pcs", "#8b5cf6"),
+        ("LAST DAY TON", f"{last_day_ton:.2f} T", f"{total_prod:,} Pcs Produced", "#2563eb"),
+        ("AS OF PROD TON", f"{as_of_ton:.2f} T", f"Cumulative As of Day {sel_day_num}", "#8b5cf6"),
         ("ACTIVE MC", f"{active_mc}", "Operating MC", "#f59e0b"),
         ("TOTAL HR", f"{total_hr}", f"Manpower ({day_hr}D + {night_hr}N)", "#6366f1"),
-        ("HR OUTPUT", f"{int(round(hr_output)):,} Pcs", "Per Person", "#06b6d4"),
+        ("HR OUTPUT", f"{int(round(hr_output)):,} Pcs", "Per Person Output", "#06b6d4"),
         ("HR PER MC", f"{hr_per_mc:.1f}", "Persons / MC", "#ec4899"),
     ]
 
@@ -310,11 +312,10 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
     ax.add_patch(sub_bg)
     
     # 1:1 Excel Formula matching for Sub Total:
-    # Row 15 Col D in Excel: =IFERROR(AVERAGE(D3:D14),0) -> or active non-zero average
-    # Row 15 Col E in Excel: =IFERROR(AVERAGEIF(E3:E14, "<>0"),0) -> exactly 14.8
     active_grp = df_size[df_size["MC QTY"] > 0]
     avg_ct = active_grp["CT Avg"].mean() if not active_grp.empty else 0.0
     avg_run_hr = active_grp["Run Hr Avg"].mean() if not active_grp.empty else 0.0
+    total_cap = df_size["Total Cap (Pcs)"].sum()
 
     sub_vals = ["Sub Total", str(active_mc), f"{avg_ct:.0f}", f"{avg_run_hr:.1f}", f"{int(total_cap):,}", f"{int(total_prod):,}", "-", f"{overall_eff:.0f}%"]
     for c_i, (val, cx) in enumerate(zip(sub_vals, col_xs)):
@@ -325,7 +326,7 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
     narr_y = 65.0
     ax.text(63.0, narr_y, "Overall Target Achievement", color='#0f172a', fontsize=9.5, fontweight='bold')
     narr_y -= 2.6
-    p1 = f"Total production reached {total_prod:,} Pcs against a target capacity of\n{total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}%."
+    p1 = f"Total production reached {total_prod:,} Pcs ({last_day_ton:.2f} Ton) against a\ntarget capacity of {total_cap:,} Pcs, achieving an overall plant\nefficiency of {overall_eff:.0f}%."
     ax.text(63.0, narr_y, p1, color='#475569', fontsize=7.8, linespacing=1.45, va='top')
 
     narr_y -= 7.5
@@ -418,13 +419,21 @@ def render_size_wise_module():
             night_hr = st.number_input("🌙 **Night Shift HR**", min_value=1, value=61, step=1)
 
         df_day = df_details[df_details["DateClean"] == sel_date].copy()
+        
+        # Calculate As of (MTD) Cumulative Tonnage
+        sel_date_obj = df_day["DateObj"].iloc[0] if "DateObj" in df_day.columns and not df_day.empty else pd.to_datetime(sel_date, format="%d-%m-%Y")
+        sel_day_num = sel_date_obj.day
+        
+        df_as_of = df_details[df_details["DateObj"].dt.day <= sel_day_num].copy()
+        as_of_ton = ((df_as_of["T-Good"].fillna(0) * df_as_of.get("Unit Wt", 0).fillna(0)) / 1000.0).sum()
+
         df_size = m1_compute_size_summary(df_day)
         df_shift = m1_compute_shiftwise_productivity(df_day, day_hr, night_hr)
 
         total_prod = df_size["Total Prod (Pcs)"].sum()
         total_cap = df_size["Total Cap (Pcs)"].sum()
         active_mcs = df_size[df_size["MC QTY"] > 0]["MC QTY"].sum()
-        total_ton = df_size["Prod Ton"].sum()
+        last_day_ton = df_size["Prod Ton"].sum()
         overall_eff = (total_prod / total_cap * 100) if total_cap > 0 else 0.0
 
         total_hr = day_hr + night_hr
@@ -445,8 +454,8 @@ def render_size_wise_module():
         high_ach_mcs = df_size[(df_size["% Achievement"] >= 84.0) | (df_size["Run Hr Avg"] >= 20.0)]
 
         jpg_bytes = m1_generate_executive_jpg(
-            df_size, total_prod, total_cap, active_mcs, total_hr, day_hr, night_hr,
-            hr_output, hr_per_mc, overall_eff, sel_date, top_row, share_pct,
+            df_size, last_day_ton, as_of_ton, total_prod, active_mcs, total_hr, day_hr, night_hr,
+            hr_output, hr_per_mc, overall_eff, sel_date, sel_day_num, top_row, share_pct,
             stopped_mcs, low_hr_mcs, high_ach_mcs
         )
 
@@ -480,8 +489,8 @@ def render_size_wise_module():
         )
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
-        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">TOTAL PROD</div><div class="kpi-val">{total_prod:,}</div><div class="kpi-sub">Pcs Output</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
+        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">LAST DAY TON</div><div class="kpi-val">{last_day_ton:.2f} T</div><div class="kpi-sub">{total_prod:,} Pcs</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">AS OF PROD TON</div><div class="kpi-val">{as_of_ton:.2f} T</div><div class="kpi-sub">Day 1 – {sel_day_num}</div></div>', unsafe_allow_html=True)
         k3.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">ACTIVE MC</div><div class="kpi-val">{active_mcs}</div><div class="kpi-sub">Operating MC</div></div>', unsafe_allow_html=True)
         k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({day_hr}D + {night_hr}N)</div></div>', unsafe_allow_html=True)
         k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,} Pcs</div><div class="kpi-sub">Per Person</div></div>', unsafe_allow_html=True)
@@ -543,7 +552,7 @@ def render_size_wise_module():
 Dear Sir,
 
 🎯 *Overall Target Achievement*
-Total production reached {total_prod:,} Pcs against a target capacity of {total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}% ({total_ton:.2f} Ton produced).
+Total production reached {total_prod:,} Pcs against a target capacity of {total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}% ({last_day_ton:.2f} Ton produced, MTD: {as_of_ton:.2f} Ton).
 
 👥 *Manpower Productivity (HR Output)*
 With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {active_mcs} active machines, average productivity was {int(round(hr_output)):,} Pcs/person and {hr_per_mc:.1f} HR/machine.
@@ -561,7 +570,7 @@ With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {
                         <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 DAILY PRODUCTION & HR BRIEF</p>
                         <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {sel_date}</p>
                         <h5>🎯 Overall Target Achievement</h5>
-                        <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({total_ton:.2f} Ton produced).</p>
+                        <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({last_day_ton:.2f} Ton produced, MTD: <b>{as_of_ton:.2f} Ton</b>).</p>
                         <h5>👥 Manpower Productivity (HR Output)</h5>
                         <p>With <b>{total_hr} HR</b> personnel deployed ({day_hr} Day + {night_hr} Night) across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
                         <h5>🏆 Top Contributing Machine</h5>
