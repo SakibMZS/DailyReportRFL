@@ -37,7 +37,7 @@ def m1_compute_size_summary(df_day_details):
     sum_s_map = df_day.groupby("Helper")["A Shift Runtime"].transform("sum")
     sum_t_map = df_day.groupby("Helper")["B Shift Runtime"].transform("sum")
     
-    # Shift A normalized capacity (Accounts for sequential changeover vs simultaneous family mold)
+    # Shift A normalized capacity
     cap_a = np.where(
         sum_s_map > 0,
         np.where(sum_s_map > 12.01, k_col * (s_col > 0).astype(float), k_col * (s_col / sum_s_map)),
@@ -51,8 +51,9 @@ def m1_compute_size_summary(df_day_details):
         0.0
     )
     
+    unit_wt = df_day.get("Unit Wt", pd.Series(0, index=df_day.index)).fillna(0)
     df_day["Norm_Cap_Pcs"] = cap_a + cap_b
-    df_day["Norm_Cap_Ton"] = (df_day["Norm_Cap_Pcs"] * df_day.get("Unit Wt", 0.0)) / 1000.0
+    df_day["Norm_Cap_Ton"] = (df_day["Norm_Cap_Pcs"] * unit_wt) / 1000.0
 
     records = []
     for sz in EXCEL_SIZES:
@@ -81,10 +82,11 @@ def m1_compute_size_summary(df_day_details):
         else:
             avg_ct = grp["CT"].mean()
 
+        grp_unit_wt = grp.get("Unit Wt", pd.Series(0, index=grp.index)).fillna(0)
         tot_cap_pcs = grp["Norm_Cap_Pcs"].sum()
-        tot_prod_pcs = grp["T-Good"].sum()
+        tot_prod_pcs = grp["T-Good"].fillna(0).sum()
         cap_ton = grp["Norm_Cap_Ton"].sum()
-        prod_ton = ((grp["T-Good"] * grp.get("Unit Wt", 0)) / 1000.0).sum()
+        prod_ton = ((grp["T-Good"].fillna(0) * grp_unit_wt) / 1000.0).sum()
 
         ach_pct = (tot_prod_pcs / tot_cap_pcs * 100) if tot_cap_pcs > 0 else 0.0
 
@@ -116,20 +118,24 @@ def m1_compute_size_summary(df_day_details):
 
 
 def m1_compute_shiftwise_productivity(df_day_details, day_hr, night_hr):
-    a_good = df_day_details["A Good"].sum() if "A Good" in df_day_details.columns else 0.0
-    b_good = df_day_details["B Good"].sum() if "B Good" in df_day_details.columns else 0.0
+    unit_wt = df_day_details.get("Unit Wt", pd.Series(0, index=df_day_details.index)).fillna(0)
+    
+    a_good_series = df_day_details["A Good"].fillna(0) if "A Good" in df_day_details.columns else pd.Series(0, index=df_day_details.index)
+    b_good_series = df_day_details["B Good"].fillna(0) if "B Good" in df_day_details.columns else pd.Series(0, index=df_day_details.index)
+
+    a_good = a_good_series.sum()
+    b_good = b_good_series.sum()
 
     a_tot = df_day_details["A Total"].fillna(0).sum() if "A Total" in df_day_details.columns else a_good
     b_tot = df_day_details["B Total"].fillna(0).sum() if "B Total" in df_day_details.columns else b_good
-
-    t_bad = df_day_details["T-Bad"].sum() if "T-Bad" in df_day_details.columns else 0.0
+    t_bad = df_day_details["T-Bad"].fillna(0).sum() if "T-Bad" in df_day_details.columns else 0.0
 
     a_bad = max(0.0, a_tot - a_good) if a_tot > 0 else (t_bad * (a_good / (a_good + b_good))) if (a_good + b_good) > 0 else 0.0
     b_bad = max(0.0, b_tot - b_good) if b_tot > 0 else (t_bad - a_bad)
 
-    unit_wt = df_day_details.get("Unit Wt", 0)
-    a_ton = ((a_good * unit_wt) / 1000.0).sum()
-    b_ton = ((b_good * unit_wt) / 1000.0).sum()
+    # Element-wise product for accurate tonnage
+    a_ton = float((a_good_series * unit_wt / 1000.0).sum())
+    b_ton = float((b_good_series * unit_wt / 1000.0).sum())
 
     a_per_hr_pcs = (a_good / day_hr) if day_hr > 0 else 0.0
     b_per_hr_pcs = (b_good / night_hr) if night_hr > 0 else 0.0
@@ -513,41 +519,49 @@ def render_size_wise_module():
                     f"and {top_row['Run Hr Avg']} Run Hours Avg."
                 )
 
-            areas_improvement = []
+            # Keep 2 bullets max to prevent long message
+            concise_bullets = []
             if stopped_mcs:
-                areas_improvement.append(f"• MC Sizes {', '.join(stopped_mcs)} were completely stopped (0% achievement).")
-            for _, r in low_hr_mcs.iterrows():
-                areas_improvement.append(f"• MC Size {r['MC Size']} recorded lower output achievement ({r['% Achievement']:.0f}% achievement, {r['Run Hr Avg']} Run Hours Avg).")
-            for _, r in high_ach_mcs.iterrows():
-                areas_improvement.append(f"• MC Size {r['MC Size']} performed exceptionally well with {r['% Achievement']:.0f}% achievement and {r['Run Hr Avg']} Run Hours.")
+                concise_bullets.append(f"• MC Sizes {', '.join(stopped_mcs[:2])} were completely stopped (0% achievement).")
+            if not low_hr_mcs.empty and len(concise_bullets) < 2:
+                r_low = low_hr_mcs.iloc[0]
+                concise_bullets.append(f"• MC Size {r_low['MC Size']} recorded lower output ({r_low['% Achievement']:.0f}% achievement, {r_low['Run Hr Avg']} Run Hours Avg).")
+            if not high_ach_mcs.empty and len(concise_bullets) < 2:
+                r_high = high_ach_mcs.iloc[0]
+                concise_bullets.append(f"• MC Size {r_high['MC Size']} performed exceptionally well with {r_high['% Achievement']:.0f}% achievement and {r_high['Run Hr Avg']} Run Hours.")
 
-            improvement_block_text = "\n".join(areas_improvement) if areas_improvement else "• Operations ran smoothly with no major bottlenecks detected."
+            improvement_block_text = "\n".join(concise_bullets) if concise_bullets else "• Operations ran smoothly with no major bottlenecks detected."
 
-            raw_narrative_text = f"""Dear Sir,
+            raw_narrative_text = f"""📋 *DAILY PRODUCTION & HR BRIEF*
+📅 *Date:* {sel_date}
 
-🎯 Overall Target Achievement
+Dear Sir,
+
+🎯 *Overall Target Achievement*
 Total production reached {total_prod:,} Pcs against a target capacity of {total_cap:,} Pcs, achieving an overall plant efficiency of {overall_eff:.0f}% ({total_ton:.2f} Ton produced).
 
-👥 Manpower Productivity (HR Output)
+👥 *Manpower Productivity (HR Output)*
 With {total_hr} HR personnel deployed ({day_hr} Day + {night_hr} Night) across {active_mcs} active machines, average productivity was {int(round(hr_output)):,} Pcs/person and {hr_per_mc:.1f} HR/machine.
 
-🏆 Top Contributing Machine
+🏆 *Top Contributing Machine*
 {top_contrib_text}
 
-⚠️ Area for Improvement & Highlights
+⚠️ *Key Highlights & Observations*
 {improvement_block_text}"""
 
             st.markdown(
                 f"""<div class="panel-card">
                     <h4>🎯 KEY PERFORMANCE ANALYSIS</h4>
                     <div class="narrative-block">
+                        <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 DAILY PRODUCTION & HR BRIEF</p>
+                        <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {sel_date}</p>
                         <h5>🎯 Overall Target Achievement</h5>
                         <p>Total production reached <b>{total_prod:,} Pcs</b> against a target capacity of <b>{total_cap:,} Pcs</b>, achieving an overall plant efficiency of <b style="color: #10b981;">{overall_eff:.0f}%</b> ({total_ton:.2f} Ton produced).</p>
                         <h5>👥 Manpower Productivity (HR Output)</h5>
                         <p>With <b>{total_hr} HR</b> personnel deployed ({day_hr} Day + {night_hr} Night) across <b>{active_mcs} active machines</b>, average productivity was <b>{int(round(hr_output)):,} Pcs/person</b> and <b>{hr_per_mc:.1f} HR/machine</b>.</p>
                         <h5>🏆 Top Contributing Machine</h5>
                         <p>{top_contrib_text}</p>
-                        <h5>⚠️ Area for Improvement & Highlights</h5>
+                        <h5>⚠️ Key Highlights & Observations</h5>
                         <p style="white-space: pre-line; margin: 0;">{improvement_block_text}</p>
                     </div>
                 </div>""",
