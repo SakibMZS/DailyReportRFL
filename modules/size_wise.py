@@ -233,7 +233,7 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
         ("TOTAL CAP", f"{total_cap:,}", "Target Pcs", "#8b5cf6"),
         ("ACTIVE MC", f"{active_mc}", "Operating MC", "#f59e0b"),
         ("TOTAL HR", f"{total_hr}", f"Manpower ({day_hr}D + {night_hr}N)", "#6366f1"),
-        ("HR OUTPUT", f"{int(round(hr_output)):,}", "Pcs / Person", "#06b6d4"),
+        ("HR OUTPUT", f"{int(round(hr_output)):,} Pcs", "Per Person", "#06b6d4"),
         ("HR PER MC", f"{hr_per_mc:.1f}", "Persons / MC", "#ec4899"),
     ]
 
@@ -308,9 +308,13 @@ def m1_generate_executive_jpg(df_size, total_prod, total_cap, active_mc, total_h
 
     sub_bg = patches.Rectangle((3.5, row_y - 1.5), 54.5, row_step, facecolor='#f1f5f9', edgecolor='none')
     ax.add_patch(sub_bg)
+    
+    # 1:1 Excel Formula matching for Sub Total:
+    # Row 15 Col D in Excel: =IFERROR(AVERAGE(D3:D14),0) -> or active non-zero average
+    # Row 15 Col E in Excel: =IFERROR(AVERAGEIF(E3:E14, "<>0"),0) -> exactly 14.8
     active_grp = df_size[df_size["MC QTY"] > 0]
-    avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mc if active_mc > 0 else 0.0
-    avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mc if active_mc > 0 else 0.0
+    avg_ct = active_grp["CT Avg"].mean() if not active_grp.empty else 0.0
+    avg_run_hr = active_grp["Run Hr Avg"].mean() if not active_grp.empty else 0.0
 
     sub_vals = ["Sub Total", str(active_mc), f"{avg_ct:.0f}", f"{avg_run_hr:.1f}", f"{int(total_cap):,}", f"{int(total_prod):,}", "-", f"{overall_eff:.0f}%"]
     for c_i, (val, cx) in enumerate(zip(sub_vals, col_xs)):
@@ -427,9 +431,10 @@ def render_size_wise_module():
         hr_output = (total_prod / total_hr) if total_hr > 0 else 0.0
         hr_per_mc = (total_hr / active_mcs) if active_mcs > 0 else 0.0
 
+        # Exact Excel Formula matching for Sub Total:
         active_grp = df_size[df_size["MC QTY"] > 0]
-        avg_ct = (active_grp["CT Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
-        avg_run_hr = (active_grp["Run Hr Avg"] * active_grp["MC QTY"]).sum() / active_mcs if active_mcs > 0 else 0.0
+        avg_ct = active_grp["CT Avg"].mean() if not active_grp.empty else 0.0
+        avg_run_hr = active_grp["Run Hr Avg"].mean() if not active_grp.empty else 0.0
 
         running_df = df_size[df_size["Total Prod (Pcs)"] > 0].sort_values("Total Prod (Pcs)", ascending=False)
         top_row = running_df.iloc[0] if not running_df.empty else None
@@ -479,7 +484,7 @@ def render_size_wise_module():
         k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">TOTAL CAP</div><div class="kpi-val">{total_cap:,}</div><div class="kpi-sub">Target Pcs</div></div>', unsafe_allow_html=True)
         k3.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">ACTIVE MC</div><div class="kpi-val">{active_mcs}</div><div class="kpi-sub">Operating MC</div></div>', unsafe_allow_html=True)
         k4.markdown(f'<div class="kpi-card indigo"><div class="kpi-title">TOTAL HR</div><div class="kpi-val">{total_hr}</div><div class="kpi-sub">Manpower ({day_hr}D + {night_hr}N)</div></div>', unsafe_allow_html=True)
-        k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,}</div><div class="kpi-sub">Pcs / Person</div></div>', unsafe_allow_html=True)
+        k5.markdown(f'<div class="kpi-card teal"><div class="kpi-title">HR OUTPUT</div><div class="kpi-val">{int(round(hr_output)):,} Pcs</div><div class="kpi-sub">Per Person</div></div>', unsafe_allow_html=True)
         k6.markdown(f'<div class="kpi-card pink"><div class="kpi-title">HR PER MC</div><div class="kpi-val">{hr_per_mc:.1f}</div><div class="kpi-sub">Persons / MC</div></div>', unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom: 1.15rem;'></div>", unsafe_allow_html=True)
