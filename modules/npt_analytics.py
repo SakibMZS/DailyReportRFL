@@ -5,17 +5,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Total available IMMs in Plastic-3 plant floor
-TOTAL_PLANT_MCS = 61
-DAILY_AVAILABLE_HRS = TOTAL_PLANT_MCS * 24.0  # 1,464.0 Hours/Day
-
-MAINTENANCE_CAUSES = {
-    "Machine Problem*",
-    "Controller Problem*",
-    "Robot Problem*",
-    "Scheduled Maintenance*",
-    "Power Breakdown (Unscheduled)*",
-}
+from config import (
+    TOTAL_PLANT_MCS,
+    DAILY_AVAILABLE_HRS,
+    POS_MAP,
+    LINE_MAP,
+    MAINTENANCE_CAUSES,
+)
 
 
 def get_col(df, candidates, default=None):
@@ -51,12 +47,12 @@ def m3_parse_workbook(file_bytes):
 
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
 
-    # Rule 4: Exclude continuous downtime without end time
+    # Exclude open-ended stoppages without end timestamp
     to_col = get_col(df_clean, ["To Time", "ToTime", "End Time", "EndTime"])
     if to_col:
         df_clean = df_clean[df_clean[to_col].notna()].copy()
 
-    # Rule 3: Use Cause Added Date as operational date
+    # Base operational date on Cause Added Date
     date_col = get_col(
         df_clean,
         ["Cause Added Date", "CauseAddedDate", "Date", "Added Date"],
@@ -79,7 +75,6 @@ def m3_parse_workbook(file_bytes):
             pd.to_numeric(df_clean[sec_col], errors="coerce").fillna(0) / 3600.0
         )
     elif dur_col in df_clean.columns:
-        # Fallback if duration is timedelta or string
         df_clean["Hours"] = (
             pd.to_timedelta(df_clean[dur_col], errors="coerce").dt.total_seconds()
             / 3600.0
@@ -89,7 +84,12 @@ def m3_parse_workbook(file_bytes):
 
     df_clean = df_clean[df_clean["Hours"] > 0].copy()
 
-    # Maintenance Tagging
+    # Shop floor mapping via central config
+    mc_col = get_col(df_clean, ["Machine", "MC SL"], "Machine")
+    df_clean["Position"] = df_clean[mc_col].astype(str).map(POS_MAP).fillna("-")
+    df_clean["Line"] = df_clean[mc_col].astype(str).map(LINE_MAP).fillna("-")
+
+    # Maintenance Tagging (5 Selected Categories)
     cause_col = get_col(df_clean, ["Cause", "Causes", "Reason", "Defect"], "Cause")
     df_clean["CauseClean"] = (
         df_clean[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
@@ -162,7 +162,7 @@ def m3_compute_machine_maintenance(df_scope):
         return pd.DataFrame()
 
     res = (
-        maint_df.groupby(["Machine", "Cause"])
+        maint_df.groupby(["Position", "Machine", "Line", "Cause"])
         .agg(Hours=("Hours", "sum"), Incidents=("Hours", "count"))
         .reset_index()
     )
@@ -178,14 +178,22 @@ def m3_generate_npt_jpg(
     oper_hrs,
     loss_pct,
     maint_loss_pct,
+    curr_as_of_total_hrs,
+    curr_as_of_avail_hrs,
+    as_of_loss_pct,
+    curr_as_of_maint_hrs,
+    as_of_maint_loss_pct,
+    as_of_maint_share_pct,
+    gf_share_pct,
+    ff_share_pct,
     top_cause_name,
     top_cause_hrs,
     top_cause_pct,
+    top_maint_pos,
     top_maint_mc,
     top_maint_hrs,
     prev_total_hrs,
     prev_avg_hrs,
-    curr_as_of_total_hrs,
     curr_as_of_avg_hrs,
     top_causes_list,
 ):
@@ -198,6 +206,7 @@ def m3_generate_npt_jpg(
 
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
+    day_num = sel_date_obj.day
 
     # 1. Header
     ax.text(
@@ -230,42 +239,12 @@ def m3_generate_npt_jpg(
 
     # 2. Top 6 KPI Cards
     kpis = [
-        (
-            "PREV MO. TOTAL",
-            f"{prev_total_hrs:.1f} H",
-            f"Avg: {prev_avg_hrs:.1f} H/D",
-            "#64748b",
-        ),
-        (
-            "THIS MO. AS OF",
-            f"{curr_as_of_total_hrs:.1f} H",
-            f"Avg: {curr_as_of_avg_hrs:.1f} H/D",
-            "#2563eb",
-        ),
-        (
-            "TOTAL NPT (DAY)",
-            f"{total_day_hrs:.1f} H",
-            f"{loss_pct:.1f}% Plant Loss",
-            "#dc2626",
-        ),
-        (
-            "MAINTENANCE LOSS",
-            f"{maint_hrs:.1f} H",
-            f"{maint_loss_pct:.1f}% Available",
-            "#7c3aed",
-        ),
-        (
-            "OPERATIONAL LOSS",
-            f"{oper_hrs:.1f} H",
-            f"{total_day_hrs - maint_hrs:.1f} H Stoppage",
-            "#f59e0b",
-        ),
-        (
-            "TOP NPT DRIVER",
-            f"{top_cause_name[:15]}",
-            f"{top_cause_hrs:.1f} H ({top_cause_pct:.1f}%)",
-            "#059669",
-        ),
+        ("PREV MO. TOTAL", f"{prev_total_hrs:.1f} H", f"Daily Avg: {prev_avg_hrs:.1f} H/D", "#64748b"),
+        ("THIS MO. AS OF", f"{curr_as_of_total_hrs:.1f} H", f"Wasted: {as_of_loss_pct:.1f}% Capacity", "#2563eb"),
+        ("MTD MAINT. LOSS", f"{curr_as_of_maint_hrs:.1f} H", f"{as_of_maint_loss_pct:.1f}% Cap ({as_of_maint_share_pct:.1f}% NPT)", "#7c3aed"),
+        ("LAST DAY NPT", f"{total_day_hrs:.1f} H", f"{loss_pct:.1f}% Available Lost", "#dc2626"),
+        ("DAY MAINT. LOSS", f"{maint_hrs:.1f} H", f"{maint_loss_pct:.1f}% Available", "#9333ea"),
+        ("TOP NPT DRIVER", f"{top_cause_name[:15]}", f"{top_cause_hrs:.1f} H ({top_cause_pct:.1f}%)", "#059669"),
     ]
 
     kpi_w, kpi_gap = 15.1, 1.25
@@ -291,22 +270,10 @@ def m3_generate_npt_jpg(
         )
         ax.add_patch(top_bar)
         ax.text(
-            x0 + kpi_w / 2,
-            92.4,
-            title,
-            color="#64748b",
-            fontsize=7.6,
-            fontweight="bold",
-            ha="center",
+            x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.6, fontweight="bold", ha="center"
         )
         ax.text(
-            x0 + kpi_w / 2,
-            89.6,
-            val,
-            color="#0f172a",
-            fontsize=13.0,
-            fontweight="bold",
-            ha="center",
+            x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=13.0, fontweight="bold", ha="center"
         )
         ax.text(
             x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center"
@@ -326,7 +293,7 @@ def m3_generate_npt_jpg(
     ax.text(
         3.5,
         83.5,
-        f"DAILY NPT BREAKDOWN & LOG — {day_formatted}",
+        f"DAILY NPT MACHINE LOG (WITH POSITION) — {day_formatted}",
         color="#0f172a",
         fontsize=11.0,
         fontweight="bold",
@@ -359,7 +326,7 @@ def m3_generate_npt_jpg(
         fontweight="bold",
     )
 
-    # Left Card Table: Top incidents / machines
+    # Left Card Table: Machine & Local Position Tag
     df_sorted = df_day.sort_values("Hours", ascending=False).head(20)
     left_x = 2.6
     tbl_w = 71.8
@@ -367,61 +334,12 @@ def m3_generate_npt_jpg(
         (left_x, 79.5), tbl_w, 2.6, facecolor="#1e293b", edgecolor="none"
     )
     ax.add_patch(tbl_hdr)
-    ax.text(
-        left_x + 1.0,
-        80.8,
-        "#",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        left_x + 3.5,
-        80.8,
-        "MACHINE",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        left_x + 18.0,
-        80.8,
-        "STOPPAGE CAUSE",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        left_x + 46.0,
-        80.8,
-        "CATEGORY",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        left_x + 58.0,
-        80.8,
-        "START TIME",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        left_x + 70.0,
-        80.8,
-        "LOST (HRS)",
-        color="#ffffff",
-        fontsize=7.2,
-        fontweight="bold",
-        ha="right",
-        va="center",
-    )
+    ax.text(left_x + 1.0, 80.8, "POS", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(left_x + 9.0, 80.8, "MACHINE", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(left_x + 23.0, 80.8, "STOPPAGE CAUSE", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(left_x + 47.0, 80.8, "CATEGORY", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(left_x + 58.0, 80.8, "START TIME", color="#ffffff", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(left_x + 70.0, 80.8, "LOST (HRS)", color="#ffffff", fontsize=7.2, fontweight="bold", ha="right", va="center")
 
     row_y = 77.2
     row_step = min(3.8, 74.0 / max(1, len(df_sorted)))
@@ -440,51 +358,13 @@ def m3_generate_npt_jpg(
 
         cat_str = "Maintenance" if r["Is_Maintenance"] else "Operational"
         cat_col = "#7c3aed" if r["Is_Maintenance"] else "#475569"
-
         from_str = str(r.get("From Time", "-"))[:16]
 
-        ax.text(
-            left_x + 1.0,
-            row_y + 0.35,
-            f"{r_i + 1}",
-            color="#64748b",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            left_x + 3.5,
-            row_y + 0.35,
-            str(r["Machine"]),
-            color="#0f172a",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            left_x + 18.0,
-            row_y + 0.35,
-            str(r["Cause"])[:26],
-            color="#b91c1c" if r["Is_Maintenance"] else "#0f172a",
-            fontsize=6.6,
-            va="center",
-        )
-        ax.text(
-            left_x + 46.0,
-            row_y + 0.35,
-            cat_str,
-            color=cat_col,
-            fontsize=6.6,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            left_x + 58.0,
-            row_y + 0.35,
-            from_str,
-            color="#64748b",
-            fontsize=6.4,
-            va="center",
-        )
+        ax.text(left_x + 1.0, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.8, fontweight="bold", va="center")
+        ax.text(left_x + 9.0, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.6, va="center")
+        ax.text(left_x + 23.0, row_y + 0.35, str(r["Cause"])[:24], color="#b91c1c" if r["Is_Maintenance"] else "#0f172a", fontsize=6.6, va="center")
+        ax.text(left_x + 47.0, row_y + 0.35, cat_str, color=cat_col, fontsize=6.6, fontweight="bold", va="center")
+        ax.text(left_x + 58.0, row_y + 0.35, from_str, color="#64748b", fontsize=6.4, va="center")
         ax.text(
             left_x + 70.0,
             row_y + 0.35,
@@ -519,15 +399,16 @@ def m3_generate_npt_jpg(
 
     top_causes_txt = "\n".join(
         [
-            f"  {idx+1}. {c[:18]}: {h:.1f}h ({p:.1f}%)"
+            f"  {idx+1}. {c[:17]}: {h:.1f}h ({p:.1f}%)"
             for idx, (c, h, p) in enumerate(top_causes_list[:4])
         ]
     )
     t1 = (
         f"• Top Contributing Stoppages:\n"
         f"{top_causes_txt}\n\n"
-        f"• Heaviest Breakdown Machine:\n"
-        f"  {top_maint_mc} ({top_maint_hrs:.1f} Hours Lost).\n\n"
+        f"• Critical Maintenance Line:\n"
+        f"  {top_maint_pos} ({top_maint_mc})\n"
+        f"  Loss: {top_maint_hrs:.1f} Hours.\n\n"
         f"• Corrective Directives:\n"
         f"  - Prioritize technician assignment\n"
         f"    on recurring breakdown lines.\n"
@@ -535,7 +416,7 @@ def m3_generate_npt_jpg(
     )
     ax.text(78.6, 75.2, t1, color="#7f1d1d", fontsize=8.0, linespacing=1.45, va="top")
 
-    # Right Card 2: Plant Overview
+    # Right Card 2: Plant & Month-To-Date Overview (Including MTD Maintenance)
     c2 = patches.FancyBboxPatch(
         (77.5, 2.5),
         20.0,
@@ -549,19 +430,22 @@ def m3_generate_npt_jpg(
     ax.text(
         78.6,
         38.2,
-        "Capacity Loss Summary",
+        "Month-to-Date & Maintenance Loss",
         color="#15803d",
         fontsize=9.6,
         fontweight="bold",
     )
     t2 = (
-        f"• Daily Available: {DAILY_AVAILABLE_HRS:,.0f} Hours\n"
-        f"  (61 Total Active Machines).\n\n"
-        f"• Stoppage Distribution:\n"
-        f"  - Maintenance: {maint_hrs:.1f} H ({maint_loss_pct:.1f}% Cap)\n"
-        f"  - Operational: {oper_hrs:.1f} H ({((total_day_hrs-maint_hrs)/DAILY_AVAILABLE_HRS*100):.1f}% Cap)\n\n"
-        f"• Overall Plant Availability Loss:\n"
-        f"  {loss_pct:.2f}% of Total Operating Potential."
+        f"• MTD Wasted Capacity (Day 1–{day_num}):\n"
+        f"  {curr_as_of_total_hrs:,.1f} H lost of {curr_as_of_avail_hrs:,.0f} H total\n"
+        f"  ({as_of_loss_pct:.1f}% Plant Loss MTD).\n\n"
+        f"• MTD Maintenance Breakdown:\n"
+        f"  - Wasted: {curr_as_of_maint_hrs:,.1f} Hours\n"
+        f"  - Plant Loss: {as_of_maint_loss_pct:.1f}% of Available\n"
+        f"  - NPT Share: {as_of_maint_share_pct:.1f}% of Total NPT\n\n"
+        f"• Stoppage Hours by Floor:\n"
+        f"  - Ground Floor: {gf_share_pct:.1f}% of loss\n"
+        f"  - First Floor: {ff_share_pct:.1f}% of loss"
     )
     ax.text(78.6, 34.6, t2, color="#166534", fontsize=8.0, linespacing=1.45, va="top")
 
@@ -651,6 +535,23 @@ def render_npt_module():
         loss_pct = (total_day_hrs / DAILY_AVAILABLE_HRS) * 100.0
         maint_loss_pct = (maint_hrs / DAILY_AVAILABLE_HRS) * 100.0
 
+        # Present Month MTD Metrics & Maintenance Wasted Percentage
+        curr_as_of_avail_hrs = sel_day_num * DAILY_AVAILABLE_HRS
+        if not df_as_of.empty:
+            curr_as_of_total_hrs = float(df_as_of["Hours"].sum())
+            curr_as_of_maint_hrs = float(df_as_of[df_as_of["Is_Maintenance"]]["Hours"].sum())
+            curr_as_of_avg_hrs = curr_as_of_total_hrs / sel_day_num
+            as_of_loss_pct = (curr_as_of_total_hrs / curr_as_of_avail_hrs) * 100.0
+            as_of_maint_loss_pct = (curr_as_of_maint_hrs / curr_as_of_avail_hrs) * 100.0
+            as_of_maint_share_pct = (
+                (curr_as_of_maint_hrs / curr_as_of_total_hrs * 100.0)
+                if curr_as_of_total_hrs > 0
+                else 0.0
+            )
+        else:
+            curr_as_of_total_hrs, curr_as_of_maint_hrs, curr_as_of_avg_hrs = 0.0, 0.0, 0.0
+            as_of_loss_pct, as_of_maint_loss_pct, as_of_maint_share_pct = 0.0, 0.0, 0.0
+
         # Previous Month Metrics
         if not df_prev.empty:
             prev_total_hrs = float(df_prev["Hours"].sum())
@@ -659,18 +560,19 @@ def render_npt_module():
         else:
             prev_total_hrs, prev_avg_hrs = 0.0, 0.0
 
-        # Present Month MTD Metrics
-        if not df_as_of.empty:
-            curr_as_of_total_hrs = float(df_as_of["Hours"].sum())
-            curr_as_of_avg_hrs = curr_as_of_total_hrs / sel_day_num
-        else:
-            curr_as_of_total_hrs, curr_as_of_avg_hrs = 0.0, 0.0
+        # Shop Floor Distribution
+        gf_hrs = df_day[df_day["Line"].str.startswith("GF")]["Hours"].sum()
+        ff_hrs = df_day[df_day["Line"].str.startswith("FF")]["Hours"].sum()
+        tot_flr = (gf_hrs + ff_hrs) if (gf_hrs + ff_hrs) > 0 else 1.0
+        gf_share_pct = (gf_hrs / tot_flr) * 100.0
+        ff_share_pct = (ff_hrs / tot_flr) * 100.0
 
         # Cause breakdowns
         df_cause_day = m3_compute_cause_summary(df_day)
         df_cause_asof = m3_compute_cause_summary(df_as_of)
         df_date_summary = m3_compute_date_summary(df_curr)
         df_maint_day = m3_compute_machine_maintenance(df_day)
+        df_maint_asof = m3_compute_machine_maintenance(df_as_of)
 
         # Top cause
         if not df_cause_day.empty:
@@ -686,12 +588,14 @@ def render_npt_module():
             top_cause_name, top_cause_hrs, top_cause_pct = "None", 0.0, 0.0
             top_causes_list = []
 
-        # Top maintenance machine
+        # Top maintenance machine & position
         if not df_maint_day.empty:
-            top_maint_mc = df_maint_day.iloc[0]["Machine"]
-            top_maint_hrs = df_maint_day.iloc[0]["Hours"]
+            top_maint_row = df_maint_day.iloc[0]
+            top_maint_pos = str(top_maint_row["Position"])
+            top_maint_mc = str(top_maint_row["Machine"])
+            top_maint_hrs = float(top_maint_row["Hours"])
         else:
-            top_maint_mc, top_maint_hrs = "None", 0.0
+            top_maint_pos, top_maint_mc, top_maint_hrs = "-", "None", 0.0
 
         # Visual JPG generation
         jpg_bytes_npt = m3_generate_npt_jpg(
@@ -702,14 +606,22 @@ def render_npt_module():
             oper_hrs,
             loss_pct,
             maint_loss_pct,
+            curr_as_of_total_hrs,
+            curr_as_of_avail_hrs,
+            as_of_loss_pct,
+            curr_as_of_maint_hrs,
+            as_of_maint_loss_pct,
+            as_of_maint_share_pct,
+            gf_share_pct,
+            ff_share_pct,
             top_cause_name,
             top_cause_hrs,
             top_cause_pct,
+            top_maint_pos,
             top_maint_mc,
             top_maint_hrs,
             prev_total_hrs,
             prev_avg_hrs,
-            curr_as_of_total_hrs,
             curr_as_of_avg_hrs,
             top_causes_list,
         )
@@ -727,26 +639,26 @@ def render_npt_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 6 KPI Cards in Web Dashboard
+        # 6 KPI Cards in Web Dashboard (Highlighting MTD Maintenance)
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
-            f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_hrs:.1f} H</div><div class="kpi-sub">Avg: {prev_avg_hrs:.1f} H/D</div></div>',
+            f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_hrs:.1f} H</div><div class="kpi-sub">Daily Avg: {prev_avg_hrs:.1f} H/D</div></div>',
             unsafe_allow_html=True,
         )
         k2.markdown(
-            f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_hrs:.1f} H</div><div class="kpi-sub">Avg: {curr_as_of_avg_hrs:.1f} H/D</div></div>',
+            f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_hrs:.1f} H</div><div class="kpi-sub">Wasted: {as_of_loss_pct:.1f}% Cap</div></div>',
             unsafe_allow_html=True,
         )
         k3.markdown(
-            f'<div class="kpi-card pink"><div class="kpi-title">TOTAL NPT (DAY)</div><div class="kpi-val">{total_day_hrs:.1f} H</div><div class="kpi-sub">{loss_pct:.1f}% Capacity Loss</div></div>',
+            f'<div class="kpi-card purple"><div class="kpi-title">MTD MAINT. LOSS</div><div class="kpi-val">{curr_as_of_maint_hrs:.1f} H</div><div class="kpi-sub">{as_of_maint_loss_pct:.1f}% Cap ({as_of_maint_share_pct:.1f}% NPT)</div></div>',
             unsafe_allow_html=True,
         )
         k4.markdown(
-            f'<div class="kpi-card purple"><div class="kpi-title">MAINTENANCE LOSS</div><div class="kpi-val">{maint_hrs:.1f} H</div><div class="kpi-sub">{maint_loss_pct:.1f}% Available</div></div>',
+            f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT</div><div class="kpi-val">{total_day_hrs:.1f} H</div><div class="kpi-sub">{loss_pct:.1f}% Available Lost</div></div>',
             unsafe_allow_html=True,
         )
         k5.markdown(
-            f'<div class="kpi-card yellow"><div class="kpi-title">OPERATIONAL LOSS</div><div class="kpi-val">{oper_hrs:.1f} H</div><div class="kpi-sub">{total_day_hrs - maint_hrs:.1f} H Stoppage</div></div>',
+            f'<div class="kpi-card yellow"><div class="kpi-title">DAY MAINT. LOSS</div><div class="kpi-val">{maint_hrs:.1f} H</div><div class="kpi-sub">{maint_loss_pct:.1f}% Available</div></div>',
             unsafe_allow_html=True,
         )
         k6.markdown(
@@ -764,7 +676,9 @@ def render_npt_module():
             st.markdown(f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {day_formatted}")
             if not df_day.empty:
                 display_cols = [
+                    "Position",
                     "Machine",
+                    "Line",
                     "Cause",
                     "Hours",
                     "From Time",
@@ -788,14 +702,16 @@ Dear Sir,
 
 🎯 *Operational Availability & Stoppage Summary*
 Total downtime reached *{total_day_hrs:.1f} Hours* ({loss_pct:.1f}% of total plant capacity across 61 IMMs).
+Month-to-Date (Day 1–{sel_day_num}) has lost *{curr_as_of_total_hrs:,.1f} Hours* (*{as_of_loss_pct:.1f}%* of total potential capacity).
 
-🔧 *Loss Breakdown*
-• Maintenance Issues: *{maint_hrs:.1f} Hours* ({maint_loss_pct:.1f}% of available time)
-• Operational Loss: *{oper_hrs:.1f} Hours*
+🔧 *Maintenance Loss Summary (MTD & Daily)*
+• MTD Maintenance Wasted: *{curr_as_of_maint_hrs:.1f} Hours* ({as_of_maint_loss_pct:.1f}% of available plant time, {as_of_maint_share_pct:.1f}% of total NPT)
+• Last Day Maintenance: *{maint_hrs:.1f} Hours* ({maint_loss_pct:.1f}% of available time)
+• Last Day Operational Loss: *{oper_hrs:.1f} Hours*
 
 🏆 *Top Stoppage Contributor*
 *{top_cause_name}* accounted for *{top_cause_hrs:.1f} Hours* ({top_cause_pct:.1f}% of day NPT).
-Heaviest maintenance line: *{top_maint_mc}* ({top_maint_hrs:.1f} Hours lost)."""
+Heaviest breakdown line: *{top_maint_pos}* ({top_maint_mc}) with *{top_maint_hrs:.1f} Hours* lost."""
 
             st.markdown("#### 📝 EXECUTIVE BRIEFING TEXT")
             st.markdown(
@@ -803,13 +719,15 @@ Heaviest maintenance line: *{top_maint_mc}* ({top_maint_hrs:.1f} Hours lost)."""
                     <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
                     <h5>🎯 Operational Availability & Stoppage Summary</h5>
-                    <p>Total downtime reached <b>{total_day_hrs:.1f} Hours</b> (<b style="color: #dc2626;">{loss_pct:.1f}%</b> of total plant capacity across 61 IMMs).</p>
-                    <h5>🔧 Loss Breakdown</h5>
-                    <p>• Maintenance Issues: <b>{maint_hrs:.1f} Hours</b> ({maint_loss_pct:.1f}% of available time)<br>
-                    • Operational Loss: <b>{oper_hrs:.1f} Hours</b></p>
+                    <p>Total downtime reached <b>{total_day_hrs:.1f} Hours</b> (<b style="color: #dc2626;">{loss_pct:.1f}%</b> of total plant capacity across 61 IMMs).<br>
+                    Month-to-Date (Day 1–{sel_day_num}) has lost <b>{curr_as_of_total_hrs:,.1f} Hours</b> (<b>{as_of_loss_pct:.1f}%</b> of total potential capacity).</p>
+                    <h5>🔧 Maintenance Loss Summary (MTD & Daily)</h5>
+                    <p>• MTD Maintenance Wasted: <b style="color: #7c3aed;">{curr_as_of_maint_hrs:.1f} Hours</b> (<b>{as_of_maint_loss_pct:.1f}%</b> of available plant capacity, <b>{as_of_maint_share_pct:.1f}%</b> of total NPT)<br>
+                    • Last Day Maintenance: <b>{maint_hrs:.1f} Hours</b> ({maint_loss_pct:.1f}% of available time)<br>
+                    • Last Day Operational Loss: <b>{oper_hrs:.1f} Hours</b></p>
                     <h5>🏆 Top Stoppage Contributor</h5>
                     <p><b>{top_cause_name}</b> accounted for <b>{top_cause_hrs:.1f} Hours</b> ({top_cause_pct:.1f}% of day NPT).<br>
-                    Heaviest breakdown line: <b>{top_maint_mc}</b> ({top_maint_hrs:.1f} Hours lost).</p>
+                    Heaviest breakdown line: <b>{top_maint_pos}</b> ({top_maint_mc}) with <b>{top_maint_hrs:.1f} Hours</b> lost.</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -818,7 +736,7 @@ Heaviest maintenance line: *{top_maint_mc}* ({top_maint_hrs:.1f} Hours lost)."""
                 st.text_area(
                     "Brief Text",
                     value=npt_brief_text,
-                    height=180,
+                    height=200,
                     label_visibility="collapsed",
                 )
 
@@ -856,12 +774,26 @@ Heaviest maintenance line: *{top_maint_mc}* ({top_maint_hrs:.1f} Hours lost)."""
 
         st.divider()
 
-        # Section 4: Maintenance Stoppages Sorted
-        st.markdown("#### 🛠️ MAINTENANCE ISSUE LINE BREAKDOWN")
-        if not df_maint_day.empty:
-            st.dataframe(df_maint_day, use_container_width=True, hide_index=True)
-        else:
-            st.info("No maintenance stoppages occurred on this date.")
+        # Section 4: Maintenance Stoppages Sorted (Day & MTD)
+        st.markdown("#### 🛠️ MAINTENANCE ISSUE BREAKDOWN (WITH POSITIONS)")
+        tab_maint_day, tab_maint_asof = st.tabs(
+            [
+                f"📅 Selected Date Breakdown ({day_formatted})",
+                f"📈 Month-to-Date Breakdowns (Day 1 – {sel_day_num})",
+            ]
+        )
+
+        with tab_maint_day:
+            if not df_maint_day.empty:
+                st.dataframe(df_maint_day, use_container_width=True, hide_index=True)
+            else:
+                st.info("No maintenance stoppages occurred on this date.")
+
+        with tab_maint_asof:
+            if not df_maint_asof.empty:
+                st.dataframe(df_maint_asof, use_container_width=True, hide_index=True)
+            else:
+                st.info("No maintenance stoppages recorded for this month.")
 
         st.divider()
 
