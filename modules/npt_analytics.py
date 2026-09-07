@@ -189,7 +189,7 @@ def m3_parse_service_maintenance(file_bytes):
 
 
 # =========================================================
-# 2. COMPUTATION HELPERS (STRICT 1 ROW PER DATE)
+# 2. COMPUTATION HELPERS
 # =========================================================
 def m3_compute_size_wise_npt(df_scope, cutoff_days):
     records = []
@@ -218,7 +218,7 @@ def m3_compute_size_wise_npt(df_scope, cutoff_days):
 def m3_compute_smed_table(df_scope, max_days=7):
     smed_df = df_scope[df_scope["Is_SMED"]].copy()
     if smed_df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), 0, 0.0, 0.0
 
     daily = (
         smed_df.groupby("DateClean")
@@ -237,14 +237,21 @@ def m3_compute_smed_table(df_scope, max_days=7):
     daily["Date"] = daily["DateClean"].dt.strftime("%-d-%b")
     daily["Total_Time"] = daily["Total_Time"].round(2)
 
-    # Window rule: If > 7 days, show last 7 days; otherwise show all
+    # Full 1-n MTD Summary Stats
+    tot_mtd_setups = daily["Mold_Change_Qty"].sum()
+    tot_mtd_time = daily["Total_Time"].sum()
+    mtd_avg_smed = (tot_mtd_time / tot_mtd_setups * 60.0) if tot_mtd_setups > 0 else 0.0
+
+    # Window rule: If > 7 days, show last 7 days
     if len(daily) > max_days:
-        daily = daily.tail(max_days).reset_index(drop=True)
+        daily_display = daily.tail(max_days).reset_index(drop=True)
+    else:
+        daily_display = daily.reset_index(drop=True)
 
-    return daily[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]]
+    return daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]], tot_mtd_setups, tot_mtd_time, mtd_avg_smed
 
 
-def m3_compute_maint_daily_table(df_scope, max_days=7):
+def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
     maint_causes = [
         "Machine Problem*",
         "Robot Problem*",
@@ -252,13 +259,13 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
         "RMCS Problem*",
         "Oil or water Leakage*",
     ]
-    dates = sorted(df_scope["DateClean"].dropna().unique())
-    # Window rule: If > 7 days, show last 7 days; otherwise show all
-    if len(dates) > max_days:
-        dates = dates[-max_days:]
+    all_dates = sorted(df_scope["DateClean"].dropna().unique())
+    
+    # Window rule: If > 7 days, show last 7 days
+    dates_display = all_dates[-max_days:] if len(all_dates) > max_days else all_dates
 
     records = []
-    for dt in dates:
+    for dt in dates_display:
         dt_df = df_scope[df_scope["DateClean"] == dt]
         row = {"Date": dt.strftime("%-d-%b")}
 
@@ -273,7 +280,22 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
         row["Total Share"] = f"{round(share_pct):.0f}%"
         records.append(row)
 
-    return pd.DataFrame(records)
+    df_display = pd.DataFrame(records)
+
+    # Full 1-n MTD Summary Stats for Grid 4
+    mtd_summary_row = {"Date": f"Total (1-{cutoff_day}) >>"}
+    tot_maint_all = 0.0
+    for mc_cause in maint_causes:
+        c_tot = df_scope[df_scope["Cause"] == mc_cause]["Hours"].sum()
+        mtd_summary_row[mc_cause] = round(c_tot, 1)
+        tot_maint_all += c_tot
+
+    mtd_summary_row["Total Hours"] = round(tot_maint_all, 1)
+    tot_avail_period = TOTAL_PLANT_MCS * 24.0 * max(1, cutoff_days)
+    mtd_share = (tot_maint_all / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
+    mtd_summary_row["Total Share"] = f"{round(mtd_share):.0f}%"
+
+    return df_display, mtd_summary_row
 
 
 def m3_compute_consolidated_daily_log(df_day):
@@ -326,7 +348,11 @@ def m3_generate_2x2_executive_jpg(
     size_tot_hrs,
     size_summary_pct,
     df_smed_grid,
+    smed_tot_qty,
+    smed_tot_time,
+    smed_avg_min,
     df_maint_grid,
+    maint_summary_dict,
 ):
     fig, ax = plt.subplots(figsize=(20.0, 11.5), dpi=240)
     fig.patch.set_facecolor("#f8fafc")
@@ -483,44 +509,61 @@ def m3_generate_2x2_executive_jpg(
     ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 3: SMED TABLE (STRICT ONE ROW PER DATE)
+    # GRID 3: SMED TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
     y_g3 = 40.5
-    n_smed = max(1, len(df_smed_grid))
-    step_g3 = min(5.3, 36.0 / n_smed)
+    step_g3 = 4.35
     for idx, r in df_smed_grid.iterrows():
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
-        ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.2), w_box, step_g3, facecolor=bg_c, edgecolor="none"))
-        ax.plot([1.5, 49.3], [y_g3 - 2.2, y_g3 - 2.2], color="#e2e8f0", linewidth=0.45)
+        ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor=bg_c, edgecolor="none"))
+        ax.plot([1.5, 49.3], [y_g3 - 2.0, y_g3 - 2.0], color="#e2e8f0", linewidth=0.45)
 
         inv_wrap = "\n".join(textwrap.wrap(str(r["Involved_Mcs"]), width=32))
-        ax.text(3.0, y_g3 + 0.3, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
-        ax.text(10.5, y_g3 + 0.3, str(r["Mold_Change_Qty"]), color="#0f172a", fontsize=7.4, va="center")
-        ax.text(18.0, y_g3 + 0.3, f"{r['Total_Time']:.2f}", color="#0f172a", fontsize=7.4, va="center")
-        ax.text(26.0, y_g3 + 0.3, f"{r['Avg_SMED']:.2f}", color="#2563eb", fontsize=7.4, fontweight="bold", va="center")
-        ax.text(34.0, y_g3 + 0.3, inv_wrap, color="#475569", fontsize=6.4, va="center")
+        ax.text(3.0, y_g3 + 0.2, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(10.5, y_g3 + 0.2, str(r["Mold_Change_Qty"]), color="#0f172a", fontsize=7.4, va="center")
+        ax.text(18.0, y_g3 + 0.2, f"{r['Total_Time']:.2f}", color="#0f172a", fontsize=7.4, va="center")
+        ax.text(26.0, y_g3 + 0.2, f"{r['Avg_SMED']:.2f}", color="#2563eb", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(34.0, y_g3 + 0.2, inv_wrap, color="#475569", fontsize=6.2, va="center")
         y_g3 -= step_g3
 
+    # Grid 3 Summary Row: Light Blue Accent (#eff6ff)
+    ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
+    ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(18.0, y_g3 + 0.2, f"{smed_tot_time:.2f}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(26.0, y_g3 + 0.2, f"{smed_avg_min:.2f}", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD", color="#64748b", fontsize=6.8, va="center")
+
     # -------------------------------------------------------------
-    # GRID 4: MAINTENANCE BREAKDOWN (STRICT ONE ROW PER DATE)
+    # GRID 4: MAINTENANCE TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
     y_g4 = 40.5
-    n_maint = max(1, len(df_maint_grid))
-    step_g4 = min(5.3, 36.0 / n_maint)
+    step_g4 = 4.35
     for idx, r in df_maint_grid.iterrows():
         bg_c = "#fefce8" if idx % 2 == 1 else "#ffffff"
-        ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.2), w_box, step_g4, facecolor=bg_c, edgecolor="none"))
-        ax.plot([50.7, 98.5], [y_g4 - 2.2, y_g4 - 2.2], color="#e2e8f0", linewidth=0.45)
+        ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor=bg_c, edgecolor="none"))
+        ax.plot([50.7, 98.5], [y_g4 - 2.0, y_g4 - 2.0], color="#e2e8f0", linewidth=0.45)
 
-        ax.text(x_g4[0], y_g4 + 0.3, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
-        ax.text(x_g4[1], y_g4 + 0.3, f"{r['Machine Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
-        ax.text(x_g4[2], y_g4 + 0.3, f"{r['Robot Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
-        ax.text(x_g4[3], y_g4 + 0.3, f"{r['Controller Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
-        ax.text(x_g4[4], y_g4 + 0.3, f"{r['RMCS Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
-        ax.text(x_g4[5], y_g4 + 0.3, f"{r['Oil or water Leakage*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
-        ax.text(x_g4[6], y_g4 + 0.3, f"{r['Total Hours']:.2f}", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
-        ax.text(x_g4[7], y_g4 + 0.3, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+        ax.text(x_g4[0], y_g4 + 0.2, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(x_g4[1], y_g4 + 0.2, f"{r['Machine Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[2], y_g4 + 0.2, f"{r['Robot Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[3], y_g4 + 0.2, f"{r['Controller Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[4], y_g4 + 0.2, f"{r['RMCS Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[5], y_g4 + 0.2, f"{r['Oil or water Leakage*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[6], y_g4 + 0.2, f"{r['Total Hours']:.2f}", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(x_g4[7], y_g4 + 0.2, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
         y_g4 -= step_g4
+
+    # Grid 4 Summary Row: Light Mint Accent (#ecfdf5)
+    ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor="#ecfdf5", edgecolor="none"))
+    ax.text(x_g4[0], y_g4 + 0.2, maint_summary_dict["Date"], color="#047857", fontsize=7.5, fontweight="bold", va="center")
+    ax.text(x_g4[1], y_g4 + 0.2, f"{maint_summary_dict['Machine Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(x_g4[2], y_g4 + 0.2, f"{maint_summary_dict['Robot Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(x_g4[3], y_g4 + 0.2, f"{maint_summary_dict['Controller Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(x_g4[4], y_g4 + 0.2, f"{maint_summary_dict['RMCS Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(x_g4[5], y_g4 + 0.2, f"{maint_summary_dict['Oil or water Leakage*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(x_g4[6], y_g4 + 0.2, f"{maint_summary_dict['Total Hours']:.1f}", color="#047857", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(x_g4[7], y_g4 + 0.2, str(maint_summary_dict["Total Share"]), color="#047857", fontsize=7.8, fontweight="bold", va="center")
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
@@ -663,8 +706,8 @@ def render_npt_module():
 
         # Computations (Auto-windowed to 7 days if n > 7)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
-        df_smed_grid = m3_compute_smed_table(df_mtd, max_days=7)
-        df_maint_grid = m3_compute_maint_daily_table(df_mtd, max_days=7)
+        df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
+        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, max_days=7)
 
         # 4-Grid JPG Generation
         jpg_bytes = m3_generate_2x2_executive_jpg(
@@ -679,7 +722,11 @@ def render_npt_module():
             size_tot_hrs,
             size_summary_pct,
             df_smed_grid,
+            smed_tot_qty,
+            smed_tot_time,
+            smed_avg_min,
             df_maint_grid,
+            maint_summary_dict,
         )
 
         with c_snap:
@@ -743,21 +790,10 @@ def render_npt_module():
             smed_setups = len(smed_last_df)
             smed_hrs = smed_last_df["Hours"].sum()
             smed_avg_min = (smed_hrs / smed_setups * 60.0) if smed_setups > 0 else 0.0
-            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if v != "-"))) if smed_setups > 0 else "None"
+            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if str(v) != "-"))) if smed_setups > 0 else "None"
 
-            smed_mtd_df = df_mtd[df_mtd["Is_SMED"]]
-            mtd_smed_setups = len(smed_mtd_df)
-            mtd_smed_hrs = smed_mtd_df["Hours"].sum()
-            mtd_smed_avg = (mtd_smed_hrs / mtd_smed_setups * 60.0) if mtd_smed_setups > 0 else 0.0
-
-            # Prior month comparison string
-            comp_str_list = []
-            for p_m in reversed(all_months[:-1]):
-                p_df = df_downtime[df_downtime["YearMonth"] == p_m]
-                p_name = p_df["MonthName"].iloc[0]
-                p_hrs = p_df["Hours"].sum()
-                comp_str_list.append(f"{p_hrs:,.2f} Hrs in {p_name}")
-            comp_str = " vs. ".join(comp_str_list) if comp_str_list else "-"
+            # Dynamic like-for-like comparison string (Sep 01–N vs Aug 01–N)
+            comp_like_for_like_str = f"vs. {tot_prev_hrs:,.2f} Hrs in {prev_month_name} 01–{cutoff_day:02d}"
 
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
@@ -765,7 +801,7 @@ Dear Sir,
 
 *1. Overall Monthly NPT Analysis (MTD Comparison)*
 
-Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
+Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
 
 *Top Contributing Causes ({curr_month_name}):*
 {chr(10).join(top_causes_lines)}
@@ -779,7 +815,7 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
 • Total Setup Time: *{smed_hrs:.2f} Hours*
 • Average SMED: *{smed_avg_min:.2f} Min/change*
 • Involved Machines: {smed_mcs_str}
-• Month-to-Date SMED: *{mtd_smed_setups} setups* completed totaling *{mtd_smed_hrs:.2f} Hours* (MTD Avg: *{mtd_smed_avg:.2f} Min*)"""
+• Month-to-Date SMED: *{smed_tot_qty} setups* completed totaling *{smed_tot_time:.2f} Hours* (MTD Avg: *{smed_avg_min:.2f} Min*)"""
 
             st.markdown("#### 📝 EXECUTIVE BRIEFING TEXT")
             st.markdown(
@@ -787,14 +823,14 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
                     <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
                     <h5>1. Overall Monthly NPT Analysis</h5>
-                    <p>Current Month Total NPT: <b>{tot_mtd_hrs:,.2f} Hours</b> (vs. {comp_str}).</p>
+                    <p>Current Month Total NPT: <b>{tot_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
                     <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
                     <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
                     <p>• Mold Changes Completed: <b>{smed_setups} setups</b> ({smed_hrs:.2f} Hours | Avg: <b>{smed_avg_min:.2f} Min/change</b>)<br>
                     • Involved Machines: {smed_mcs_str}<br>
-                    • Month-to-Date SMED: <b>{mtd_smed_setups} setups</b> completed totaling <b>{mtd_smed_hrs:.2f} Hours</b> (MTD Avg: <b>{mtd_smed_avg:.2f} Min</b>)</p>
+                    • Month-to-Date SMED: <b>{smed_tot_qty} setups</b> completed totaling <b>{smed_tot_time:.2f} Hours</b> (MTD Avg: <b>{smed_avg_min:.2f} Min</b>)</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
