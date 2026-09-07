@@ -61,7 +61,7 @@ def extract_mc_size(pos_val, mc_val):
 
 
 # =========================================================
-# 1. PARSING ENGINES
+# 1. PARSING ENGINES (APPROACH 3: CLOSED + ACTIVE PRESERVED)
 # =========================================================
 @st.cache_data
 def m3_parse_downtime_workbook(file_bytes):
@@ -88,12 +88,11 @@ def m3_parse_downtime_workbook(file_bytes):
     )
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
 
-    # Exclude open-ended stoppages without end timestamp
+    # Track missing end times for open-ended tracking
     to_col = get_col(df_clean, ["To Time", "ToTime", "End Time", "EndTime"])
-    if to_col:
-        df_clean = df_clean[df_clean[to_col].notna()].copy()
+    df_clean["Is_Ongoing"] = df_clean[to_col].isna() if to_col else False
 
-    # Base operational date on Cause Added Date — NORMALIZE STRIPS TIME COMPONENT
+    # Base operational date on Cause Added Date — NORMALIZE STRIPS TIME
     date_col = get_col(
         df_clean,
         ["Cause Added Date", "CauseAddedDate", "Date", "Added Date"],
@@ -124,7 +123,8 @@ def m3_parse_downtime_workbook(file_bytes):
     else:
         df_clean["Hours"] = 0.0
 
-    df_clean = df_clean[df_clean["Hours"] > 0].copy()
+    # Ensure ongoing open incidents have exactly 0 closed hours
+    df_clean.loc[df_clean["Is_Ongoing"], "Hours"] = 0.0
 
     # Machine Positions and Sizes
     mc_col = get_col(df_clean, ["Machine", "MC SL"], "Machine")
@@ -192,12 +192,14 @@ def m3_parse_service_maintenance(file_bytes):
 # 2. COMPUTATION HELPERS
 # =========================================================
 def m3_compute_size_wise_npt(df_scope, cutoff_days):
+    # Only closed duration counts for capacity metrics
+    df_closed = df_scope[~df_scope["Is_Ongoing"]].copy()
     records = []
-    tot_hrs_all = df_scope["Hours"].sum()
+    tot_hrs_all = df_closed["Hours"].sum()
 
     for sz in EXCEL_SIZES:
         nos = SIZE_NOS_MAP.get(sz, 0)
-        sz_hrs = df_scope[df_scope["Size"] == sz]["Hours"].sum()
+        sz_hrs = df_closed[df_closed["Size"] == sz]["Hours"].sum()
         avail_hrs = nos * 24.0 * max(1, cutoff_days)
         cap_pct = (sz_hrs / avail_hrs * 100.0) if avail_hrs > 0 else 0.0
 
@@ -216,7 +218,8 @@ def m3_compute_size_wise_npt(df_scope, cutoff_days):
 
 
 def m3_compute_smed_table(df_scope, max_days=7):
-    smed_df = df_scope[df_scope["Is_SMED"]].copy()
+    # Only closed mold changes count
+    smed_df = df_scope[df_scope["Is_SMED"] & (~df_scope["Is_Ongoing"])].copy()
     if smed_df.empty:
         return pd.DataFrame(), 0, 0.0, 0.0
 
@@ -257,12 +260,13 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
         "RMCS Problem*",
         "Oil or water Leakage*",
     ]
-    all_dates = sorted(df_scope["DateClean"].dropna().unique())
+    df_closed = df_scope[~df_scope["Is_Ongoing"]].copy()
+    all_dates = sorted(df_closed["DateClean"].dropna().unique())
     dates_display = all_dates[-max_days:] if len(all_dates) > max_days else all_dates
 
     records = []
     for dt in dates_display:
-        dt_df = df_scope[df_scope["DateClean"] == dt]
+        dt_df = df_closed[df_closed["DateClean"] == dt]
         row = {"Date": dt.strftime("%-d-%b")}
 
         maint_sum = 0.0
@@ -281,7 +285,7 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
     mtd_summary_row = {"Date": f"Total (1-{cutoff_days}) >>"}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
-        c_tot = df_scope[df_scope["Cause"] == mc_cause]["Hours"].sum()
+        c_tot = df_closed[df_closed["Cause"] == mc_cause]["Hours"].sum()
         mtd_summary_row[mc_cause] = round(c_tot, 1)
         tot_maint_all += c_tot
 
@@ -294,11 +298,13 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
 
 
 def m3_compute_consolidated_daily_log(df_day):
+    """Approach 3: Groups by machine, shows Total Hours (Closed), flags ongoing incidents."""
     if df_day.empty:
         return pd.DataFrame()
 
     records = []
     for (pos, mc), grp in df_day.groupby(["Position", "Machine"]):
+        has_ongoing = grp["Is_Ongoing"].any()
         causes = ", ".join(
             sorted(
                 set(
@@ -308,21 +314,31 @@ def m3_compute_consolidated_daily_log(df_day):
             )
         )
         line = grp["Line"].iloc[0]
-        hrs = grp["Hours"].sum()
+        closed_hrs = grp[~grp["Is_Ongoing"]]["Hours"].sum()
         start_t = str(grp["From Time"].min())[:16]
+
+        if has_ongoing:
+            status = "Active / In Progress ⏳"
+            dur_display = f"{closed_hrs:.2f} h (Ongoing)" if closed_hrs > 0 else "0.0 h (Ongoing)"
+        else:
+            status = "Closed ✅"
+            dur_display = f"{closed_hrs:.2f} h"
 
         records.append({
             "Position": pos,
             "Machine": mc,
             "Line": line,
+            "Status": status,
             "Combined Causes": causes,
-            "Total Hours": round(hrs, 2),
+            "Closed Hours": round(closed_hrs, 2),
+            "Duration": dur_display,
             "Start Time": start_t,
+            "Is_Ongoing": has_ongoing,
         })
 
     res = (
         pd.DataFrame(records)
-        .sort_values("Total Hours", ascending=False)
+        .sort_values(by=["Is_Ongoing", "Closed Hours"], ascending=[False, False])
         .reset_index(drop=True)
     )
     return res
@@ -413,7 +429,7 @@ def m3_generate_2x2_executive_jpg(
     for p in [p1, p2, p3, p4]:
         ax.add_patch(p)
 
-    # Top-Left Header Banner (Clean Title Without Prefix)
+    # Top-Left Header Banner
     hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g1)
     ax.text(3.0, 89.4, f"TOP 10 NPT SHARE IMPACT ({curr_abbr} 01–{cutoff_day:02d} vs {prev_abbr} 01–{cutoff_day:02d})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
@@ -431,7 +447,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(19.5, 86.3, f"Share % ({curr_abbr} vs {prev_abbr})", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
     ax.text(46.0, 86.3, "Variance", color="#0f172a", fontsize=7.4, fontweight="bold", ha="center", va="center")
 
-    # Top-Right Header Banner (Clean Title Without Prefix)
+    # Top-Right Header Banner
     hdr_g2 = patches.Rectangle((50.7, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g2)
     ax.text(53.0, 89.4, f"MC SIZE-WISE NPT CAPACITY LOSS ({curr_abbr} 01–{cutoff_day:02d}, {sel_date_obj.year})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
@@ -442,7 +458,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(77.0, 86.3, "NPT hrs", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(90.0, 86.3, "NPT %", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
 
-    # Bottom-Left Header Banner (Clean Title Without Prefix)
+    # Bottom-Left Header Banner
     hdr_g3 = patches.Rectangle((1.5, 42.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g3)
     ax.text(3.0, 44.4, "SMED", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
@@ -454,7 +470,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(24.5, 41.4, "Avg SMED", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
     ax.text(34.0, 41.4, "Involved Mcs", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
 
-    # Bottom-Right Header Banner (Clean Title Without Prefix)
+    # Bottom-Right Header Banner
     hdr_g4 = patches.Rectangle((50.7, 42.8), w_box, 3.2, facecolor="#00a859", edgecolor="none")
     ax.add_patch(hdr_g4)
     ax.text(53.0, 44.4, "MC MAINTENANCE RELATED ISSUE", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
@@ -484,14 +500,11 @@ def m3_generate_2x2_executive_jpg(
         hrs_curr = curr_hours_dict.get(c, 0.0)
         diff = val_curr - val_prev
 
-        # Cause Label
         c_label = c.replace("*", "")[:20]
         ax.text(3.0, y_g1 - 0.2, c_label, color="#b91c1c" if "Problem" in c else "#0f172a", fontsize=7.2, fontweight="bold", va="center")
 
-        # Current Hours
         ax.text(17.5, y_g1 - 0.2, f"{hrs_curr:.1f}h", color="#0f172a", fontsize=7.0, fontweight="bold", ha="right", va="center")
 
-        # Dual Bars
         bar_x = 19.5
         bar_max_w = 21.0
         w_curr = (val_curr / max_share) * bar_max_w
@@ -503,7 +516,6 @@ def m3_generate_2x2_executive_jpg(
         ax.add_patch(patches.Rectangle((bar_x, y_g1 - 1.95), w_prev, 0.95, facecolor="#cbd5e1", edgecolor="none"))
         ax.text(bar_x + w_prev + 0.5, y_g1 - 1.45, f"{val_prev:.1f}%", color="#64748b", fontsize=6.6, va="center")
 
-        # Variance Pill
         badge_x = 46.0
         if diff > 0:
             badge_bg = "#fee2e2"
@@ -519,21 +531,30 @@ def m3_generate_2x2_executive_jpg(
 
         y_g1 -= y_step_g1
 
-    # Top-Left Summary Row
+    # Dynamic Summary Footer Sentence
     net_hrs_diff = tot_curr_mtd_hrs - tot_prev_mtd_hrs
     pct_net_diff = (net_hrs_diff / tot_prev_mtd_hrs * 100.0) if tot_prev_mtd_hrs > 0 else 0.0
+
+    if net_hrs_diff <= 0:
+        outcome_str = f"Saved {abs(net_hrs_diff):,.0f} hrs"
+        tot_badge_bg = "#dcfce7"
+        tot_badge_fg = "#15803d"
+        tot_badge_txt = f"▼ {abs(pct_net_diff):.1f}%"
+    else:
+        outcome_str = f"Lost {abs(net_hrs_diff):,.0f} hrs"
+        tot_badge_bg = "#fee2e2"
+        tot_badge_fg = "#b91c1c"
+        tot_badge_txt = f"▲ +{abs(pct_net_diff):.1f}%"
+
+    summary_sentence = (
+        f"Total downtime in first {cutoff_day} days "
+        f"({curr_abbr}: {tot_curr_mtd_hrs:,.0f} vs {prev_abbr}: {tot_prev_mtd_hrs:,.0f} hrs). {outcome_str}"
+    )
 
     ax.add_patch(patches.Rectangle((1.5, 48.0), w_box, 3.2, facecolor="#eff6ff", edgecolor="#bfdbfe", linewidth=0.6))
     ax.text(3.0, 49.6, f"Total ({curr_abbr} 1–{cutoff_day}) >>", color="#1d4ed8", fontsize=7.4, fontweight="bold", va="center")
     ax.text(17.5, 49.6, f"{tot_curr_mtd_hrs:,.1f}h", color="#1d4ed8", fontsize=7.4, fontweight="bold", ha="right", va="center")
-    
-    summary_txt = f"{curr_abbr}: {tot_curr_mtd_hrs:,.1f} H  |  {prev_abbr}: {tot_prev_mtd_hrs:,.1f} H  |  Net: {abs(net_hrs_diff):,.1f} H"
-    ax.text(19.5, 49.6, summary_txt, color="#334155", fontsize=6.8, fontweight="bold", va="center")
-
-    tot_badge_bg = "#dcfce7" if net_hrs_diff <= 0 else "#fee2e2"
-    tot_badge_fg = "#15803d" if net_hrs_diff <= 0 else "#b91c1c"
-    tot_badge_sign = "▼ " if net_hrs_diff <= 0 else "▲ +"
-    tot_badge_txt = f"{tot_badge_sign}{abs(pct_net_diff):.1f}%"
+    ax.text(19.5, 49.6, summary_sentence, color="#1e293b", fontsize=6.7, fontweight="bold", va="center")
 
     ax.add_patch(patches.FancyBboxPatch((46.0 - 2.8, 48.4), 5.6, 2.4, boxstyle="round,pad=0.1,rounding_size=0.3", facecolor=tot_badge_bg, edgecolor="none"))
     ax.text(46.0, 49.6, tot_badge_txt, color=tot_badge_fg, fontsize=6.8, fontweight="bold", ha="center", va="center")
@@ -565,7 +586,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # BOTTOM-LEFT: SMED TABLE (WITH FULL 1-N SUMMARY ROW)
+    # BOTTOM-LEFT: SMED TABLE
     # -------------------------------------------------------------
     y_g3 = 38.2
     step_g3 = 4.35
@@ -582,7 +603,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(34.0, y_g3 + 0.2, inv_wrap, color="#475569", fontsize=6.2, va="center")
         y_g3 -= step_g3
 
-    # Bottom-Left Summary Row: Light Blue Accent (#eff6ff)
+    # Bottom-Left Summary Row
     ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
     ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
@@ -591,7 +612,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
 
     # -------------------------------------------------------------
-    # BOTTOM-RIGHT: MAINTENANCE TABLE (WITH FULL 1-N SUMMARY ROW)
+    # BOTTOM-RIGHT: MAINTENANCE TABLE
     # -------------------------------------------------------------
     y_g4 = 38.2
     step_g4 = 4.35
@@ -610,7 +631,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(x_g4[7], y_g4 + 0.2, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
         y_g4 -= step_g4
 
-    # Bottom-Right Summary Row: Light Mint Accent (#ecfdf5)
+    # Bottom-Right Summary Row
     ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor="#ecfdf5", edgecolor="none"))
     ax.text(x_g4[0], y_g4 + 0.2, maint_summary_dict["Date"], color="#047857", fontsize=7.5, fontweight="bold", va="center")
     ax.text(x_g4[1], y_g4 + 0.2, f"{maint_summary_dict['Machine Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
@@ -727,35 +748,40 @@ def render_npt_module():
 
         selected_top_causes = st.session_state["top_10_causes_selected"]
 
+        # Scope frames
         df_last_day = active_m_df[active_m_df["DateStr"] == sel_cutoff_str].copy()
         df_mtd = active_m_df[active_m_df["DayNum"] <= cutoff_day].copy()
+
+        # Closed only for historical calculations
+        df_mtd_closed = df_mtd[~df_mtd["Is_Ongoing"]].copy()
 
         if len(all_months) >= 2:
             prev_month = all_months[-2]
             prev_m_df = df_downtime[df_downtime["YearMonth"] == prev_month]
             prev_month_name = prev_m_df["MonthName"].iloc[0]
-            prev_m_mtd = prev_m_df[prev_m_df["DayNum"] <= cutoff_day]
+            prev_m_mtd_closed = prev_m_df[(prev_m_df["DayNum"] <= cutoff_day) & (~prev_m_df["Is_Ongoing"])].copy()
         else:
             prev_month = active_month
             prev_m_df = active_m_df
             prev_month_name = "Prior"
-            prev_m_mtd = df_mtd
+            prev_m_mtd_closed = df_mtd_closed
 
-        tot_curr_mtd_hrs = df_mtd["Hours"].sum()
-        tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
+        tot_curr_mtd_hrs = df_mtd_closed["Hours"].sum()
+        tot_prev_mtd_hrs = prev_m_mtd_closed["Hours"].sum()
 
         curr_share_dict = (
-            (df_mtd.groupby("Cause")["Hours"].sum() / tot_curr_mtd_hrs * 100).to_dict()
+            (df_mtd_closed.groupby("Cause")["Hours"].sum() / tot_curr_mtd_hrs * 100).to_dict()
             if tot_curr_mtd_hrs > 0
             else {}
         )
         prev_share_dict = (
-            (prev_m_mtd.groupby("Cause")["Hours"].sum() / tot_prev_mtd_hrs * 100).to_dict()
+            (prev_m_mtd_closed.groupby("Cause")["Hours"].sum() / tot_prev_mtd_hrs * 100).to_dict()
             if tot_prev_mtd_hrs > 0
             else {}
         )
-        curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
+        curr_hours_dict = df_mtd_closed.groupby("Cause")["Hours"].sum().to_dict()
 
+        # Computations
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, max_days=7)
@@ -793,31 +819,35 @@ def render_npt_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 4 Web Metric Cards
+        # 4 Metric Cards
         k1, k2, k3, k4 = st.columns(4)
         k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_curr_mtd_hrs/cutoff_day:.1f} H/Day</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div><div class="kpi-val">{size_summary_pct:.2f}%</div><div class="kpi-sub">Of {TOTAL_PLANT_MCS*24*cutoff_day:,.0f} H Available</div></div>', unsafe_allow_html=True)
-        last_day_hrs = df_last_day["Hours"].sum()
-        k3.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_hrs:.1f} H</div><div class="kpi-sub">{(last_day_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Capacity</div></div>', unsafe_allow_html=True)
-        maint_last_hrs = df_last_day[df_last_day["Is_Maintenance"]]["Hours"].sum()
-        k4.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div><div class="kpi-val">{maint_last_hrs:.1f} H</div><div class="kpi-sub">{(maint_last_hrs/last_day_hrs*100 if last_day_hrs>0 else 0):.1f}% NPT Share</div></div>', unsafe_allow_html=True)
+        
+        last_day_closed_hrs = df_last_day[~df_last_day["Is_Ongoing"]]["Hours"].sum()
+        ongoing_count = df_last_day["Is_Ongoing"].sum()
+        k3.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_closed_hrs:.1f} H</div><div class="kpi-sub">{(last_day_closed_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Cap ({ongoing_count} Active)</div></div>', unsafe_allow_html=True)
+        
+        maint_last_hrs = df_last_day[(~df_last_day["Is_Ongoing"]) & df_last_day["Is_Maintenance"]]["Hours"].sum()
+        k4.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div><div class="kpi-val">{maint_last_hrs:.1f} H</div><div class="kpi-sub">{(maint_last_hrs/last_day_closed_hrs*100 if last_day_closed_hrs>0 else 0):.1f}% NPT Share</div></div>', unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
-        # Consolidated Machine Table & WhatsApp Brief
+        # Consolidated Machine Table (With Active Watchlist) & WhatsApp Brief
         col_left, col_right = st.columns([1.5, 1.1], gap="large")
 
         with col_left:
             st.markdown(f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {sel_date_obj.strftime('%B %d')}")
-            st.caption("Consolidated: Single combined entry per machine for the day.")
+            st.caption("Consolidated: Single entry per machine. Active ongoing breakdowns pinned with ⏳ badge.")
             df_cons_log = m3_compute_consolidated_daily_log(df_last_day)
             if not df_cons_log.empty:
-                st.dataframe(df_cons_log, use_container_width=True, hide_index=True, height=400)
+                display_df = df_cons_log[["Position", "Machine", "Line", "Status", "Combined Causes", "Duration", "Start Time"]]
+                st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
             else:
                 st.success("✅ Zero downtime logged for this date!")
 
         with col_right:
-            top_mtd_causes = df_mtd.groupby("Cause")["Hours"].sum().sort_values(ascending=False).head(4)
+            top_mtd_causes = df_mtd_closed.groupby("Cause")["Hours"].sum().sort_values(ascending=False).head(4)
             top_causes_lines = []
             for c_n, c_h in top_mtd_causes.items():
                 c_clean = c_n.replace("*", "").strip()
@@ -835,11 +865,11 @@ def render_npt_module():
             tot_tech_day = 0.0
             for mi in maint_items:
                 mi_clean = mi.replace("*", "").strip()
-                mi_h = df_last_day[df_last_day["Cause"] == mi]["Hours"].sum()
+                mi_h = df_last_day[(~df_last_day["Is_Ongoing"]) & (df_last_day["Cause"] == mi)]["Hours"].sum()
                 tot_tech_day += mi_h
                 maint_lines.append(f"• {mi_clean}: {mi_h:.2f} Hrs")
 
-            smed_last_df = df_last_day[df_last_day["Is_SMED"]]
+            smed_last_df = df_last_day[(~df_last_day["Is_Ongoing"]) & df_last_day["Is_SMED"]]
             smed_setups_last = len(smed_last_df)
             smed_hrs_last = smed_last_df["Hours"].sum()
             smed_avg_min_last = (smed_hrs_last / smed_setups_last * 60.0) if smed_setups_last > 0 else 0.0
@@ -862,7 +892,7 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
 
 *2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})*
 {chr(10).join(maint_lines)}
-*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_hrs*100 if last_day_hrs>0 else 0):.0f}% overall plant NPT share)
+*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_closed_hrs*100 if last_day_closed_hrs>0 else 0):.0f}% overall plant NPT share)
 
 *3. Mold Change & SMED Performance (Last Day: {day_formatted})*
 • Mold Changes Completed: *{smed_setups_last} setups*
