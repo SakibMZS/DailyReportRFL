@@ -403,7 +403,7 @@ def m3_generate_2x2_executive_jpg(
         va="center",
     )
 
-    # 4 Grid Containers
+    # 4 Containers
     w_box, h_box = 47.8, 43.5
     p1 = patches.FancyBboxPatch((1.5, 47.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
     p2 = patches.FancyBboxPatch((50.7, 47.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
@@ -413,10 +413,10 @@ def m3_generate_2x2_executive_jpg(
     for p in [p1, p2, p3, p4]:
         ax.add_patch(p)
 
-    # Grid 1 Header Banner
+    # Top-Left Header Banner (Clean Title Without Prefix)
     hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g1)
-    ax.text(3.0, 89.4, f"GRID 1: TOP 10 NPT SHARE IMPACT ({curr_abbr} 01–{cutoff_day:02d} vs {prev_abbr} 01–{cutoff_day:02d})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
+    ax.text(3.0, 89.4, f"TOP 10 NPT SHARE IMPACT ({curr_abbr} 01–{cutoff_day:02d} vs {prev_abbr} 01–{cutoff_day:02d})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
     
     # Legend
     ax.add_patch(patches.Rectangle((33.0, 88.8), 1.8, 1.1, facecolor="#ef4444", edgecolor="none"))
@@ -424,17 +424,17 @@ def m3_generate_2x2_executive_jpg(
     ax.add_patch(patches.Rectangle((40.5, 88.8), 1.8, 1.1, facecolor="#94a3b8", edgecolor="none"))
     ax.text(42.7, 89.4, f"{prev_abbr}", color="#ffffff", fontsize=7.6, va="center")
 
-    # Grid 1 Column Headers
+    # Top-Left Column Headers
     ax.add_patch(patches.Rectangle((1.5, 85.0), w_box, 2.6, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
     ax.text(3.0, 86.3, "Cause Description", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
     ax.text(17.5, 86.3, f"{curr_abbr} (Hrs)", color="#0f172a", fontsize=7.4, fontweight="bold", ha="right", va="center")
     ax.text(19.5, 86.3, f"Share % ({curr_abbr} vs {prev_abbr})", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
     ax.text(46.0, 86.3, "Variance", color="#0f172a", fontsize=7.4, fontweight="bold", ha="center", va="center")
 
-    # Grid 2 Header Banner
+    # Top-Right Header Banner (Clean Title Without Prefix)
     hdr_g2 = patches.Rectangle((50.7, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g2)
-    ax.text(53.0, 89.4, f"GRID 2: MC SIZE-WISE NPT CAPACITY LOSS ({curr_abbr} 01–{cutoff_day:02d}, {sel_date_obj.year})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
+    ax.text(53.0, 89.4, f"MC SIZE-WISE NPT CAPACITY LOSS ({curr_abbr} 01–{cutoff_day:02d}, {sel_date_obj.year})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
 
     ax.add_patch(patches.Rectangle((50.7, 85.0), w_box, 2.6, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
     ax.text(53.5, 86.3, "Mc Size", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
@@ -442,10 +442,10 @@ def m3_generate_2x2_executive_jpg(
     ax.text(77.0, 86.3, "NPT hrs", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(90.0, 86.3, "NPT %", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
 
-    # Grid 3 Header Banner
+    # Bottom-Left Header Banner (Clean Title Without Prefix)
     hdr_g3 = patches.Rectangle((1.5, 42.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g3)
-    ax.text(3.0, 44.4, "GRID 3: SMED", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(3.0, 44.4, "SMED", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
 
     ax.add_patch(patches.Rectangle((1.5, 40.2), w_box, 2.4, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
     ax.text(2.8, 41.4, "Date", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
@@ -454,10 +454,10 @@ def m3_generate_2x2_executive_jpg(
     ax.text(24.5, 41.4, "Avg SMED", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
     ax.text(34.0, 41.4, "Involved Mcs", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
 
-    # Grid 4 Header Banner
+    # Bottom-Right Header Banner (Clean Title Without Prefix)
     hdr_g4 = patches.Rectangle((50.7, 42.8), w_box, 3.2, facecolor="#00a859", edgecolor="none")
     ax.add_patch(hdr_g4)
-    ax.text(53.0, 44.4, "GRID 4: MC MAINTENANCE RELATED ISSUE", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(53.0, 44.4, "MC MAINTENANCE RELATED ISSUE", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
 
     x_g4 = [52.2, 58.0, 64.5, 71.8, 78.8, 85.5, 91.5, 95.8]
     ax.add_patch(patches.Rectangle((50.7, 40.2), w_box, 2.4, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
@@ -471,7 +471,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(x_g4[7], 41.4, "Share", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 1: IMPACT COMPARISON CHART + SUMMARY FOOTER
+    # TOP-LEFT: IMPACT COMPARISON CHART + SUMMARY FOOTER
     # -------------------------------------------------------------
     y_g1 = 82.8
     y_step_g1 = 3.25
@@ -519,7 +519,7 @@ def m3_generate_2x2_executive_jpg(
 
         y_g1 -= y_step_g1
 
-    # Grid 1 Summary Row
+    # Top-Left Summary Row
     net_hrs_diff = tot_curr_mtd_hrs - tot_prev_mtd_hrs
     pct_net_diff = (net_hrs_diff / tot_prev_mtd_hrs * 100.0) if tot_prev_mtd_hrs > 0 else 0.0
 
@@ -539,7 +539,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(46.0, 49.6, tot_badge_txt, color=tot_badge_fg, fontsize=6.8, fontweight="bold", ha="center", va="center")
 
     # -------------------------------------------------------------
-    # GRID 2: MC SIZE-WISE TABLE
+    # TOP-RIGHT: MC SIZE-WISE TABLE
     # -------------------------------------------------------------
     y_g2 = 82.8
     step_g2 = 2.85
@@ -557,7 +557,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(90.5, y_g2 + 0.3, f"{cap_val:.1f}%", color=t_col, fontsize=7.6, fontweight="bold" if cap_val >= 25 else "normal", va="center")
         y_g2 -= step_g2
 
-    # Grid 2 Summary Row
+    # Top-Right Summary Row
     ax.add_patch(patches.Rectangle((50.7, y_g2 - 1.1), w_box, step_g2, facecolor="#fff1f2", edgecolor="none"))
     ax.text(54.0, y_g2 + 0.3, "Summary >>", color="#e11d48", fontsize=8.0, fontweight="bold", va="center")
     ax.text(65.5, y_g2 + 0.3, f"{TOTAL_PLANT_MCS}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
@@ -565,7 +565,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 3: SMED TABLE (WITH FULL 1-N SUMMARY ROW)
+    # BOTTOM-LEFT: SMED TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
     y_g3 = 38.2
     step_g3 = 4.35
@@ -582,7 +582,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(34.0, y_g3 + 0.2, inv_wrap, color="#475569", fontsize=6.2, va="center")
         y_g3 -= step_g3
 
-    # Grid 3 Summary Row: Light Blue Accent (#eff6ff)
+    # Bottom-Left Summary Row: Light Blue Accent (#eff6ff)
     ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
     ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
@@ -591,7 +591,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
 
     # -------------------------------------------------------------
-    # GRID 4: MAINTENANCE TABLE (WITH FULL 1-N SUMMARY ROW)
+    # BOTTOM-RIGHT: MAINTENANCE TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
     y_g4 = 38.2
     step_g4 = 4.35
@@ -610,7 +610,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(x_g4[7], y_g4 + 0.2, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
         y_g4 -= step_g4
 
-    # Grid 4 Summary Row: Light Mint Accent (#ecfdf5)
+    # Bottom-Right Summary Row: Light Mint Accent (#ecfdf5)
     ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor="#ecfdf5", edgecolor="none"))
     ax.text(x_g4[0], y_g4 + 0.2, maint_summary_dict["Date"], color="#047857", fontsize=7.5, fontweight="bold", va="center")
     ax.text(x_g4[1], y_g4 + 0.2, f"{maint_summary_dict['Machine Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
@@ -699,19 +699,16 @@ def render_npt_module():
         day_formatted = sel_date_obj.strftime("%d-%b")
         curr_month_name = active_m_df["MonthName"].iloc[0]
 
-        # All present causes
         all_present_causes = sorted([c for c in df_downtime["Cause"].dropna().unique() if "Server Error" not in str(c)])
         
-        # Initialize top 10 causes in session state
         if "top_10_causes_selected" not in st.session_state:
             st.session_state["top_10_causes_selected"] = [c for c in DEFAULT_TOP_10_CAUSES if c in all_present_causes]
 
-        # Popover Dropdown Selection with Max 10 Cap
         with c_causes:
             st.markdown("<div style='margin-top:0.25rem;'></div>", unsafe_allow_html=True)
             with st.popover(f"🎯 Select Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
                 st.markdown("##### 📌 Choose up to 10 Causes to Compare")
-                st.caption("Checked causes will be included in the impact analysis and Grid 1 chart:")
+                st.caption("Checked causes will be included in the impact analysis and chart:")
                 
                 updated_selection = []
                 for c_item in all_present_causes:
@@ -730,11 +727,9 @@ def render_npt_module():
 
         selected_top_causes = st.session_state["top_10_causes_selected"]
 
-        # Scoped DataFrames
         df_last_day = active_m_df[active_m_df["DateStr"] == sel_cutoff_str].copy()
         df_mtd = active_m_df[active_m_df["DayNum"] <= cutoff_day].copy()
 
-        # Identify previous month (supports 2 months or 3+ months dynamically)
         if len(all_months) >= 2:
             prev_month = all_months[-2]
             prev_m_df = df_downtime[df_downtime["YearMonth"] == prev_month]
@@ -761,12 +756,10 @@ def render_npt_module():
         )
         curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
-        # Computations (Auto-windowed to 7 days if n > 7, with full 1-n MTD Summary Stats)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, max_days=7)
 
-        # 4-Grid JPG Generation
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
             cutoff_day,
