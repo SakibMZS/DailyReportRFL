@@ -15,7 +15,7 @@ from config import (
     EXCEL_SIZES,
 )
 
-# Standard Plastic-3 Machine Quantity Distribution by Size
+# Standard Plastic-3 Machine Quantity Distribution by Size (Sum = 61)
 SIZE_NOS_MAP = {
     "160": 9,
     "120": 13,
@@ -134,7 +134,6 @@ def m3_parse_downtime_workbook(file_bytes):
         lambda r: extract_mc_size(r["Position"], r[mc_col]), axis=1
     )
 
-    # Clean Cause & Maintenance flags
     cause_col = get_col(df_clean, ["Cause", "Causes", "Reason", "Defect"], "Cause")
     df_clean["CauseClean"] = (
         df_clean[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
@@ -205,8 +204,8 @@ def m3_compute_size_wise_npt(df_scope, cutoff_days):
         records.append({
             "MC Size": sz,
             "Nos": nos,
-            "NPT hrs": round(sz_hrs, 2),
-            "NPT %": round(cap_pct, 2),
+            "NPT hrs": round(sz_hrs, 1),
+            "NPT %": round(cap_pct, 1),
         })
 
     df_res = pd.DataFrame(records)
@@ -222,7 +221,7 @@ def m3_compute_smed_table(df_scope, max_days=7):
         return pd.DataFrame()
 
     daily = (
-        smed_df.groupby(["DateStr", "DateClean"])
+        smed_df.groupby("DateClean")
         .agg(
             Mold_Change_Qty=("Hours", "count"),
             Total_Time=("Hours", "sum"),
@@ -234,10 +233,11 @@ def m3_compute_smed_table(df_scope, max_days=7):
         .reset_index()
     )
     daily["Avg_SMED"] = (daily["Total_Time"] / daily["Mold_Change_Qty"] * 60.0).round(2)
-    daily["Date"] = daily["DateClean"].dt.strftime("%d-%b")
+    daily["Date"] = daily["DateClean"].dt.strftime("%-d-%b")
     daily["Total_Time"] = daily["Total_Time"].round(2)
 
-    # Cap to last 7 days if n > 7
+    # Sort chronological
+    daily = daily.sort_values("DateClean").reset_index(drop=True)
     if len(daily) > max_days:
         daily = daily.tail(max_days).reset_index(drop=True)
 
@@ -259,8 +259,8 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
     records = []
     for dt in dates:
         dt_df = df_scope[df_scope["DateClean"] == dt]
-        dt_tot = dt_df["Hours"].sum()
-        row = {"Date": dt.strftime("%d-%b")}
+        day_total_npt = dt_df["Hours"].sum()
+        row = {"Date": dt.strftime("%-d-%b")}
 
         maint_sum = 0.0
         for mc_cause in maint_causes:
@@ -268,9 +268,10 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
             row[mc_cause] = round(c_hrs, 2)
             maint_sum += c_hrs
 
-        row["Total Share"] = (
-            f"{(maint_sum / dt_tot * 100):.0f}%" if dt_tot > 0 else "0%"
-        )
+        row["Total Hours"] = round(maint_sum, 2)
+        # Total Share of Plant Capacity Available (1,464 hrs)
+        share_pct = (maint_sum / DAILY_AVAILABLE_HRS * 100.0) if DAILY_AVAILABLE_HRS > 0 else 0.0
+        row["Total Share"] = f"{round(share_pct):.0f}%"
         records.append(row)
 
     return pd.DataFrame(records)
@@ -312,7 +313,7 @@ def m3_compute_consolidated_daily_log(df_day):
 
 
 # =========================================================
-# 3. 2×2 GRID EXECUTIVE 1-PAGE JPG REPORT
+# 3. EXECUTIVE 4-GRID 1-PAGE REPORT (PROFESSIONAL 2×2)
 # =========================================================
 def m3_generate_2x2_executive_jpg(
     sel_date_obj,
@@ -328,636 +329,203 @@ def m3_generate_2x2_executive_jpg(
     df_smed_grid,
     df_maint_grid,
 ):
-    fig, ax = plt.subplots(figsize=(19.0, 11.2), dpi=220)
+    fig, ax = plt.subplots(figsize=(20.0, 11.5), dpi=240)
     fig.patch.set_facecolor("#f8fafc")
     ax.set_facecolor("#f8fafc")
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
     ax.axis("off")
 
-    date_str = sel_date_obj.strftime("%d-%m-%Y")
+    start_date_str = f"{curr_month_name[:4]} 01"
+    end_date_str = f"{curr_month_name[:4]} {cutoff_day:02d}, {sel_date_obj.year}"
+    span_title = f"{start_date_str.upper()} TO {end_date_str.upper()} NPT ANALYSIS"
 
-    # Header Bar
+    # Blue Header Banner
     banner = patches.FancyBboxPatch(
-        (1.5, 93.0),
+        (1.5, 92.5),
         97.0,
-        6.0,
+        6.5,
         boxstyle="round,pad=0.2,rounding_size=0.4",
-        facecolor="#0f172a",
+        facecolor="#091e3a",
         edgecolor="none",
     )
     ax.add_patch(banner)
     ax.text(
         3.5,
-        96.2,
-        "OPERATIONAL ANALYTICS — NON-PRODUCTIVE TIME (NPT) 4-GRID REPORT",
+        96.8,
+        "OPERATIONAL ANALYTICS — NON-PRODUCTIVE TIME (NPT) REPORT",
         color="#ffffff",
-        fontsize=14.0,
+        fontsize=14.5,
+        fontweight="bold",
+        va="center",
+    )
+    ax.text(
+        3.5,
+        94.2,
+        f"{span_title}  |  Plastic-3 Production Floor (61 IMMs Standard Baseline)",
+        color="#38bdf8",
+        fontsize=9.2,
         fontweight="bold",
         va="center",
     )
     ax.text(
         96.5,
-        96.2,
-        f"Cutoff: Day 1–{cutoff_day}  |  Operational Date: {date_str}",
+        95.5,
+        f"Report Date: {sel_date_obj.strftime('%d-%m-%Y')}",
         color="#94a3b8",
         fontsize=9.0,
         ha="right",
         va="center",
     )
 
-    # 4 Grid Outer Panels
+    # 4 Grid Containers
     w_box, h_box = 47.8, 43.5
-    p1 = patches.FancyBboxPatch(
-        (1.5, 48.0),
-        w_box,
-        h_box,
-        boxstyle="round,pad=0.2,rounding_size=0.6",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
-    p2 = patches.FancyBboxPatch(
-        (50.7, 48.0),
-        w_box,
-        h_box,
-        boxstyle="round,pad=0.2,rounding_size=0.6",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
-    p3 = patches.FancyBboxPatch(
-        (1.5, 3.0),
-        w_box,
-        h_box,
-        boxstyle="round,pad=0.2,rounding_size=0.6",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
-    p4 = patches.FancyBboxPatch(
-        (50.7, 3.0),
-        w_box,
-        h_box,
-        boxstyle="round,pad=0.2,rounding_size=0.6",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
+    p1 = patches.FancyBboxPatch((1.5, 47.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
+    p2 = patches.FancyBboxPatch((50.7, 47.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
+    p3 = patches.FancyBboxPatch((1.5, 2.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
+    p4 = patches.FancyBboxPatch((50.7, 2.5), w_box, h_box, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
 
     for p in [p1, p2, p3, p4]:
         ax.add_patch(p)
 
-    # Headers for Grids
-    ax.text(
-        3.0,
-        89.6,
-        f"GRID 1: TOP 10 NPT SHARE IMPACT COMPARISON ({curr_month_name} vs {prev_month_name})",
-        color="#0f172a",
-        fontsize=10.0,
-        fontweight="bold",
-    )
-    ax.text(
-        52.2,
-        89.6,
-        f"GRID 2: MC SIZE-WISE NPT CAPACITY LOSS (Day 1–{cutoff_day})",
-        color="#0f172a",
-        fontsize=10.0,
-        fontweight="bold",
-    )
-    ax.text(
-        3.0,
-        44.6,
-        "GRID 3: MOLD CHANGEOVER (SMED) EXECUTION LOG",
-        color="#0f172a",
-        fontsize=10.0,
-        fontweight="bold",
-    )
-    ax.text(
-        52.2,
-        44.6,
-        "GRID 4: TECHNICAL & MAINTENANCE STATIONS IMPACT",
-        color="#0f172a",
-        fontsize=10.0,
-        fontweight="bold",
-    )
+    # Grid 1 Banner
+    hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#f1f5f9", edgecolor="none")
+    ax.add_patch(hdr_g1)
+    ax.text(3.0, 89.4, "Cause", color="#0f172a", fontsize=10.0, fontweight="bold", va="center")
+    ax.text(23.0, 89.4, "Present vs Last Month Impact Share (%)", color="#0f172a", fontsize=9.5, fontweight="bold", va="center")
+
+    # Grid 2 Banner
+    hdr_g2 = patches.Rectangle((50.7, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
+    ax.add_patch(hdr_g2)
+    ax.text(53.0, 89.4, "Mc Size", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(64.5, 89.4, "Nos", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(76.5, 89.4, "NPT hrs", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(89.5, 89.4, "NPT %", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+
+    # Grid 3 Banner
+    hdr_g3 = patches.Rectangle((1.5, 42.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
+    ax.add_patch(hdr_g3)
+    ax.text(2.8, 44.4, "Date", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+    ax.text(8.8, 44.4, "Mold Qty", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+    ax.text(16.5, 44.4, "Total (Hr)", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+    ax.text(24.5, 44.4, "Avg SMED", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+    ax.text(34.0, 44.4, "Involved Mcs", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+
+    # Grid 4 Banner
+    hdr_g4 = patches.Rectangle((50.7, 42.8), w_box, 3.2, facecolor="#00a859", edgecolor="none")
+    ax.add_patch(hdr_g4)
+    x_g4 = [52.2, 58.0, 64.5, 71.8, 78.8, 85.5, 91.5, 95.8]
+    ax.text(x_g4[0], 44.4, "Date", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[1], 44.4, "Machine*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[2], 44.4, "Robot*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[3], 44.4, "Controller*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[4], 44.4, "RMCS*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[5], 44.4, "Oil/Water*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[6], 44.4, "Total Hrs", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(x_g4[7], 44.4, "Share", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 1: IMPACT COMPARISON CHART (NPT SHARE %)
+    # GRID 1: IMPACT COMPARISON CHART
     # -------------------------------------------------------------
-    y_g1 = 86.5
-    y_step_g1 = 3.6
-    max_share = (
-        max(
-            [curr_share_dict.get(c, 0.0) for c in top_10_causes]
-            + [prev_share_dict.get(c, 0.0) for c in top_10_causes]
-            + [35.0]
-        )
-    )
+    y_g1 = 85.5
+    y_step_g1 = 3.65
+    all_shares = [curr_share_dict.get(c, 0.0) for c in top_10_causes] + [prev_share_dict.get(c, 0.0) for c in top_10_causes]
+    max_share = max(all_shares + [30.0])
 
     for c in top_10_causes[:10]:
         c_clean = c.replace("*", "")[:24]
         val_curr = curr_share_dict.get(c, 0.0)
         val_prev = prev_share_dict.get(c, 0.0)
 
-        ax.text(
-            3.2,
-            y_g1 - 0.2,
-            c_clean,
-            color="#0f172a",
-            fontsize=7.2,
-            fontweight="bold",
-            va="center",
-        )
+        ax.text(3.0, y_g1 - 0.2, c, color="#e11d48", fontsize=7.6, fontweight="bold", va="center")
 
-        # Bar Current
-        w_curr = (val_curr / max_share) * 22.0
-        bar_c = patches.Rectangle(
-            (19.0, y_g1 - 0.7), w_curr, 1.2, facecolor="#dc2626", edgecolor="none"
-        )
-        ax.add_patch(bar_c)
-        ax.text(
-            19.5 + w_curr,
-            y_g1 - 0.1,
-            f"{val_curr:.1f}%",
-            color="#dc2626",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
+        # Solid Red Bar for Present Month
+        w_curr = (val_curr / max_share) * 19.5
+        ax.add_patch(patches.Rectangle((22.5, y_g1 - 0.75), w_curr, 1.25, facecolor="#ef4444", edgecolor="#b91c1c", linewidth=0.5))
+        ax.text(23.0 + w_curr, y_g1 - 0.15, f"{val_curr:.1f}%", color="#b91c1c", fontsize=7.2, fontweight="bold", va="center")
 
-        # Bar Previous
-        w_prev = (val_prev / max_share) * 22.0
-        bar_p = patches.Rectangle(
-            (19.0, y_g1 - 2.1), w_prev, 1.2, facecolor="#94a3b8", edgecolor="none"
-        )
-        ax.add_patch(bar_p)
-        ax.text(
-            19.5 + w_prev,
-            y_g1 - 1.5,
-            f"{val_prev:.1f}%",
-            color="#64748b",
-            fontsize=6.8,
-            va="center",
-        )
+        # Muted Gray Bar for Last Month
+        w_prev = (val_prev / max_share) * 19.5
+        ax.add_patch(patches.Rectangle((22.5, y_g1 - 2.15), w_prev, 1.1, facecolor="#cbd5e1", edgecolor="#94a3b8", linewidth=0.5))
+        ax.text(23.0 + w_prev, y_g1 - 1.6, f"{val_prev:.1f}%", color="#64748b", fontsize=7.0, va="center")
 
         y_g1 -= y_step_g1
 
     # Grid 1 Legend
-    ax.add_patch(
-        patches.Rectangle(
-            (32.0, 89.2), 2.0, 1.0, facecolor="#dc2626", edgecolor="none"
-        )
-    )
-    ax.text(
-        34.5,
-        89.7,
-        f"{curr_month_name} Share",
-        color="#0f172a",
-        fontsize=7.2,
-        va="center",
-    )
-    ax.add_patch(
-        patches.Rectangle(
-            (41.0, 89.2), 2.0, 1.0, facecolor="#94a3b8", edgecolor="none"
-        )
-    )
-    ax.text(
-        43.5,
-        89.7,
-        f"{prev_month_name} Share",
-        color="#0f172a",
-        fontsize=7.2,
-        va="center",
-    )
+    ax.add_patch(patches.Rectangle((33.0, 48.5), 2.2, 1.1, facecolor="#ef4444", edgecolor="#b91c1c", linewidth=0.5))
+    ax.text(35.8, 49.1, f"{curr_month_name} Share", color="#0f172a", fontsize=7.5, fontweight="bold", va="center")
+    ax.add_patch(patches.Rectangle((41.5, 48.5), 2.2, 1.1, facecolor="#cbd5e1", edgecolor="#94a3b8", linewidth=0.5))
+    ax.text(44.3, 49.1, f"{prev_month_name} Share", color="#64748b", fontsize=7.5, va="center")
 
     # -------------------------------------------------------------
-    # GRID 2: MC SIZE-WISE TABLE (Exact Match image_406e3c.png)
+    # GRID 2: MC SIZE-WISE TABLE
     # -------------------------------------------------------------
-    x_g2 = [52.5, 62.0, 73.0, 86.0]
-    hdr_box_g2 = patches.Rectangle(
-        (52.0, 85.5), 45.0, 2.4, facecolor="#0f172a", edgecolor="none"
-    )
-    ax.add_patch(hdr_box_g2)
-    ax.text(
-        x_g2[0],
-        86.7,
-        "Mc Size",
-        color="#ffffff",
-        fontsize=7.5,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[1],
-        86.7,
-        "Nos",
-        color="#ffffff",
-        fontsize=7.5,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[2],
-        86.7,
-        "NPT hrs",
-        color="#ffffff",
-        fontsize=7.5,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[3],
-        86.7,
-        "NPT %",
-        color="#ffffff",
-        fontsize=7.5,
-        fontweight="bold",
-        va="center",
-    )
-
-    y_g2 = 83.2
-    step_g2 = 2.7
+    y_g2 = 85.5
+    step_g2 = 2.85
     for idx, r in df_size_grid.iterrows():
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
-        ax.add_patch(
-            patches.Rectangle(
-                (52.0, y_g2 - 1.0),
-                45.0,
-                step_g2,
-                facecolor=bg_c,
-                edgecolor="none",
-            )
-        )
-        ax.plot(
-            [52.0, 97.0],
-            [y_g2 - 1.0, y_g2 - 1.0],
-            color="#e2e8f0",
-            linewidth=0.4,
-        )
+        ax.add_patch(patches.Rectangle((50.7, y_g2 - 1.1), w_box, step_g2, facecolor=bg_c, edgecolor="none"))
+        ax.plot([50.7, 98.5], [y_g2 - 1.1, y_g2 - 1.1], color="#e2e8f0", linewidth=0.45)
 
-        ax.text(
-            x_g2[0],
-            y_g2 + 0.3,
-            str(r["MC Size"]),
-            color="#0f172a",
-            fontsize=7.2,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            x_g2[1],
-            y_g2 + 0.3,
-            str(r["Nos"]),
-            color="#64748b",
-            fontsize=7.2,
-            va="center",
-        )
-        ax.text(
-            x_g2[2],
-            y_g2 + 0.3,
-            f"{r['NPT hrs']:.1f}",
-            color="#0f172a",
-            fontsize=7.2,
-            va="center",
-        )
-        ax.text(
-            x_g2[3],
-            y_g2 + 0.3,
-            f"{r['NPT %']:.1f}%",
-            color="#b91c1c" if r["NPT %"] >= 20 else "#0f172a",
-            fontsize=7.2,
-            fontweight="bold" if r["NPT %"] >= 20 else "normal",
-            va="center",
-        )
+        ax.text(54.0, y_g2 + 0.3, str(r["MC Size"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+        ax.text(65.5, y_g2 + 0.3, str(r["Nos"]), color="#64748b", fontsize=7.6, va="center")
+        ax.text(77.5, y_g2 + 0.3, f"{r['NPT hrs']:.1f}", color="#0f172a", fontsize=7.6, va="center")
+        
+        cap_val = r["NPT %"]
+        t_col = "#dc2626" if cap_val >= 25 else "#0f172a"
+        ax.text(90.5, y_g2 + 0.3, f"{cap_val:.1f}%", color=t_col, fontsize=7.6, fontweight="bold" if cap_val >= 25 else "normal", va="center")
         y_g2 -= step_g2
 
-    # Summary Row
-    ax.add_patch(
-        patches.Rectangle(
-            (52.0, y_g2 - 1.0),
-            45.0,
-            step_g2,
-            facecolor="#fef2f2",
-            edgecolor="none",
-        )
-    )
-    ax.text(
-        x_g2[0],
-        y_g2 + 0.3,
-        "Summary >>",
-        color="#dc2626",
-        fontsize=7.6,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[1],
-        y_g2 + 0.3,
-        f"{TOTAL_PLANT_MCS}",
-        color="#0f172a",
-        fontsize=7.6,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[2],
-        y_g2 + 0.3,
-        f"{size_tot_hrs:,.1f}",
-        color="#0f172a",
-        fontsize=7.6,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g2[3],
-        y_g2 + 0.3,
-        f"{size_summary_pct:.1f}%",
-        color="#dc2626",
-        fontsize=7.6,
-        fontweight="bold",
-        va="center",
-    )
+    # Grid 2 Summary Row
+    ax.add_patch(patches.Rectangle((50.7, y_g2 - 1.1), w_box, step_g2, facecolor="#fff1f2", edgecolor="none"))
+    ax.text(54.0, y_g2 + 0.3, "Summary >>", color="#e11d48", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(65.5, y_g2 + 0.3, f"{TOTAL_PLANT_MCS}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(77.5, y_g2 + 0.3, f"{size_tot_hrs:,.1f}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 3: SMED TABLE (Exact Match image_4013a3.png)
+    # GRID 3: SMED TABLE
     # -------------------------------------------------------------
-    hdr_box_g3 = patches.Rectangle(
-        (3.0, 40.8), 44.5, 2.4, facecolor="#0f172a", edgecolor="none"
-    )
-    ax.add_patch(hdr_box_g3)
-    ax.text(
-        3.5,
-        42.0,
-        "Date",
-        color="#ffffff",
-        fontsize=7.0,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        9.0,
-        42.0,
-        "Mold Qty",
-        color="#ffffff",
-        fontsize=7.0,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        15.5,
-        42.0,
-        "Total (Hr)",
-        color="#ffffff",
-        fontsize=7.0,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        22.0,
-        42.0,
-        "Avg (Min)",
-        color="#ffffff",
-        fontsize=7.0,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        29.0,
-        42.0,
-        "Involved Machines",
-        color="#ffffff",
-        fontsize=7.0,
-        fontweight="bold",
-        va="center",
-    )
-
-    y_g3 = 38.5
-    step_g3 = 4.8
+    y_g3 = 40.5
+    n_smed = max(1, len(df_smed_grid))
+    step_g3 = min(5.3, 36.0 / n_smed)
     for idx, r in df_smed_grid.iterrows():
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
-        ax.add_patch(
-            patches.Rectangle(
-                (3.0, y_g3 - 2.0),
-                44.5,
-                step_g3,
-                facecolor=bg_c,
-                edgecolor="none",
-            )
-        )
-        ax.plot(
-            [3.0, 47.5],
-            [y_g3 - 2.0, y_g3 - 2.0],
-            color="#e2e8f0",
-            linewidth=0.4,
-        )
+        ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.2), w_box, step_g3, facecolor=bg_c, edgecolor="none"))
+        ax.plot([1.5, 49.3], [y_g3 - 2.2, y_g3 - 2.2], color="#e2e8f0", linewidth=0.45)
 
-        inv_wrap = "\n".join(textwrap.wrap(str(r["Involved_Mcs"]), width=28))
-        ax.text(
-            3.5,
-            y_g3 + 0.3,
-            str(r["Date"]),
-            color="#0f172a",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            9.5,
-            y_g3 + 0.3,
-            str(r["Mold_Change_Qty"]),
-            color="#0f172a",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            16.0,
-            y_g3 + 0.3,
-            f"{r['Total_Time']:.2f}",
-            color="#0f172a",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            22.5,
-            y_g3 + 0.3,
-            f"{r['Avg_SMED']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            29.0,
-            y_g3 + 0.3,
-            inv_wrap,
-            color="#475569",
-            fontsize=6.2,
-            va="center",
-        )
+        inv_wrap = "\n".join(textwrap.wrap(str(r["Involved_Mcs"]), width=32))
+        ax.text(3.0, y_g3 + 0.3, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(10.5, y_g3 + 0.3, str(r["Mold_Change_Qty"]), color="#0f172a", fontsize=7.4, va="center")
+        ax.text(18.0, y_g3 + 0.3, f"{r['Total_Time']:.2f}", color="#0f172a", fontsize=7.4, va="center")
+        ax.text(26.0, y_g3 + 0.3, f"{r['Avg_SMED']:.2f}", color="#2563eb", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(34.0, y_g3 + 0.3, inv_wrap, color="#475569", fontsize=6.4, va="center")
         y_g3 -= step_g3
 
     # -------------------------------------------------------------
-    # GRID 4: MAINTENANCE BREAKDOWN (Exact Match image_407125.png)
+    # GRID 4: MAINTENANCE BREAKDOWN TABLE
     # -------------------------------------------------------------
-    hdr_box_g4 = patches.Rectangle(
-        (52.0, 40.8), 45.0, 2.4, facecolor="#059669", edgecolor="none"
-    )
-    ax.add_patch(hdr_box_g4)
-    x_g4 = [52.5, 59.0, 66.5, 74.5, 82.0, 89.5, 94.0]
-    ax.text(
-        x_g4[0],
-        42.0,
-        "Date",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[1],
-        42.0,
-        "Machine*",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[2],
-        42.0,
-        "Robot*",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[3],
-        42.0,
-        "Controller*",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[4],
-        42.0,
-        "RMCS*",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[5],
-        42.0,
-        "Oil/Water*",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-    ax.text(
-        x_g4[6],
-        42.0,
-        "Share",
-        color="#ffffff",
-        fontsize=6.8,
-        fontweight="bold",
-        va="center",
-    )
-
-    y_g4 = 38.5
-    step_g4 = 4.8
+    y_g4 = 40.5
+    n_maint = max(1, len(df_maint_grid))
+    step_g4 = min(5.3, 36.0 / n_maint)
     for idx, r in df_maint_grid.iterrows():
-        bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
-        ax.add_patch(
-            patches.Rectangle(
-                (52.0, y_g4 - 2.0),
-                45.0,
-                step_g4,
-                facecolor=bg_c,
-                edgecolor="none",
-            )
-        )
-        ax.plot(
-            [52.0, 97.0],
-            [y_g4 - 2.0, y_g4 - 2.0],
-            color="#e2e8f0",
-            linewidth=0.4,
-        )
+        bg_c = "#fefce8" if idx % 2 == 1 else "#ffffff"
+        ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.2), w_box, step_g4, facecolor=bg_c, edgecolor="none"))
+        ax.plot([50.7, 98.5], [y_g4 - 2.2, y_g4 - 2.2], color="#e2e8f0", linewidth=0.45)
 
-        ax.text(
-            x_g4[0],
-            y_g4 + 0.3,
-            str(r["Date"]),
-            color="#0f172a",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
-        ax.text(
-            x_g4[1],
-            y_g4 + 0.3,
-            f"{r['Machine Problem*']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            x_g4[2],
-            y_g4 + 0.3,
-            f"{r['Robot Problem*']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            x_g4[3],
-            y_g4 + 0.3,
-            f"{r['Controller Problem*']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            x_g4[4],
-            y_g4 + 0.3,
-            f"{r['RMCS Problem*']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            x_g4[5],
-            y_g4 + 0.3,
-            f"{r['Oil or water Leakage*']:.1f}",
-            color="#2563eb",
-            fontsize=6.8,
-            va="center",
-        )
-        ax.text(
-            x_g4[6],
-            y_g4 + 0.3,
-            str(r["Total Share"]),
-            color="#0f172a",
-            fontsize=6.8,
-            fontweight="bold",
-            va="center",
-        )
+        ax.text(x_g4[0], y_g4 + 0.3, str(r["Date"]), color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(x_g4[1], y_g4 + 0.3, f"{r['Machine Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[2], y_g4 + 0.3, f"{r['Robot Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[3], y_g4 + 0.3, f"{r['Controller Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[4], y_g4 + 0.3, f"{r['RMCS Problem*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[5], y_g4 + 0.3, f"{r['Oil or water Leakage*']:.1f}", color="#0284c7", fontsize=7.2, va="center")
+        ax.text(x_g4[6], y_g4 + 0.3, f"{r['Total Hours']:.2f}", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+        ax.text(x_g4[7], y_g4 + 0.3, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
         y_g4 -= step_g4
 
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
     buf = io.BytesIO()
-    plt.savefig(
-        buf,
-        format="jpg",
-        facecolor=fig.get_facecolor(),
-        edgecolor="none",
-        dpi=220,
-    )
+    plt.savefig(buf, format="jpg", facecolor=fig.get_facecolor(), edgecolor="none", dpi=240)
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
@@ -992,94 +560,84 @@ def render_npt_module():
             st.markdown(
                 '<div style="background:#ffffff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #8b5cf6;">'
                 '<h4 style="margin-top:0; color:#0f172a;">📂 1. Primary Downtime Report (Required)</h4>'
-                '<p style="color:#64748b !important; font-size:0.85rem;">Upload the multi-month (or 2-month) ERP Downtime workbook.</p></div>',
+                '<p style="color:#64748b !important; font-size:0.85rem;">Upload the multi-month or 2-month ERP Downtime workbook.</p></div>',
                 unsafe_allow_html=True,
             )
-            up_dt = st.file_uploader(
-                "Select Downtime Workbook (.xlsx)",
-                type=["xlsx", "xls"],
-                key="up_dt_file",
-            )
+            up_dt = st.file_uploader("Select Downtime Workbook (.xlsx)", type=["xlsx", "xls"], key="up_dt_file")
 
         with c_up2:
             st.markdown(
                 '<div style="background:#ffffff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #10b981;">'
                 '<h4 style="margin-top:0; color:#0f172a;">🛠️ 2. Service Maintenance Report (Optional)</h4>'
-                '<p style="color:#64748b !important; font-size:0.85rem;">Upload engineering workshop ticket logs for SMS token audit.</p></div>',
+                '<p style="color:#64748b !important; font-size:0.85rem;">Upload workshop ticket logs for SMS token audit.</p></div>',
                 unsafe_allow_html=True,
             )
-            up_sm = st.file_uploader(
-                "Select Maintenance Ticket Workbook (.xlsx)",
-                type=["xlsx", "xls"],
-                key="up_sm_file",
-            )
+            up_sm = st.file_uploader("Select Maintenance Ticket Workbook (.xlsx)", type=["xlsx", "xls"], key="up_sm_file")
 
         if up_dt is not None:
-            if st.button(
-                "🚀 Ingest Workbooks & Launch Console",
-                type="primary",
-                use_container_width=True,
-            ):
+            if st.button("🚀 Ingest Workbooks & Launch Console", type="primary", use_container_width=True):
                 st.session_state["m3_file_bytes"] = up_dt.getvalue()
-                st.session_state["m3_sm_bytes"] = (
-                    up_sm.getvalue() if up_sm is not None else None
-                )
+                st.session_state["m3_sm_bytes"] = up_sm.getvalue() if up_sm is not None else None
                 st.rerun()
 
     else:
         df_downtime = m3_parse_downtime_workbook(st.session_state["m3_file_bytes"])
-        df_service = m3_parse_service_maintenance(
-            st.session_state.get("m3_sm_bytes")
-        )
+        df_service = m3_parse_service_maintenance(st.session_state.get("m3_sm_bytes"))
 
         all_months = sorted(df_downtime["YearMonth"].unique())
         active_month = all_months[-1]
         active_m_df = df_downtime[df_downtime["YearMonth"] == active_month]
 
-        # Explicit Cutoff Selection (Requirement 1)
+        # Explicit Cutoff Selection
         avail_cutoff_dates = sorted(active_m_df["DateStr"].unique().tolist())
 
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_causes, c_snap = st.columns([1.3, 2.2, 1.3], gap="small")
+        c_date, c_causes, c_snap = st.columns([1.3, 1.8, 1.3], gap="small")
 
         with c_date:
-            sel_cutoff_str = st.selectbox(
-                "📅 **Select Last Operational Day (Cutoff)**",
-                avail_cutoff_dates,
-                index=len(avail_cutoff_dates) - 1,
-            )
+            sel_cutoff_str = st.selectbox("📅 **Select Last Operational Day (Cutoff)**", avail_cutoff_dates, index=len(avail_cutoff_dates) - 1)
 
         sel_date_obj = pd.to_datetime(sel_cutoff_str)
         cutoff_day = sel_date_obj.day
         day_formatted = sel_date_obj.strftime("%d-%b")
         curr_month_name = active_m_df["MonthName"].iloc[0]
 
-        # Customizable Top 10 Causes (Requirement 5)
-        all_present_causes = sorted(
-            [
-                c
-                for c in df_downtime["Cause"].dropna().unique()
-                if "Server Error" not in str(c)
-            ]
-        )
-        default_selected = [
-            c for c in DEFAULT_TOP_10_CAUSES if c in all_present_causes
-        ]
+        # All present causes
+        all_present_causes = sorted([c for c in df_downtime["Cause"].dropna().unique() if "Server Error" not in str(c)])
+        
+        # Initialize top 10 causes in session state
+        if "top_10_causes_selected" not in st.session_state:
+            st.session_state["top_10_causes_selected"] = [c for c in DEFAULT_TOP_10_CAUSES if c in all_present_causes]
 
+        # Popover Dropdown Selection with Max 10 Cap
         with c_causes:
-            selected_top_causes = st.multiselect(
-                "🎯 **Top 10 NPT Reasons (Editable)**",
-                all_present_causes,
-                default=default_selected,
-            )
-            if not selected_top_causes:
-                selected_top_causes = default_selected
+            st.markdown("<div style='margin-top:0.25rem;'></div>", unsafe_allow_html=True)
+            with st.popover(f"🎯 Select Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
+                st.markdown("##### 📌 Choose up to 10 Causes to Compare")
+                st.caption("Checked causes will be included in the impact analysis and Grid 1 chart:")
+                
+                updated_selection = []
+                for c_item in all_present_causes:
+                    is_currently_checked = c_item in st.session_state["top_10_causes_selected"]
+                    chk = st.checkbox(c_item, value=is_currently_checked, key=f"chk_cause_{c_item}")
+                    if chk:
+                        updated_selection.append(c_item)
+
+                if len(updated_selection) > 10:
+                    st.warning("⚠️ Maximum 10 causes allowed! Keeping first 10 selected.")
+                    updated_selection = updated_selection[:10]
+
+                if st.button("Apply Selected Causes", type="primary", use_container_width=True):
+                    st.session_state["top_10_causes_selected"] = updated_selection
+                    st.rerun()
+
+        selected_top_causes = st.session_state["top_10_causes_selected"]
 
         # Scoped DataFrames
         df_last_day = active_m_df[active_m_df["DateStr"] == sel_cutoff_str].copy()
         df_mtd = active_m_df[active_m_df["DayNum"] <= cutoff_day].copy()
 
-        # Previous Month identification
+        # Identify previous month (supports 2 months or 3+ months dynamically)
         if len(all_months) >= 2:
             prev_month = all_months[-2]
             prev_m_df = df_downtime[df_downtime["YearMonth"] == prev_month]
@@ -1091,28 +649,22 @@ def render_npt_module():
             prev_month_name = "Prior"
             prev_m_mtd = df_mtd
 
-        # Share Dictionaries for Grid 1 Chart
         tot_mtd_hrs = df_mtd["Hours"].sum()
         tot_prev_hrs = prev_m_mtd["Hours"].sum()
+
         curr_share_dict = (
             (df_mtd.groupby("Cause")["Hours"].sum() / tot_mtd_hrs * 100).to_dict()
             if tot_mtd_hrs > 0
             else {}
         )
         prev_share_dict = (
-            (
-                prev_m_mtd.groupby("Cause")["Hours"].sum()
-                / tot_prev_hrs
-                * 100
-            ).to_dict()
+            (prev_m_mtd.groupby("Cause")["Hours"].sum() / tot_prev_hrs * 100).to_dict()
             if tot_prev_hrs > 0
             else {}
         )
 
-        # Grid 2, 3, 4 Data Computations
-        df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(
-            df_mtd, cutoff_day
-        )
+        # Computations
+        df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
         df_smed_grid = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid = m3_compute_maint_daily_table(df_mtd, max_days=7)
 
@@ -1133,10 +685,7 @@ def render_npt_module():
         )
 
         with c_snap:
-            st.markdown(
-                "<div style='margin-top: 1.65rem;'></div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
             st.download_button(
                 label="📸 Download 2×2 JPG Report",
                 data=jpg_bytes,
@@ -1146,72 +695,37 @@ def render_npt_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 4 Core KPI Cards
+        # 4 Web Metric Cards
         k1, k2, k3, k4 = st.columns(4)
-        k1.markdown(
-            f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_mtd_hrs/cutoff_day:.1f} H/Day</div></div>',
-            unsafe_allow_html=True,
-        )
-        k2.markdown(
-            f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div><div class="kpi-val">{size_summary_pct:.2f}%</div><div class="kpi-sub">Of {TOTAL_PLANT_MCS*24*cutoff_day:,.0f} H Total Available</div></div>',
-            unsafe_allow_html=True,
-        )
+        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_mtd_hrs/cutoff_day:.1f} H/Day</div></div>', unsafe_allow_html=True)
+        k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div><div class="kpi-val">{size_summary_pct:.2f}%</div><div class="kpi-sub">Of {TOTAL_PLANT_MCS*24*cutoff_day:,.0f} H Available</div></div>', unsafe_allow_html=True)
         last_day_hrs = df_last_day["Hours"].sum()
-        k3.markdown(
-            f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_hrs:.1f} H</div><div class="kpi-sub">{(last_day_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Capacity</div></div>',
-            unsafe_allow_html=True,
-        )
-        maint_last_hrs = df_last_day[df_last_day["Is_Maintenance"]][
-            "Hours"
-        ].sum()
-        k4.markdown(
-            f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div><div class="kpi-val">{maint_last_hrs:.1f} H</div><div class="kpi-sub">{(maint_last_hrs/last_day_hrs*100 if last_day_hrs>0 else 0):.1f}% NPT Share</div></div>',
-            unsafe_allow_html=True,
-        )
+        k3.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_hrs:.1f} H</div><div class="kpi-sub">{(last_day_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Capacity</div></div>', unsafe_allow_html=True)
+        maint_last_hrs = df_last_day[df_last_day["Is_Maintenance"]]["Hours"].sum()
+        k4.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div><div class="kpi-val">{maint_last_hrs:.1f} H</div><div class="kpi-sub">{(maint_last_hrs/last_day_hrs*100 if last_day_hrs>0 else 0):.1f}% NPT Share</div></div>', unsafe_allow_html=True)
 
-        st.markdown(
-            "<div style='margin-bottom: 1.25rem;'></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
-        # Consolidated Machine Table & WhatsApp Brief (Requirements 3 & 4)
+        # Consolidated Machine Table & WhatsApp Brief
         col_left, col_right = st.columns([1.5, 1.1], gap="large")
 
         with col_left:
-            st.markdown(
-                f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {sel_date_obj.strftime('%B %d')}"
-            )
-            st.caption(
-                "Consolidated: Single combined entry per machine for the day."
-            )
+            st.markdown(f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {sel_date_obj.strftime('%B %d')}")
+            st.caption("Consolidated: Single combined entry per machine for the day.")
             df_cons_log = m3_compute_consolidated_daily_log(df_last_day)
             if not df_cons_log.empty:
-                st.dataframe(
-                    df_cons_log,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=400,
-                )
+                st.dataframe(df_cons_log, use_container_width=True, hide_index=True, height=400)
             else:
                 st.success("✅ Zero downtime logged for this date!")
 
         with col_right:
-            # Build 3-Part WhatsApp Brief exactly to spec
-            top_mtd_causes = (
-                df_mtd.groupby("Cause")["Hours"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(4)
-            )
+            top_mtd_causes = df_mtd.groupby("Cause")["Hours"].sum().sort_values(ascending=False).head(4)
             top_causes_lines = []
             for c_n, c_h in top_mtd_causes.items():
                 c_clean = c_n.replace("*", "").strip()
                 c_pct = (c_h / tot_mtd_hrs * 100) if tot_mtd_hrs > 0 else 0.0
-                top_causes_lines.append(
-                    f"{c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)"
-                )
+                top_causes_lines.append(f"{c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
 
-            # Maintenance values on last day
             maint_items = [
                 "Machine Problem*",
                 "Robot Problem*",
@@ -1227,51 +741,32 @@ def render_npt_module():
                 tot_tech_day += mi_h
                 maint_lines.append(f"{mi_clean}: {mi_h:.2f} Hrs")
 
-            # SMED on last day
             smed_last_df = df_last_day[df_last_day["Is_SMED"]]
             smed_setups = len(smed_last_df)
             smed_hrs = smed_last_df["Hours"].sum()
-            smed_avg_min = (
-                (smed_hrs / smed_setups * 60.0) if smed_setups > 0 else 0.0
-            )
-            smed_mcs_str = (
-                ", ".join(
-                    sorted(
-                        set(
-                            str(v)
-                            for v in smed_last_df["Position"].unique()
-                            if v != "-"
-                        )
-                    )
-                )
-                if smed_setups > 0
-                else "None"
-            )
+            smed_avg_min = (smed_hrs / smed_setups * 60.0) if smed_setups > 0 else 0.0
+            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if v != "-"))) if smed_setups > 0 else "None"
 
-            # MTD SMED
             smed_mtd_df = df_mtd[df_mtd["Is_SMED"]]
             mtd_smed_setups = len(smed_mtd_df)
             mtd_smed_hrs = smed_mtd_df["Hours"].sum()
-            mtd_smed_avg = (
-                (mtd_smed_hrs / mtd_smed_setups * 60.0)
-                if mtd_smed_setups > 0
-                else 0.0
-            )
+            mtd_smed_avg = (mtd_smed_hrs / mtd_smed_setups * 60.0) if mtd_smed_setups > 0 else 0.0
 
-            # Prior months comparison string
+            # Dynamic prior month comparison string
             comp_str_list = []
-            for p_m in all_months[:-1]:
+            for p_m in reversed(all_months[:-1]):
                 p_df = df_downtime[df_downtime["YearMonth"] == p_m]
                 p_name = p_df["MonthName"].iloc[0]
                 p_hrs = p_df["Hours"].sum()
                 comp_str_list.append(f"{p_hrs:,.2f} Hrs in {p_name}")
-            comp_str = " and ".join(comp_str_list) if comp_str_list else "-"
+            comp_str = " vs. ".join(comp_str_list) if comp_str_list else "-"
 
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
 Dear Sir,
 
 *1. Overall Monthly NPT Analysis (MTD Comparison)*
+
 Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
 
 *Top Contributing Causes ({curr_month_name}):*
@@ -1279,7 +774,7 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
 
 *2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})*
 {chr(10).join(maint_lines)}
-*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_hrs*100 if last_day_hrs>0 else 0):.1f}% day NPT share)
+*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_hrs*100 if last_day_hrs>0 else 0):.0f}% overall plant NPT share)
 
 *3. Mold Change & SMED Performance (Last Day: {day_formatted})*
 • Mold Changes Completed: *{smed_setups} setups*
@@ -1296,23 +791,18 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
                     <h5>1. Overall Monthly NPT Analysis</h5>
                     <p>Current Month Total NPT: <b>{tot_mtd_hrs:,.2f} Hours</b> (vs. {comp_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
-                    <h5>2. Machine Maintenance & Technical NPT</h5>
-                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
-                    <h5>3. Mold Change & SMED Performance</h5>
-                    <p>• Changes: <b>{smed_setups} setups</b> ({smed_hrs:.2f} Hrs | Avg: <b>{smed_avg_min:.2f} Min</b>)<br>
-                    • Machines: {smed_mcs_str}<br>
-                    • MTD: <b>{mtd_smed_setups} setups</b> ({mtd_smed_hrs:.2f} Hrs | Avg: <b>{mtd_smed_avg:.2f} Min</b>)</p>
+                    <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
+                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
+                    <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
+                    <p>• Mold Changes Completed: <b>{smed_setups} setups</b> ({smed_hrs:.2f} Hours | Avg: <b>{smed_avg_min:.2f} Min/change</b>)<br>
+                    • Involved Machines: {smed_mcs_str}<br>
+                    • Month-to-Date SMED: <b>{mtd_smed_setups} setups</b> completed totaling <b>{mtd_smed_hrs:.2f} Hours</b> (MTD Avg: <b>{mtd_smed_avg:.2f} Min</b>)</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
 
             with st.expander("📋 Copy Plain Text Brief"):
-                st.text_area(
-                    "Brief Text",
-                    value=whatsapp_msg,
-                    height=200,
-                    label_visibility="collapsed",
-                )
+                st.text_area("Brief Text", value=whatsapp_msg, height=200, label_visibility="collapsed")
 
         st.divider()
 
@@ -1324,21 +814,13 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* (vs. {comp_str}).
         ])
 
         with tab_grid2:
-            st.markdown(
-                f"#### 📏 MC SIZE-WISE NPT BREAKDOWN (Day 1–{cutoff_day})"
-            )
+            st.markdown(f"#### 📏 MC SIZE-WISE NPT BREAKDOWN (Day 1–{cutoff_day})")
             st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
 
         with tab_smed:
-            st.markdown(
-                f"#### ⏱️ SMED CHANGEOVER PERFORMANCE (Day 1–{cutoff_day})"
-            )
+            st.markdown(f"#### ⏱️ SMED CHANGEOVER PERFORMANCE (Day 1–{cutoff_day})")
             st.dataframe(df_smed_grid, use_container_width=True, hide_index=True)
 
         with tab_maint:
-            st.markdown(
-                f"#### 🛠️ TECHNICAL & BREAKDOWN TREND (Day 1–{cutoff_day})"
-            )
-            st.dataframe(
-                df_maint_grid, use_container_width=True, hide_index=True
-            )
+            st.markdown(f"#### 🛠️ TECHNICAL & BREAKDOWN TREND (Day 1–{cutoff_day})")
+            st.dataframe(df_maint_grid, use_container_width=True, hide_index=True)
