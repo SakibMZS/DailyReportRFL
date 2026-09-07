@@ -238,8 +238,8 @@ def m3_compute_smed_table(df_scope, max_days=7):
     daily["Total_Time"] = daily["Total_Time"].round(2)
 
     # Full 1-n MTD Summary Stats
-    tot_mtd_setups = daily["Mold_Change_Qty"].sum()
-    tot_mtd_time = daily["Total_Time"].sum()
+    tot_mtd_setups = int(daily["Mold_Change_Qty"].sum())
+    tot_mtd_time = float(daily["Total_Time"].sum())
     mtd_avg_smed = (tot_mtd_time / tot_mtd_setups * 60.0) if tot_mtd_setups > 0 else 0.0
 
     # Window rule: If > 7 days, show last 7 days
@@ -282,8 +282,8 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
 
     df_display = pd.DataFrame(records)
 
-    # Full 1-n MTD Summary Stats for Grid 4
-    mtd_summary_row = {"Date": f"Total (1-{cutoff_day}) >>"}
+    # Full 1-n MTD Summary Stats for Grid 4 (Using cutoff_days parameter directly)
+    mtd_summary_row = {"Date": f"Total (1-{cutoff_days}) >>"}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
         c_tot = df_scope[df_scope["Cause"] == mc_cause]["Hours"].sum()
@@ -704,7 +704,7 @@ def render_npt_module():
             else {}
         )
 
-        # Computations (Auto-windowed to 7 days if n > 7)
+        # Computations (Auto-windowed to 7 days if n > 7, with full 1-n MTD Summary Stats)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, max_days=7)
@@ -769,7 +769,7 @@ def render_npt_module():
             for c_n, c_h in top_mtd_causes.items():
                 c_clean = c_n.replace("*", "").strip()
                 c_pct = (c_h / tot_mtd_hrs * 100) if tot_mtd_hrs > 0 else 0.0
-                top_causes_lines.append(f"{c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
+                top_causes_lines.append(f"• {c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
 
             maint_items = [
                 "Machine Problem*",
@@ -784,24 +784,24 @@ def render_npt_module():
                 mi_clean = mi.replace("*", "").strip()
                 mi_h = df_last_day[df_last_day["Cause"] == mi]["Hours"].sum()
                 tot_tech_day += mi_h
-                maint_lines.append(f"{mi_clean}: {mi_h:.2f} Hrs")
+                maint_lines.append(f"• {mi_clean}: {mi_h:.2f} Hrs")
 
             smed_last_df = df_last_day[df_last_day["Is_SMED"]]
-            smed_setups = len(smed_last_df)
-            smed_hrs = smed_last_df["Hours"].sum()
-            smed_avg_min = (smed_hrs / smed_setups * 60.0) if smed_setups > 0 else 0.0
-            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if str(v) != "-"))) if smed_setups > 0 else "None"
+            smed_setups_last = len(smed_last_df)
+            smed_hrs_last = smed_last_df["Hours"].sum()
+            smed_avg_min_last = (smed_hrs_last / smed_setups_last * 60.0) if smed_setups_last > 0 else 0.0
+            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if str(v) != "-"))) if smed_setups_last > 0 else "None"
 
-            # Dynamic like-for-like comparison string (Sep 01–N vs Aug 01–N)
+            # Strict 1-N Like-for-Like Comparison string
             comp_like_for_like_str = f"vs. {tot_prev_hrs:,.2f} Hrs in {prev_month_name} 01–{cutoff_day:02d}"
 
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
 Dear Sir,
 
-*1. Overall Monthly NPT Analysis (MTD Comparison)*
+*1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})*
 
-Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
+Current Month Total NPT ({curr_month_name[:3]} 01–{cutoff_day:02d}): *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
 
 *Top Contributing Causes ({curr_month_name}):*
 {chr(10).join(top_causes_lines)}
@@ -811,9 +811,9 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
 *Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_hrs*100 if last_day_hrs>0 else 0):.0f}% overall plant NPT share)
 
 *3. Mold Change & SMED Performance (Last Day: {day_formatted})*
-• Mold Changes Completed: *{smed_setups} setups*
-• Total Setup Time: *{smed_hrs:.2f} Hours*
-• Average SMED: *{smed_avg_min:.2f} Min/change*
+• Mold Changes Completed: *{smed_setups_last} setups*
+• Total Setup Time: *{smed_hrs_last:.2f} Hours*
+• Average SMED: *{smed_avg_min_last:.2f} Min/change*
 • Involved Machines: {smed_mcs_str}
 • Month-to-Date SMED: *{smed_tot_qty} setups* completed totaling *{smed_tot_time:.2f} Hours* (MTD Avg: *{smed_avg_min:.2f} Min*)"""
 
@@ -822,13 +822,13 @@ Current Month Total NPT: *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
                 f"""<div class="narrative-block">
                     <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
-                    <h5>1. Overall Monthly NPT Analysis</h5>
-                    <p>Current Month Total NPT: <b>{tot_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
+                    <h5>1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})</h5>
+                    <p>Current Month Total NPT ({curr_month_name[:3]} 01–{cutoff_day:02d}): <b>{tot_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
                     <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
                     <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
-                    <p>• Mold Changes Completed: <b>{smed_setups} setups</b> ({smed_hrs:.2f} Hours | Avg: <b>{smed_avg_min:.2f} Min/change</b>)<br>
+                    <p>• Mold Changes Completed: <b>{smed_setups_last} setups</b> ({smed_hrs_last:.2f} Hours | Avg: <b>{smed_avg_min_last:.2f} Min/change</b>)<br>
                     • Involved Machines: {smed_mcs_str}<br>
                     • Month-to-Date SMED: <b>{smed_tot_qty} setups</b> completed totaling <b>{smed_tot_time:.2f} Hours</b> (MTD Avg: <b>{smed_avg_min:.2f} Min</b>)</p>
                 </div>""",
