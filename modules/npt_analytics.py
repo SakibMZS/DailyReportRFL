@@ -93,13 +93,13 @@ def m3_parse_downtime_workbook(file_bytes):
     if to_col:
         df_clean = df_clean[df_clean[to_col].notna()].copy()
 
-    # Base operational date on Cause Added Date
+    # Base operational date on Cause Added Date — NORMALIZE STRIPS TIME COMPONENT
     date_col = get_col(
         df_clean,
         ["Cause Added Date", "CauseAddedDate", "Date", "Added Date"],
         df_clean.columns[-1],
     )
-    df_clean["DateClean"] = pd.to_datetime(df_clean[date_col], errors="coerce")
+    df_clean["DateClean"] = pd.to_datetime(df_clean[date_col], errors="coerce").dt.normalize()
     df_clean = df_clean.dropna(subset=["DateClean"]).sort_values("DateClean")
     df_clean["DateStr"] = df_clean["DateClean"].dt.strftime("%Y-%m-%d")
     df_clean["MonthName"] = df_clean["DateClean"].dt.strftime("%B")
@@ -174,7 +174,7 @@ def m3_parse_service_maintenance(file_bytes):
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
 
     from_col = get_col(df_clean, ["From", "Start Date", "Created Date"], "From")
-    df_clean["DateClean"] = pd.to_datetime(df_clean[from_col], errors="coerce")
+    df_clean["DateClean"] = pd.to_datetime(df_clean[from_col], errors="coerce").dt.normalize()
     df_clean["MonthName"] = df_clean["DateClean"].dt.strftime("%B")
     df_clean["DayNum"] = df_clean["DateClean"].dt.day
     df_clean["YearMonth"] = df_clean["DateClean"].dt.to_period("M")
@@ -189,7 +189,7 @@ def m3_parse_service_maintenance(file_bytes):
 
 
 # =========================================================
-# 2. COMPUTATION HELPERS
+# 2. COMPUTATION HELPERS (STRICT 1 ROW PER DATE)
 # =========================================================
 def m3_compute_size_wise_npt(df_scope, cutoff_days):
     records = []
@@ -227,17 +227,17 @@ def m3_compute_smed_table(df_scope, max_days=7):
             Total_Time=("Hours", "sum"),
             Involved_Mcs=(
                 "Position",
-                lambda x: ", ".join(sorted(set(str(v) for v in x if v != "-"))),
+                lambda x: ", ".join(sorted(set(str(v) for v in x if str(v) != "-"))),
             ),
         )
         .reset_index()
+        .sort_values("DateClean")
     )
     daily["Avg_SMED"] = (daily["Total_Time"] / daily["Mold_Change_Qty"] * 60.0).round(2)
     daily["Date"] = daily["DateClean"].dt.strftime("%-d-%b")
     daily["Total_Time"] = daily["Total_Time"].round(2)
 
-    # Sort chronological
-    daily = daily.sort_values("DateClean").reset_index(drop=True)
+    # Window rule: If > 7 days, show last 7 days; otherwise show all
     if len(daily) > max_days:
         daily = daily.tail(max_days).reset_index(drop=True)
 
@@ -253,13 +253,13 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
         "Oil or water Leakage*",
     ]
     dates = sorted(df_scope["DateClean"].dropna().unique())
+    # Window rule: If > 7 days, show last 7 days; otherwise show all
     if len(dates) > max_days:
         dates = dates[-max_days:]
 
     records = []
     for dt in dates:
         dt_df = df_scope[df_scope["DateClean"] == dt]
-        day_total_npt = dt_df["Hours"].sum()
         row = {"Date": dt.strftime("%-d-%b")}
 
         maint_sum = 0.0
@@ -269,7 +269,6 @@ def m3_compute_maint_daily_table(df_scope, max_days=7):
             maint_sum += c_hrs
 
         row["Total Hours"] = round(maint_sum, 2)
-        # Total Share of Plant Capacity Available (1,464 hrs)
         share_pct = (maint_sum / DAILY_AVAILABLE_HRS * 100.0) if DAILY_AVAILABLE_HRS > 0 else 0.0
         row["Total Share"] = f"{round(share_pct):.0f}%"
         records.append(row)
@@ -340,7 +339,7 @@ def m3_generate_2x2_executive_jpg(
     end_date_str = f"{curr_month_name[:4]} {cutoff_day:02d}, {sel_date_obj.year}"
     span_title = f"{start_date_str.upper()} TO {end_date_str.upper()} NPT ANALYSIS"
 
-    # Blue Header Banner
+    # Blue Header Banner with Date Span
     banner = patches.FancyBboxPatch(
         (1.5, 92.5),
         97.0,
@@ -364,7 +363,7 @@ def m3_generate_2x2_executive_jpg(
         94.2,
         f"{span_title}  |  Plastic-3 Production Floor (61 IMMs Standard Baseline)",
         color="#38bdf8",
-        fontsize=9.2,
+        fontsize=9.5,
         fontweight="bold",
         va="center",
     )
@@ -391,7 +390,7 @@ def m3_generate_2x2_executive_jpg(
     # Grid 1 Banner
     hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#f1f5f9", edgecolor="none")
     ax.add_patch(hdr_g1)
-    ax.text(3.0, 89.4, "Cause", color="#0f172a", fontsize=10.0, fontweight="bold", va="center")
+    ax.text(3.0, 89.4, "Cause", color="#dc2626", fontsize=10.5, fontweight="bold", va="center")
     ax.text(23.0, 89.4, "Present vs Last Month Impact Share (%)", color="#0f172a", fontsize=9.5, fontweight="bold", va="center")
 
     # Grid 2 Banner
@@ -433,18 +432,18 @@ def m3_generate_2x2_executive_jpg(
     max_share = max(all_shares + [30.0])
 
     for c in top_10_causes[:10]:
-        c_clean = c.replace("*", "")[:24]
         val_curr = curr_share_dict.get(c, 0.0)
         val_prev = prev_share_dict.get(c, 0.0)
 
-        ax.text(3.0, y_g1 - 0.2, c, color="#e11d48", fontsize=7.6, fontweight="bold", va="center")
+        # Bold Red Cause Label
+        ax.text(3.0, y_g1 - 0.2, c, color="#dc2626", fontsize=7.8, fontweight="bold", va="center")
 
         # Solid Red Bar for Present Month
         w_curr = (val_curr / max_share) * 19.5
         ax.add_patch(patches.Rectangle((22.5, y_g1 - 0.75), w_curr, 1.25, facecolor="#ef4444", edgecolor="#b91c1c", linewidth=0.5))
         ax.text(23.0 + w_curr, y_g1 - 0.15, f"{val_curr:.1f}%", color="#b91c1c", fontsize=7.2, fontweight="bold", va="center")
 
-        # Muted Gray Bar for Last Month
+        # Steel Gray Bar for Last Month
         w_prev = (val_prev / max_share) * 19.5
         ax.add_patch(patches.Rectangle((22.5, y_g1 - 2.15), w_prev, 1.1, facecolor="#cbd5e1", edgecolor="#94a3b8", linewidth=0.5))
         ax.text(23.0 + w_prev, y_g1 - 1.6, f"{val_prev:.1f}%", color="#64748b", fontsize=7.0, va="center")
@@ -484,7 +483,7 @@ def m3_generate_2x2_executive_jpg(
     ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 3: SMED TABLE
+    # GRID 3: SMED TABLE (STRICT ONE ROW PER DATE)
     # -------------------------------------------------------------
     y_g3 = 40.5
     n_smed = max(1, len(df_smed_grid))
@@ -503,7 +502,7 @@ def m3_generate_2x2_executive_jpg(
         y_g3 -= step_g3
 
     # -------------------------------------------------------------
-    # GRID 4: MAINTENANCE BREAKDOWN TABLE
+    # GRID 4: MAINTENANCE BREAKDOWN (STRICT ONE ROW PER DATE)
     # -------------------------------------------------------------
     y_g4 = 40.5
     n_maint = max(1, len(df_maint_grid))
@@ -588,7 +587,6 @@ def render_npt_module():
         active_month = all_months[-1]
         active_m_df = df_downtime[df_downtime["YearMonth"] == active_month]
 
-        # Explicit Cutoff Selection
         avail_cutoff_dates = sorted(active_m_df["DateStr"].unique().tolist())
 
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
@@ -663,7 +661,7 @@ def render_npt_module():
             else {}
         )
 
-        # Computations
+        # Computations (Auto-windowed to 7 days if n > 7)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
         df_smed_grid = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid = m3_compute_maint_daily_table(df_mtd, max_days=7)
@@ -752,7 +750,7 @@ def render_npt_module():
             mtd_smed_hrs = smed_mtd_df["Hours"].sum()
             mtd_smed_avg = (mtd_smed_hrs / mtd_smed_setups * 60.0) if mtd_smed_setups > 0 else 0.0
 
-            # Dynamic prior month comparison string
+            # Prior month comparison string
             comp_str_list = []
             for p_m in reversed(all_months[:-1]):
                 p_df = df_downtime[df_downtime["YearMonth"] == p_m]
