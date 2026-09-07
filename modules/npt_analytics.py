@@ -32,16 +32,16 @@ SIZE_NOS_MAP = {
 }
 
 DEFAULT_TOP_10_CAUSES = [
+    "No Demand",
     "Manpower Short*",
-    "No Demand*",
     "Mold Problem*",
     "Machine Problem*",
+    "Power Breakdown (Unscheduled)*",
     "Robot Problem*",
     "Sample + Mold Test (RND)*",
-    "Power Breakdown (Unscheduled)*",
     "Product Jam*",
     "Mold Change*",
-    "Color variation*",
+    "RMCS Problem*",
 ]
 
 
@@ -237,12 +237,10 @@ def m3_compute_smed_table(df_scope, max_days=7):
     daily["Date"] = daily["DateClean"].dt.strftime("%-d-%b")
     daily["Total_Time"] = daily["Total_Time"].round(2)
 
-    # Full 1-n MTD Summary Stats
     tot_mtd_setups = int(daily["Mold_Change_Qty"].sum())
     tot_mtd_time = float(daily["Total_Time"].sum())
     mtd_avg_smed = (tot_mtd_time / tot_mtd_setups * 60.0) if tot_mtd_setups > 0 else 0.0
 
-    # Window rule: If > 7 days, show last 7 days
     if len(daily) > max_days:
         daily_display = daily.tail(max_days).reset_index(drop=True)
     else:
@@ -260,8 +258,6 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
         "Oil or water Leakage*",
     ]
     all_dates = sorted(df_scope["DateClean"].dropna().unique())
-    
-    # Window rule: If > 7 days, show last 7 days
     dates_display = all_dates[-max_days:] if len(all_dates) > max_days else all_dates
 
     records = []
@@ -282,7 +278,6 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
 
     df_display = pd.DataFrame(records)
 
-    # Full 1-n MTD Summary Stats for Grid 4 (Using cutoff_days parameter directly)
     mtd_summary_row = {"Date": f"Total (1-{cutoff_days}) >>"}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
@@ -342,6 +337,9 @@ def m3_generate_2x2_executive_jpg(
     top_10_causes,
     curr_share_dict,
     prev_share_dict,
+    curr_hours_dict,
+    tot_curr_mtd_hrs,
+    tot_prev_mtd_hrs,
     curr_month_name,
     prev_month_name,
     df_size_grid,
@@ -361,11 +359,13 @@ def m3_generate_2x2_executive_jpg(
     ax.set_ylim(0, 100)
     ax.axis("off")
 
-    start_date_str = f"{curr_month_name[:4]} 01"
-    end_date_str = f"{curr_month_name[:4]} {cutoff_day:02d}, {sel_date_obj.year}"
+    curr_abbr = curr_month_name[:3].capitalize()
+    prev_abbr = prev_month_name[:3].capitalize()
+    start_date_str = f"{curr_abbr} 01"
+    end_date_str = f"{curr_abbr} {cutoff_day:02d}, {sel_date_obj.year}"
     span_title = f"{start_date_str.upper()} TO {end_date_str.upper()} NPT ANALYSIS"
 
-    # Blue Header Banner with Date Span
+    # Blue Header Banner
     banner = patches.FancyBboxPatch(
         (1.5, 92.5),
         97.0,
@@ -413,79 +413,135 @@ def m3_generate_2x2_executive_jpg(
     for p in [p1, p2, p3, p4]:
         ax.add_patch(p)
 
-    # Grid 1 Banner
-    hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#f1f5f9", edgecolor="none")
+    # Grid 1 Header Banner
+    hdr_g1 = patches.Rectangle((1.5, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g1)
-    ax.text(3.0, 89.4, "Cause", color="#dc2626", fontsize=10.5, fontweight="bold", va="center")
-    ax.text(23.0, 89.4, "Present vs Last Month Impact Share (%)", color="#0f172a", fontsize=9.5, fontweight="bold", va="center")
+    ax.text(3.0, 89.4, f"GRID 1: TOP 10 NPT SHARE IMPACT ({curr_abbr} 01–{cutoff_day:02d} vs {prev_abbr} 01–{cutoff_day:02d})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
+    
+    # Legend
+    ax.add_patch(patches.Rectangle((33.0, 88.8), 1.8, 1.1, facecolor="#ef4444", edgecolor="none"))
+    ax.text(35.2, 89.4, f"{curr_abbr}", color="#ffffff", fontsize=7.6, va="center")
+    ax.add_patch(patches.Rectangle((40.5, 88.8), 1.8, 1.1, facecolor="#94a3b8", edgecolor="none"))
+    ax.text(42.7, 89.4, f"{prev_abbr}", color="#ffffff", fontsize=7.6, va="center")
 
-    # Grid 2 Banner
+    # Grid 1 Column Headers
+    ax.add_patch(patches.Rectangle((1.5, 85.0), w_box, 2.6, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
+    ax.text(3.0, 86.3, "Cause Description", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+    ax.text(17.5, 86.3, f"{curr_abbr} (Hrs)", color="#0f172a", fontsize=7.4, fontweight="bold", ha="right", va="center")
+    ax.text(19.5, 86.3, f"Share % ({curr_abbr} vs {prev_abbr})", color="#0f172a", fontsize=7.4, fontweight="bold", va="center")
+    ax.text(46.0, 86.3, "Variance", color="#0f172a", fontsize=7.4, fontweight="bold", ha="center", va="center")
+
+    # Grid 2 Header Banner
     hdr_g2 = patches.Rectangle((50.7, 87.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g2)
-    ax.text(53.0, 89.4, "Mc Size", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
-    ax.text(64.5, 89.4, "Nos", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
-    ax.text(76.5, 89.4, "NPT hrs", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
-    ax.text(89.5, 89.4, "NPT %", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+    ax.text(53.0, 89.4, f"GRID 2: MC SIZE-WISE NPT CAPACITY LOSS ({curr_abbr} 01–{cutoff_day:02d}, {sel_date_obj.year})", color="#ffffff", fontsize=8.8, fontweight="bold", va="center")
 
-    # Grid 3 Banner
+    ax.add_patch(patches.Rectangle((50.7, 85.0), w_box, 2.6, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
+    ax.text(53.5, 86.3, "Mc Size", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(65.0, 86.3, "Nos", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(77.0, 86.3, "NPT hrs", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(90.0, 86.3, "NPT %", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
+
+    # Grid 3 Header Banner
     hdr_g3 = patches.Rectangle((1.5, 42.8), w_box, 3.2, facecolor="#091e3a", edgecolor="none")
     ax.add_patch(hdr_g3)
-    ax.text(2.8, 44.4, "Date", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
-    ax.text(8.8, 44.4, "Mold Qty", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
-    ax.text(16.5, 44.4, "Total (Hr)", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
-    ax.text(24.5, 44.4, "Avg SMED", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
-    ax.text(34.0, 44.4, "Involved Mcs", color="#ffffff", fontsize=8.5, fontweight="bold", va="center")
+    ax.text(3.0, 44.4, "GRID 3: SMED", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
 
-    # Grid 4 Banner
+    ax.add_patch(patches.Rectangle((1.5, 40.2), w_box, 2.4, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
+    ax.text(2.8, 41.4, "Date", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(8.8, 41.4, "Mold Qty", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(16.5, 41.4, "Total (Hr)", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(24.5, 41.4, "Avg SMED", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+    ax.text(34.0, 41.4, "Involved Mcs", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
+
+    # Grid 4 Header Banner
     hdr_g4 = patches.Rectangle((50.7, 42.8), w_box, 3.2, facecolor="#00a859", edgecolor="none")
     ax.add_patch(hdr_g4)
+    ax.text(53.0, 44.4, "GRID 4: MC MAINTENANCE RELATED ISSUE", color="#ffffff", fontsize=9.0, fontweight="bold", va="center")
+
     x_g4 = [52.2, 58.0, 64.5, 71.8, 78.8, 85.5, 91.5, 95.8]
-    ax.text(x_g4[0], 44.4, "Date", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[1], 44.4, "Machine*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[2], 44.4, "Robot*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[3], 44.4, "Controller*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[4], 44.4, "RMCS*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[5], 44.4, "Oil/Water*", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[6], 44.4, "Total Hrs", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(x_g4[7], 44.4, "Share", color="#ffffff", fontsize=8.0, fontweight="bold", va="center")
+    ax.add_patch(patches.Rectangle((50.7, 40.2), w_box, 2.4, facecolor="#f1f5f9", edgecolor="#e2e8f0", linewidth=0.5))
+    ax.text(x_g4[0], 41.4, "Date", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[1], 41.4, "Machine*", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[2], 41.4, "Robot*", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[3], 41.4, "Controller*", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[4], 41.4, "RMCS*", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[5], 41.4, "Oil/Water*", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[6], 41.4, "Total Hrs", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
+    ax.text(x_g4[7], 41.4, "Share", color="#0f172a", fontsize=7.0, fontweight="bold", va="center")
 
     # -------------------------------------------------------------
-    # GRID 1: IMPACT COMPARISON CHART
+    # GRID 1: IMPACT COMPARISON CHART + SUMMARY FOOTER
     # -------------------------------------------------------------
-    y_g1 = 85.5
-    y_step_g1 = 3.65
+    y_g1 = 82.8
+    y_step_g1 = 3.25
     all_shares = [curr_share_dict.get(c, 0.0) for c in top_10_causes] + [prev_share_dict.get(c, 0.0) for c in top_10_causes]
-    max_share = max(all_shares + [30.0])
+    max_share = max(all_shares + [35.0])
 
     for c in top_10_causes[:10]:
         val_curr = curr_share_dict.get(c, 0.0)
         val_prev = prev_share_dict.get(c, 0.0)
+        hrs_curr = curr_hours_dict.get(c, 0.0)
+        diff = val_curr - val_prev
 
-        # Bold Red Cause Label
-        ax.text(3.0, y_g1 - 0.2, c, color="#dc2626", fontsize=7.8, fontweight="bold", va="center")
+        # Cause Label
+        c_label = c.replace("*", "")[:20]
+        ax.text(3.0, y_g1 - 0.2, c_label, color="#b91c1c" if "Problem" in c else "#0f172a", fontsize=7.2, fontweight="bold", va="center")
 
-        # Solid Red Bar for Present Month
-        w_curr = (val_curr / max_share) * 19.5
-        ax.add_patch(patches.Rectangle((22.5, y_g1 - 0.75), w_curr, 1.25, facecolor="#ef4444", edgecolor="#b91c1c", linewidth=0.5))
-        ax.text(23.0 + w_curr, y_g1 - 0.15, f"{val_curr:.1f}%", color="#b91c1c", fontsize=7.2, fontweight="bold", va="center")
+        # Current Hours
+        ax.text(17.5, y_g1 - 0.2, f"{hrs_curr:.1f}h", color="#0f172a", fontsize=7.0, fontweight="bold", ha="right", va="center")
 
-        # Steel Gray Bar for Last Month
-        w_prev = (val_prev / max_share) * 19.5
-        ax.add_patch(patches.Rectangle((22.5, y_g1 - 2.15), w_prev, 1.1, facecolor="#cbd5e1", edgecolor="#94a3b8", linewidth=0.5))
-        ax.text(23.0 + w_prev, y_g1 - 1.6, f"{val_prev:.1f}%", color="#64748b", fontsize=7.0, va="center")
+        # Dual Bars
+        bar_x = 19.5
+        bar_max_w = 21.0
+        w_curr = (val_curr / max_share) * bar_max_w
+        w_prev = (val_prev / max_share) * bar_max_w
+
+        ax.add_patch(patches.Rectangle((bar_x, y_g1 - 0.65), w_curr, 1.05, facecolor="#ef4444", edgecolor="none"))
+        ax.text(bar_x + w_curr + 0.5, y_g1 - 0.15, f"{val_curr:.1f}%", color="#b91c1c", fontsize=6.8, fontweight="bold", va="center")
+
+        ax.add_patch(patches.Rectangle((bar_x, y_g1 - 1.95), w_prev, 0.95, facecolor="#cbd5e1", edgecolor="none"))
+        ax.text(bar_x + w_prev + 0.5, y_g1 - 1.45, f"{val_prev:.1f}%", color="#64748b", fontsize=6.6, va="center")
+
+        # Variance Pill
+        badge_x = 46.0
+        if diff > 0:
+            badge_bg = "#fee2e2"
+            badge_fg = "#b91c1c"
+            badge_txt = f"▲ +{diff:.1f}%"
+        else:
+            badge_bg = "#dcfce7"
+            badge_fg = "#15803d"
+            badge_txt = f"▼ {diff:.1f}%"
+
+        ax.add_patch(patches.FancyBboxPatch((badge_x - 2.8, y_g1 - 1.6), 5.6, 2.4, boxstyle="round,pad=0.1,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
+        ax.text(badge_x, y_g1 - 0.4, badge_txt, color=badge_fg, fontsize=6.8, fontweight="bold", ha="center", va="center")
 
         y_g1 -= y_step_g1
 
-    # Grid 1 Legend
-    ax.add_patch(patches.Rectangle((33.0, 48.5), 2.2, 1.1, facecolor="#ef4444", edgecolor="#b91c1c", linewidth=0.5))
-    ax.text(35.8, 49.1, f"{curr_month_name} Share", color="#0f172a", fontsize=7.5, fontweight="bold", va="center")
-    ax.add_patch(patches.Rectangle((41.5, 48.5), 2.2, 1.1, facecolor="#cbd5e1", edgecolor="#94a3b8", linewidth=0.5))
-    ax.text(44.3, 49.1, f"{prev_month_name} Share", color="#64748b", fontsize=7.5, va="center")
+    # Grid 1 Summary Row
+    net_hrs_diff = tot_curr_mtd_hrs - tot_prev_mtd_hrs
+    pct_net_diff = (net_hrs_diff / tot_prev_mtd_hrs * 100.0) if tot_prev_mtd_hrs > 0 else 0.0
+
+    ax.add_patch(patches.Rectangle((1.5, 48.0), w_box, 3.2, facecolor="#eff6ff", edgecolor="#bfdbfe", linewidth=0.6))
+    ax.text(3.0, 49.6, f"Total ({curr_abbr} 1–{cutoff_day}) >>", color="#1d4ed8", fontsize=7.4, fontweight="bold", va="center")
+    ax.text(17.5, 49.6, f"{tot_curr_mtd_hrs:,.1f}h", color="#1d4ed8", fontsize=7.4, fontweight="bold", ha="right", va="center")
+    
+    summary_txt = f"{curr_abbr}: {tot_curr_mtd_hrs:,.1f} H  |  {prev_abbr}: {tot_prev_mtd_hrs:,.1f} H  |  Net: {abs(net_hrs_diff):,.1f} H"
+    ax.text(19.5, 49.6, summary_txt, color="#334155", fontsize=6.8, fontweight="bold", va="center")
+
+    tot_badge_bg = "#dcfce7" if net_hrs_diff <= 0 else "#fee2e2"
+    tot_badge_fg = "#15803d" if net_hrs_diff <= 0 else "#b91c1c"
+    tot_badge_sign = "▼ " if net_hrs_diff <= 0 else "▲ +"
+    tot_badge_txt = f"{tot_badge_sign}{abs(pct_net_diff):.1f}%"
+
+    ax.add_patch(patches.FancyBboxPatch((46.0 - 2.8, 48.4), 5.6, 2.4, boxstyle="round,pad=0.1,rounding_size=0.3", facecolor=tot_badge_bg, edgecolor="none"))
+    ax.text(46.0, 49.6, tot_badge_txt, color=tot_badge_fg, fontsize=6.8, fontweight="bold", ha="center", va="center")
 
     # -------------------------------------------------------------
     # GRID 2: MC SIZE-WISE TABLE
     # -------------------------------------------------------------
-    y_g2 = 85.5
+    y_g2 = 82.8
     step_g2 = 2.85
     for idx, r in df_size_grid.iterrows():
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
@@ -511,7 +567,7 @@ def m3_generate_2x2_executive_jpg(
     # -------------------------------------------------------------
     # GRID 3: SMED TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
-    y_g3 = 40.5
+    y_g3 = 38.2
     step_g3 = 4.35
     for idx, r in df_smed_grid.iterrows():
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
@@ -532,12 +588,12 @@ def m3_generate_2x2_executive_jpg(
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(18.0, y_g3 + 0.2, f"{smed_tot_time:.2f}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(26.0, y_g3 + 0.2, f"{smed_avg_min:.2f}", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
-    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD", color="#64748b", fontsize=6.8, va="center")
+    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
 
     # -------------------------------------------------------------
     # GRID 4: MAINTENANCE TABLE (WITH FULL 1-N SUMMARY ROW)
     # -------------------------------------------------------------
-    y_g4 = 40.5
+    y_g4 = 38.2
     step_g4 = 4.35
     for idx, r in df_maint_grid.iterrows():
         bg_c = "#fefce8" if idx % 2 == 1 else "#ffffff"
@@ -690,19 +746,20 @@ def render_npt_module():
             prev_month_name = "Prior"
             prev_m_mtd = df_mtd
 
-        tot_mtd_hrs = df_mtd["Hours"].sum()
-        tot_prev_hrs = prev_m_mtd["Hours"].sum()
+        tot_curr_mtd_hrs = df_mtd["Hours"].sum()
+        tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
 
         curr_share_dict = (
-            (df_mtd.groupby("Cause")["Hours"].sum() / tot_mtd_hrs * 100).to_dict()
-            if tot_mtd_hrs > 0
+            (df_mtd.groupby("Cause")["Hours"].sum() / tot_curr_mtd_hrs * 100).to_dict()
+            if tot_curr_mtd_hrs > 0
             else {}
         )
         prev_share_dict = (
-            (prev_m_mtd.groupby("Cause")["Hours"].sum() / tot_prev_hrs * 100).to_dict()
-            if tot_prev_hrs > 0
+            (prev_m_mtd.groupby("Cause")["Hours"].sum() / tot_prev_mtd_hrs * 100).to_dict()
+            if tot_prev_mtd_hrs > 0
             else {}
         )
+        curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
         # Computations (Auto-windowed to 7 days if n > 7, with full 1-n MTD Summary Stats)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
@@ -716,6 +773,9 @@ def render_npt_module():
             selected_top_causes,
             curr_share_dict,
             prev_share_dict,
+            curr_hours_dict,
+            tot_curr_mtd_hrs,
+            tot_prev_mtd_hrs,
             curr_month_name,
             prev_month_name,
             df_size_grid,
@@ -742,7 +802,7 @@ def render_npt_module():
 
         # 4 Web Metric Cards
         k1, k2, k3, k4 = st.columns(4)
-        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_mtd_hrs/cutoff_day:.1f} H/Day</div></div>', unsafe_allow_html=True)
+        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_curr_mtd_hrs/cutoff_day:.1f} H/Day</div></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div><div class="kpi-val">{size_summary_pct:.2f}%</div><div class="kpi-sub">Of {TOTAL_PLANT_MCS*24*cutoff_day:,.0f} H Available</div></div>', unsafe_allow_html=True)
         last_day_hrs = df_last_day["Hours"].sum()
         k3.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_hrs:.1f} H</div><div class="kpi-sub">{(last_day_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Capacity</div></div>', unsafe_allow_html=True)
@@ -768,7 +828,7 @@ def render_npt_module():
             top_causes_lines = []
             for c_n, c_h in top_mtd_causes.items():
                 c_clean = c_n.replace("*", "").strip()
-                c_pct = (c_h / tot_mtd_hrs * 100) if tot_mtd_hrs > 0 else 0.0
+                c_pct = (c_h / tot_curr_mtd_hrs * 100) if tot_curr_mtd_hrs > 0 else 0.0
                 top_causes_lines.append(f"• {c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
 
             maint_items = [
@@ -792,8 +852,9 @@ def render_npt_module():
             smed_avg_min_last = (smed_hrs_last / smed_setups_last * 60.0) if smed_setups_last > 0 else 0.0
             smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if str(v) != "-"))) if smed_setups_last > 0 else "None"
 
-            # Strict 1-N Like-for-Like Comparison string
-            comp_like_for_like_str = f"vs. {tot_prev_hrs:,.2f} Hrs in {prev_month_name} 01–{cutoff_day:02d}"
+            curr_abbr_txt = curr_month_name[:3].capitalize()
+            prev_abbr_txt = prev_month_name[:3].capitalize()
+            comp_like_for_like_str = f"vs. {tot_prev_mtd_hrs:,.2f} Hrs in {prev_abbr_txt} 01–{cutoff_day:02d}"
 
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
@@ -801,7 +862,7 @@ Dear Sir,
 
 *1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})*
 
-Current Month Total NPT ({curr_month_name[:3]} 01–{cutoff_day:02d}): *{tot_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
+Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
 
 *Top Contributing Causes ({curr_month_name}):*
 {chr(10).join(top_causes_lines)}
@@ -823,7 +884,7 @@ Current Month Total NPT ({curr_month_name[:3]} 01–{cutoff_day:02d}): *{tot_mtd
                     <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
                     <h5>1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})</h5>
-                    <p>Current Month Total NPT ({curr_month_name[:3]} 01–{cutoff_day:02d}): <b>{tot_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
+                    <p>Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
                     <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
