@@ -9,7 +9,6 @@ from openpyxl.utils import get_column_letter
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Centralized Floor Mappings from config
 from config import POS_MAP, LINE_MAP
 
 
@@ -49,13 +48,14 @@ def m2_parse_workbook(file_bytes):
             header_idx = idx
             break
 
-    if header_idx is not None:
-        df_clean = pd.read_excel(xls, sheet_name=sheet_name, skiprows=header_idx)
-    else:
-        df_clean = pd.read_excel(xls, sheet_name=sheet_name)
-
+    df_clean = (
+        pd.read_excel(xls, sheet_name=sheet_name, skiprows=header_idx)
+        if header_idx is not None
+        else pd.read_excel(xls, sheet_name=sheet_name)
+    )
     df_clean.columns = [str(c).strip() for c in df_clean.columns]
 
+    # Date normalization (Strict Calendar Date)
     date_col = get_col(
         df_clean, ["Added Date", "Date", "Entry Date", "AddedDate"], df_clean.columns[-1]
     )
@@ -63,6 +63,19 @@ def m2_parse_workbook(file_bytes):
     df_clean = df_clean.dropna(subset=["DateClean"]).sort_values("DateClean")
     df_clean["DateStr"] = df_clean["DateClean"].dt.strftime("%Y-%m-%d")
     df_clean["YearMonth"] = df_clean["DateClean"].dt.to_period("M")
+
+    # Global Quantity Conversion (Raw ERP Quantity is logged in thousands)
+    qty_col = get_col(df_clean, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"])
+    if qty_col:
+        df_clean["Qty_Pcs"] = (pd.to_numeric(df_clean[qty_col], errors="coerce").fillna(0.0) * 1000.0).round()
+    else:
+        df_clean["Qty_Pcs"] = 0.0
+
+    wt_col = get_col(df_clean, ["Weight", "Rejection Ton", "Weight (Ton)", "Weight (kg)"])
+    if wt_col:
+        df_clean["Weight_Ton"] = pd.to_numeric(df_clean[wt_col], errors="coerce").fillna(0.0)
+    else:
+        df_clean["Weight_Ton"] = 0.0
 
     unique_months = sorted(df_clean["YearMonth"].unique())
     if len(unique_months) >= 2:
@@ -82,23 +95,11 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
     mc_col = get_col(df_day, ["Machine", "MC SL", "MC Name"], df_day.columns[2])
     item_col = get_col(df_day, ["Item", "Mold", "Item Name", "Mold / Item"], df_day.columns[3])
     cause_col = get_col(df_day, ["Cause", "Causes", "Defect", "Reason"], "Cause")
-    qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], "Quantity")
-    wt_col = get_col(df_day, ["Weight", "Rejection Ton", "Weight (Ton)", "Weight (kg)"], "Weight")
 
     records = []
     for mc, grp in df_day.groupby(mc_col):
-        raw_qty = (
-            pd.to_numeric(grp[qty_col], errors="coerce").fillna(0).sum()
-            if qty_col in grp.columns
-            else 0.0
-        )
-        qty_factor = 1000.0 if (qty_col in grp.columns and grp[qty_col].max() < 100) else 1.0
-        total_pcs = raw_qty * qty_factor
-        total_ton = (
-            pd.to_numeric(grp[wt_col], errors="coerce").fillna(0).sum()
-            if wt_col in grp.columns
-            else 0.0
-        )
+        total_pcs = grp["Qty_Pcs"].sum()
+        total_ton = grp["Weight_Ton"].sum()
 
         if cause_col in grp.columns:
             causes_list = [
@@ -138,13 +139,11 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
 
 
 def m2_export_rejection_excel(df_day_filtered):
-    """Exports daily critical rejection lines (>min_cutoff) matching image_ba46d3.jpg formatting."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Critical Rejection Log"
     ws.views.sheetView[0].showGridLines = True
 
-    # Styling Palette
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     header_font = Font(name="Calibri", size=11, bold=True, color="000000")
     data_font = Font(name="Calibri", size=10, color="000000")
@@ -204,7 +203,6 @@ def m2_export_rejection_excel(df_day_filtered):
 
     ws.row_dimensions[current_row].height = 22
 
-    # Column Auto-fit
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         col_letter = get_column_letter(col[0].column)
@@ -218,41 +216,25 @@ def m2_export_rejection_excel(df_day_filtered):
 def m2_compute_cause_breakdown(df_scope):
     if df_scope.empty:
         return pd.DataFrame()
-    qty_col = get_col(df_scope, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
-    wt_col = get_col(df_scope, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
     cause_col = get_col(df_scope, ["Cause", "Causes", "Defect", "Reason"], "Cause")
     mc_col = get_col(df_scope, ["Machine", "MC SL"], "Machine")
-
-    qty_factor = 1000.0 if (qty_col and df_scope[qty_col].max() < 100) else 1.0
 
     res = (
         df_scope.groupby(cause_col)
         .agg(
-            Rej_Pcs=(
-                qty_col,
-                lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor)),
-            )
-            if qty_col
-            else (cause_col, "count"),
-            Rej_Kg=(
-                wt_col,
-                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * 1000.0, 1),
-            )
-            if wt_col
-            else (cause_col, "count"),
-            Rej_Ton=(
-                wt_col,
-                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum(), 4),
-            )
-            if wt_col
-            else (cause_col, "count"),
+            Rej_Pcs=("Qty_Pcs", "sum"),
+            Rej_Ton=("Weight_Ton", "sum"),
             Entries_Count=(cause_col, "count"),
             MC_Count=(mc_col, "nunique") if mc_col in df_scope.columns else (cause_col, "count"),
         )
         .reset_index()
     )
 
+    res["Rej_Pcs"] = res["Rej_Pcs"].round().astype(int)
+    res["Rej_Kg"] = (res["Rej_Ton"] * 1000.0).round(1)
+    res["Rej_Ton"] = res["Rej_Ton"].round(4)
     res["Cause"] = res[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
+
     tot_pcs = res["Rej_Pcs"].sum()
     res["% Share Raw"] = (res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
@@ -267,38 +249,22 @@ def m2_compute_lineman_breakdown(df_scope):
     if not lineman_col or lineman_col not in df_scope.columns:
         return pd.DataFrame()
 
-    qty_col = get_col(df_scope, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"], None)
-    wt_col = get_col(df_scope, ["Weight", "Rejection Ton", "Weight (Ton)"], None)
     mc_col = get_col(df_scope, ["Machine", "MC SL"], "Machine")
-
-    qty_factor = 1000.0 if (qty_col and df_scope[qty_col].max() < 100) else 1.0
 
     res = (
         df_scope.groupby(lineman_col)
         .agg(
-            Rej_Pcs=(
-                qty_col,
-                lambda x: int(round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * qty_factor)),
-            )
-            if qty_col
-            else (lineman_col, "count"),
-            Rej_Kg=(
-                wt_col,
-                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum() * 1000.0, 1),
-            )
-            if wt_col
-            else (lineman_col, "count"),
-            Rej_Ton=(
-                wt_col,
-                lambda x: round(pd.to_numeric(x, errors="coerce").fillna(0).sum(), 4),
-            )
-            if wt_col
-            else (lineman_col, "count"),
+            Rej_Pcs=("Qty_Pcs", "sum"),
+            Rej_Ton=("Weight_Ton", "sum"),
             Logged_Entries=(lineman_col, "count"),
             Machines_Covered=(mc_col, "nunique") if mc_col in df_scope.columns else (lineman_col, "count"),
         )
         .reset_index()
     )
+
+    res["Rej_Pcs"] = res["Rej_Pcs"].round().astype(int)
+    res["Rej_Kg"] = (res["Rej_Ton"] * 1000.0).round(1)
+    res["Rej_Ton"] = res["Rej_Ton"].round(4)
 
     tot_pcs = res["Rej_Pcs"].sum()
     tot_ton = res["Rej_Ton"].sum()
@@ -312,25 +278,14 @@ def m2_compute_lineman_breakdown(df_scope):
 
 
 def m2_compute_tonnage_comparison(df_prev, df_curr):
-    wt_col_prev = (
-        get_col(df_prev, ["Weight", "Rejection Ton"], None) if not df_prev.empty else None
-    )
-    wt_col_curr = (
-        get_col(df_curr, ["Weight", "Rejection Ton"], None) if not df_curr.empty else None
-    )
-
-    if not df_prev.empty and wt_col_prev:
-        t_prev = (
-            df_prev.groupby(df_prev["DateClean"].dt.day)[wt_col_prev].sum().reset_index()
-        )
+    if not df_prev.empty and "Weight_Ton" in df_prev.columns:
+        t_prev = df_prev.groupby(df_prev["DateClean"].dt.day)["Weight_Ton"].sum().reset_index()
         t_prev.columns = ["Day", "Prev_Month_Ton"]
     else:
         t_prev = pd.DataFrame(columns=["Day", "Prev_Month_Ton"])
 
-    if not df_curr.empty and wt_col_curr:
-        t_curr = (
-            df_curr.groupby(df_curr["DateClean"].dt.day)[wt_col_curr].sum().reset_index()
-        )
+    if not df_curr.empty and "Weight_Ton" in df_curr.columns:
+        t_curr = df_curr.groupby(df_curr["DateClean"].dt.day)["Weight_Ton"].sum().reset_index()
         t_curr.columns = ["Day", "Curr_Month_Ton"]
     else:
         t_curr = pd.DataFrame(columns=["Day", "Curr_Month_Ton"])
@@ -373,36 +328,10 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # Header
-    ax.text(
-        1.5,
-        98.4,
-        "DAILY REJECTION & DEFECT ANALYTICS REPORT",
-        color="#0f172a",
-        fontsize=16.0,
-        fontweight="bold",
-        va="top",
-    )
-    ax.text(
-        1.5,
-        95.8,
-        f"Plastic-3 Machine Rejection Log (>{min_cutoff} Pcs) & Plant Summary  |  Report Date: {date_formatted}",
-        color="#64748b",
-        fontsize=8.8,
-        va="top",
-    )
-    ax.text(
-        98.5,
-        97.2,
-        "PLASTIC-3 OPERATIONS",
-        color="#2563eb",
-        fontsize=8.8,
-        fontweight="bold",
-        ha="right",
-        va="top",
-    )
+    ax.text(1.5, 98.4, "DAILY REJECTION & DEFECT ANALYTICS REPORT", color="#0f172a", fontsize=16.0, fontweight="bold", va="top")
+    ax.text(1.5, 95.8, f"Plastic-3 Machine Rejection Log (>{min_cutoff} Pcs) & Plant Summary  |  Report Date: {date_formatted}", color="#64748b", fontsize=8.8, va="top")
+    ax.text(98.5, 97.2, "PLASTIC-3 OPERATIONS", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
 
-    # Dynamic KPI Cards Row (Like-for-Like: Day 1 to N)
     kpis = [
         (f"{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior MTD Total", "#64748b"),
         (f"{prev_abbr.upper()} 01–{sel_day_num:02d} AVG", f"{prev_as_of_avg_ton:.2f} T/Day", "Prior Daily Baseline", "#64748b"),
@@ -414,69 +343,20 @@ def m2_generate_scrap_jpg(
     kpi_w, kpi_gap = 15.1, 1.25
     for i, (title, val, sub, col_bar) in enumerate(kpis):
         x0 = 1.5 + i * (kpi_w + kpi_gap)
-        card = patches.FancyBboxPatch(
-            (x0, 87.0),
-            kpi_w,
-            7.2,
-            boxstyle="round,pad=0.15,rounding_size=0.5",
-            facecolor="#ffffff",
-            edgecolor="#cbd5e1",
-            linewidth=0.8,
-        )
+        card = patches.FancyBboxPatch((x0, 87.0), kpi_w, 7.2, boxstyle="round,pad=0.15,rounding_size=0.5", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=0.8)
         ax.add_patch(card)
-        top_bar = patches.FancyBboxPatch(
-            (x0 + 0.1, 93.75),
-            kpi_w - 0.2,
-            0.45,
-            boxstyle="round,pad=0.03,rounding_size=0.2",
-            facecolor=col_bar,
-            edgecolor="none",
-        )
+        top_bar = patches.FancyBboxPatch((x0 + 0.1, 93.75), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor="none")
         ax.add_patch(top_bar)
-        ax.text(
-            x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.4, fontweight="bold", ha="center"
-        )
-        ax.text(
-            x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=12.5, fontweight="bold", ha="center"
-        )
+        ax.text(x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.4, fontweight="bold", ha="center")
+        ax.text(x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=12.5, fontweight="bold", ha="center")
         ax.text(x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center")
 
-    left_card = patches.FancyBboxPatch(
-        (1.5, 1.5),
-        74.0,
-        84.0,
-        boxstyle="round,pad=0.25,rounding_size=0.8",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
+    left_card = patches.FancyBboxPatch((1.5, 1.5), 74.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=1)
     ax.add_patch(left_card)
-    ax.text(
-        3.5,
-        83.5,
-        f"PLASTIC-3 MACHINE REJECTION LOG (>{min_cutoff} Pcs) — {day_formatted}",
-        color="#0f172a",
-        fontsize=11.0,
-        fontweight="bold",
-    )
-    ax.text(
-        73.5,
-        83.5,
-        f"{high_rej_count} Machines Active Above Threshold",
-        color="#64748b",
-        fontsize=8.0,
-        ha="right",
-    )
+    ax.text(3.5, 83.5, f"PLASTIC-3 MACHINE REJECTION LOG (>{min_cutoff} Pcs) — {day_formatted}", color="#0f172a", fontsize=11.0, fontweight="bold")
+    ax.text(73.5, 83.5, f"{high_rej_count} Machines Active Above Threshold", color="#64748b", fontsize=8.0, ha="right")
 
-    right_card = patches.FancyBboxPatch(
-        (76.5, 1.5),
-        22.0,
-        84.0,
-        boxstyle="round,pad=0.25,rounding_size=0.8",
-        facecolor="#ffffff",
-        edgecolor="#cbd5e1",
-        linewidth=1,
-    )
+    right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=1)
     ax.add_patch(right_card)
     ax.text(78.0, 83.5, "EXECUTIVE ANALYSIS", color="#0f172a", fontsize=11.0, fontweight="bold")
 
@@ -503,21 +383,16 @@ def m2_generate_scrap_jpg(
 
             ax.text(left_x + 1.0, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.8, fontweight="bold", va="center")
             ax.text(left_x + 8.5, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.6, va="center")
-
             cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=38))
             ax.text(left_x + 18.0, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.4, va="center")
-
             ax.text(left_x + 44.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=7.0, fontweight="bold", ha="right", va="center")
-
             mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=38))
             ax.text(left_x + 46.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.4, va="center")
             row_y -= row_step
-
     else:
         mid_idx = (n_count + 1) // 2
         sub_a = df_day_filtered.iloc[:mid_idx]
         sub_b = df_day_filtered.iloc[mid_idx:]
-
         sub_configs = [(sub_a, 2.6, 35.8), (sub_b, 39.0, 35.8)]
 
         for sub_df, left_x, tbl_w in sub_configs:
@@ -539,25 +414,14 @@ def m2_generate_scrap_jpg(
 
                 ax.text(left_x + 0.8, row_y + 0.35, str(r["Position"]), color="#0f172a", fontsize=6.7, fontweight="bold", va="center")
                 ax.text(left_x + 4.8, row_y + 0.35, str(r["Machine"]), color="#64748b", fontsize=6.5, va="center")
-
                 cause_wrap = "\n".join(textwrap.wrap(str(r["Causes"]), width=20))
                 ax.text(left_x + 10.4, row_y + 0.35, cause_wrap, color="#b91c1c", fontsize=6.2, va="center")
-
                 ax.text(left_x + 23.0, row_y + 0.35, f"{int(r['Qty']):,}", color="#0f172a", fontsize=6.8, fontweight="bold", ha="right", va="center")
-
                 mold_wrap = "\n".join(textwrap.wrap(str(r["Mold"]), width=20))
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    c1 = patches.FancyBboxPatch(
-        (77.5, 42.5),
-        20.0,
-        39.0,
-        boxstyle="round,pad=0.2,rounding_size=0.5",
-        facecolor="#fff7f7",
-        edgecolor="#fecaca",
-        linewidth=0.8,
-    )
+    c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#fff7f7", edgecolor="#fecaca", linewidth=0.8)
     ax.add_patch(c1)
     ax.text(78.6, 78.8, "Rejection Pareto & Top Causes", color="#b91c1c", fontsize=9.6, fontweight="bold")
 
@@ -575,15 +439,7 @@ def m2_generate_scrap_jpg(
     )
     ax.text(78.6, 75.2, t1, color="#7f1d1d", fontsize=8.2, linespacing=1.45, va="top")
 
-    c2 = patches.FancyBboxPatch(
-        (77.5, 2.5),
-        20.0,
-        38.5,
-        boxstyle="round,pad=0.2,rounding_size=0.5",
-        facecolor="#f0fdf4",
-        edgecolor="#bbf7d0",
-        linewidth=0.8,
-    )
+    c2 = patches.FancyBboxPatch((77.5, 2.5), 20.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#f0fdf4", edgecolor="#bbf7d0", linewidth=0.8)
     ax.add_patch(c2)
     ax.text(78.6, 38.2, "Shop Floor & Plant Distribution", color="#15803d", fontsize=9.6, fontweight="bold")
     t2 = (
@@ -664,7 +520,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     mid_idx = (len(df_cause) + 1) // 2
     sub_a = df_cause.iloc[:mid_idx].copy()
     sub_b = df_cause.iloc[mid_idx:].copy()
-
     sub_configs = [(sub_a, 2.6, 35.6, 1), (sub_b, 38.6, 35.6, mid_idx + 1)]
 
     for sub_df, left_x, tbl_w, start_rank in sub_configs:
@@ -909,7 +764,7 @@ def render_scrap_module():
             st.markdown(
                 '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #dc2626; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
                 '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Rejection / Scrap Workbook</h3>'
-                '<p style="color:#64748b !important;">Select the Excel workbook containing monthly defect records (e.g. rej78.xlsx).</p></div>',
+                '<p style="color:#64748b !important;">Select the Excel workbook containing monthly defect records (e.g. rej.xlsx).</p></div>',
                 unsafe_allow_html=True,
             )
             st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
@@ -927,7 +782,6 @@ def render_scrap_module():
         df_prev, df_curr, df_full = m2_parse_workbook(st.session_state["m2_file_bytes"])
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
 
-        # Control Bar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_cut, c_snap, c_excel = st.columns([1.3, 1.0, 1.2, 1.5], gap="small")
         with c_date:
@@ -939,39 +793,29 @@ def render_scrap_module():
         sel_day_num = sel_date_obj.day
         day_formatted = sel_date_obj.strftime("%B %d")
 
-        # Dynamic month labels
         curr_abbr = df_curr["DateClean"].dt.strftime("%b").iloc[0] if not df_curr.empty else "Sep"
         prev_abbr = df_prev["DateClean"].dt.strftime("%b").iloc[0] if not df_prev.empty else "Aug"
 
-        # 1. Day records & filter
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
         df_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num].copy()
         df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
 
-        # 2. Previous Month Stats (Like-for-Like: Day 1 to N)
-        prev_wt_col = get_col(df_prev, ["Weight", "Rejection Ton"], None)
-        if not df_prev.empty and prev_wt_col:
+        if not df_prev.empty:
             df_prev_as_of = df_prev[df_prev["DateClean"].dt.day <= sel_day_num].copy()
-            prev_as_of_total_ton = float(pd.to_numeric(df_prev_as_of[prev_wt_col], errors="coerce").fillna(0).sum())
-            prev_as_of_avg_ton = prev_as_of_total_ton / sel_day_num
+            prev_as_of_total_ton = float(df_prev_as_of["Weight_Ton"].sum())
+            prev_as_of_avg_ton = prev_as_of_total_ton / max(1, sel_day_num)
         else:
             prev_as_of_total_ton, prev_as_of_avg_ton = 0.0, 0.0
 
-        # 3. Present Month Stats (Day 1 to N)
-        curr_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
-        if not df_as_of.empty and curr_wt_col:
-            curr_as_of_total_ton = float(pd.to_numeric(df_as_of[curr_wt_col], errors="coerce").fillna(0).sum())
-            curr_as_of_avg_ton = curr_as_of_total_ton / sel_day_num
-        else:
-            curr_as_of_total_ton, curr_as_of_avg_ton = 0.0, 0.0
+        curr_as_of_total_ton = float(df_as_of["Weight_Ton"].sum()) if not df_as_of.empty else 0.0
+        curr_as_of_avg_ton = curr_as_of_total_ton / max(1, sel_day_num)
 
-        # Calculate Like-for-Like Variance Metrics
         diff_ton = curr_as_of_avg_ton - prev_as_of_avg_ton
         pct_diff = (diff_ton / prev_as_of_avg_ton * 100.0) if prev_as_of_avg_ton > 0 else 0.0
 
         if diff_ton > 0:
-            variance_line_plain = f"⚠️ Variance: Unfortunately, we are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
-            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> Unfortunately, we are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
+            variance_line_plain = f"⚠️ Variance: We are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> We are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
         elif diff_ton < 0:
             variance_line_plain = f"✅ Variance: We are producing {abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%) less rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
             variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #16a34a; font-size: 0.85rem;">✅ <b>Variance:</b> We are producing <b>{abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%)</b> less rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
@@ -979,25 +823,11 @@ def render_scrap_module():
             variance_line_plain = f"ℹ️ Variance: Daily rejection rate is on par with {prev_abbr} 01–{sel_day_num:02d} baseline."
             variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.85rem;">ℹ️ <b>Variance:</b> Daily rejection rate is on par with {prev_abbr} 01–{sel_day_num:02d} baseline.</p>'
 
-        # 4. Daily Totals & Drivers
-        qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs"], None)
-        wt_col = get_col(df_day, ["Weight", "Rejection Ton"], None)
-        cause_col = get_col(df_day, ["Cause", "Causes"], "Cause")
-        mc_col = get_col(df_day, ["Machine", "MC SL"], "Machine")
-
-        qty_factor = 1000.0 if (qty_col and df_day[qty_col].max() < 100) else 1.0
-        total_rej_pcs = (
-            int(round(pd.to_numeric(df_day[qty_col], errors="coerce").fillna(0).sum() * qty_factor))
-            if (qty_col and not df_day.empty)
-            else 0
-        )
-        total_rej_ton = (
-            float(pd.to_numeric(df_day[wt_col], errors="coerce").fillna(0).sum())
-            if (wt_col and not df_day.empty)
-            else 0.0
-        )
+        total_rej_pcs = int(round(df_day["Qty_Pcs"].sum())) if not df_day.empty else 0
+        total_rej_ton = float(df_day["Weight_Ton"].sum()) if not df_day.empty else 0.0
         high_rej_count = len(df_day_filtered)
-        total_day_mcs = df_day[mc_col].nunique() if mc_col in df_day.columns else high_rej_count
+        mc_col = get_col(df_day, ["Machine", "MC SL"], "Machine")
+        total_day_mcs = df_day[mc_col].nunique() if (mc_col in df_day.columns and not df_day.empty) else high_rej_count
 
         df_cause_day = m2_compute_cause_breakdown(df_day)
         df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
@@ -1006,8 +836,9 @@ def render_scrap_module():
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
         top3_summary_list = []
-        if not df_day.empty and cause_col in df_day.columns and qty_col in df_day.columns:
-            cause_grp = df_day.groupby(cause_col)[qty_col].sum() * qty_factor
+        cause_col = get_col(df_day, ["Cause", "Causes"], "Cause")
+        if not df_day.empty and cause_col in df_day.columns:
+            cause_grp = df_day.groupby(cause_col)["Qty_Pcs"].sum()
             top_cause = cause_grp.idxmax() if not cause_grp.empty else "General"
             top_cause_pcs = int(round(cause_grp.max())) if not cause_grp.empty else 0
             top_cause_pct = (top_cause_pcs / total_rej_pcs * 100.0) if total_rej_pcs > 0 else 0.0
@@ -1027,21 +858,20 @@ def render_scrap_module():
         else:
             top_cause, top_cause_pcs, top_cause_pct, top3_pct = "General", 0, 0.0, 0.0
 
-        if not df_day.empty and mc_col in df_day.columns and wt_col in df_day.columns:
-            mc_wt_grp = df_day.groupby(mc_col)[wt_col].sum() * 1000.0
+        if not df_day.empty and mc_col in df_day.columns:
+            mc_wt_grp = df_day.groupby(mc_col)["Weight_Ton"].sum() * 1000.0
             top_wt_mc = mc_wt_grp.idxmax() if not mc_wt_grp.empty else "-"
             top_wt_kg = float(mc_wt_grp.max()) if not mc_wt_grp.empty else 0.0
 
             df_day["LineCode"] = df_day[mc_col].map(LINE_MAP).fillna("-")
-            gf_wt = df_day[df_day["LineCode"].str.startswith("GF")][wt_col].sum()
-            ff_wt = df_day[df_day["LineCode"].str.startswith("FF")][wt_col].sum()
+            gf_wt = df_day[df_day["LineCode"].str.startswith("GF")]["Weight_Ton"].sum()
+            ff_wt = df_day[df_day["LineCode"].str.startswith("FF")]["Weight_Ton"].sum()
             tot_w = (gf_wt + ff_wt) if (gf_wt + ff_wt) > 0 else 1.0
             gf_share_pct = gf_wt / tot_w * 100.0
             ff_share_pct = ff_wt / tot_w * 100.0
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # Generate Visual Artifacts
         jpg_bytes_daily = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
@@ -1103,7 +933,6 @@ def render_scrap_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 6 KPI Cards in Web Dashboard (Like-for-Like)
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
             f'<div class="kpi-card indigo"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior MTD Total</div></div>',
@@ -1132,7 +961,6 @@ def render_scrap_module():
 
         st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
-        # Mid Section: Rejection Log Table & WhatsApp Note
         col_left, col_right = st.columns([1.55, 0.95], gap="large")
         with col_left:
             st.markdown(f"#### ⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
@@ -1182,7 +1010,6 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
 
         st.divider()
 
-        # Section 3: Cause-Wise Rejection Defect Analysis
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
@@ -1208,7 +1035,6 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
 
         st.divider()
 
-        # Section 4: Lineman-Wise Analysis
         c_line_hdr, c_line_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_line_hdr:
             st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
@@ -1240,7 +1066,6 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
 
         st.divider()
 
-        # Section 5: Month-over-Month Daily Trend
         st.markdown("#### 📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
         trend_display = df_trend.rename(
             columns={
