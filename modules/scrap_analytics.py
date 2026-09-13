@@ -6,75 +6,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# =========================================================
-# STANDARD MACHINE POSITION & LINE MAPPING
-# =========================================================
-MAPPING_DATA = [
-    ("A1-160", "FF A-B", "IMM-160-6"),
-    ("A2-120", "FF A-B", "IMM-120-20"),
-    ("A3-120", "FF A-B", "IMM-120-28"),
-    ("A4-120", "FF A-B", "IMM-120-29"),
-    ("A5-160", "FF A-B", "IMM-160-7"),
-    ("A6-160", "FF A-B", "IMM-160-12"),
-    ("A7-160", "FF A-B", "IMM-160-48"),
-    ("B1-120", "FF A-B", "IMM-120-11"),
-    ("B2-120", "FF A-B", "IMM-120-15"),
-    ("B3-120", "FF A-B", "IMM-120-14"),
-    ("B4-120", "FF A-B", "IMM-120-75"),
-    ("B5-90PC", "FF A-B", "IMM-90-8"),
-    ("B6-90PC", "FF A-B", "IMM-90-9"),
-    ("B7-120PC", "FF A-B", "IMM-120-32"),
-    ("B8-120PC", "FF A-B", "IMM-120-27"),
-    ("C1-120", "FF C-D", "IMM-120-4"),
-    ("C2-160", "FF C-D", "IMM-160-17"),
-    ("C3-120", "FF C-D", "IMM-120-22"),
-    ("C4-120PC", "FF C-D", "IMM-120-46"),
-    ("C5-90", "FF C-D", "IMM-90-4"),
-    ("C6-120", "FF C-D", "IMM-120-47"),
-    ("C7-160", "FF C-D", "IMM-160-51"),
-    ("D1-160", "FF C-D", "IMM-160-39"),
-    ("D2-160", "FF C-D", "IMM-160-79"),
-    ("D3-160", "FF C-D", "IMM-160-80"),
-    ("A1-280TC", "GF A-B", "IMM-280R-25"),
-    ("A2-380", "GF A-B", "IMM-380-5"),
-    ("A3-380 (PC)", "GF A-B", "IMM-380-81"),
-    ("A4-380", "GF A-B", "IMM-380-80"),
-    ("A5-HP-330", "GF A-B", "IMM-330-4"),
-    ("B1-470", "GF A-B", "IMM-470-5"),
-    ("B2-380", "GF A-B", "IMM-380-6"),
-    ("B3-530", "GF A-B", "IMM-530-15"),
-    ("B4-530", "GF A-B", "IMM-530-16"),
-    ("B5-530", "GF A-B", "IMM-530-22"),
-    ("B6-380", "GF A-B", "IMM-380-4"),
-    ("C1-800-30", "GF C-D", "IMM-800-30"),
-    ("C2-800-31", "GF C-D", "IMM-800-31"),
-    ("C3-270-1", "GF C-D", "IMM-270-1"),
-    ("C4-380-73", "GF C-D", "IMM-380-73"),
-    ("C5-380-44", "GF C-D", "IMM-380-44"),
-    ("C6-280TC", "GF C-D", "IMM-280R-3"),
-    ("D1-280TC", "GF C-D", "IMM-280R-24"),
-    ("D2-MA2-250", "GF C-D", "IMM-250-106"),
-    ("D3-330-1", "GF C-D", "IMM-330-1"),
-    ("D4-HP-330-5", "GF C-D", "IMM-330-5"),
-    ("D5-428-1", "GF C-D", "IMM-428-1"),
-    ("D6-HP-428-4", "GF C-D", "IMM-428-4"),
-    ("D7-HP-330", "GF C-D", "IMM-330-8"),
-    ("E1-380-90", "GF E-F", "IMM-380-90"),
-    ("E2-380-94", "GF E-F", "IMM-380-94"),
-    ("E3-380-88", "GF E-F", "IMM-380-88"),
-    ("E4-380-76", "GF E-F", "IMM-380-76"),
-    ("E5-380-62", "GF E-F", "IMM-380-62"),
-    ("E6-380-75", "GF E-F", "IMM-380-75"),
-    ("F1-380-92", "GF E-F", "IMM-380-92"),
-    ("F2-380-93", "GF E-F", "IMM-380-93"),
-    ("F3-380-98", "GF E-F", "IMM-380-98"),
-    ("F4-380-99", "GF E-F", "IMM-380-99"),
-    ("F5-380-101", "GF E-F", "IMM-380-101"),
-    ("F6-380-100", "GF E-F", "IMM-380-100"),
-]
-
-POS_MAP = {smart_manu: pos for pos, line, smart_manu in MAPPING_DATA}
-LINE_MAP = {smart_manu: line for pos, line, smart_manu in MAPPING_DATA}
+# Centralized Floor Mappings from central config
+from config import POS_MAP, LINE_MAP
 
 
 def clean_mold_name(val):
@@ -329,8 +262,8 @@ def m2_generate_scrap_jpg(
     sel_date_obj,
     total_rej_pcs,
     total_rej_ton,
-    prev_total_ton,
-    prev_avg_ton,
+    prev_as_of_total_ton,
+    prev_as_of_avg_ton,
     curr_as_of_total_ton,
     curr_as_of_avg_ton,
     high_rej_count,
@@ -344,6 +277,9 @@ def m2_generate_scrap_jpg(
     gf_share_pct,
     ff_share_pct,
     top3_summary_list,
+    prev_abbr="Aug",
+    curr_abbr="Sep",
+    sel_day_num=1,
     min_cutoff=50,
 ):
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
@@ -356,7 +292,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Clean Dynamic Top Header
+    # 1. Clean Top Header
     ax.text(
         1.5,
         98.4,
@@ -385,12 +321,12 @@ def m2_generate_scrap_jpg(
         va="top",
     )
 
-    # 2. Dynamic KPI Cards Row
+    # 2. Dynamic KPI Cards Row (Like-for-Like: Day 1 to N)
     kpis = [
-        ("PREV MO. TOTAL", f"{prev_total_ton:.2f} T", "Total Rejection", "#64748b"),
-        ("PREV MO. AVG", f"{prev_avg_ton:.2f} T/Day", "Daily Baseline", "#64748b"),
-        ("THIS MO. AS OF", f"{curr_as_of_total_ton:.2f} T", f"As of {day_formatted}", "#2563eb"),
-        ("THIS MO. AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current MTD Pace", "#2563eb"),
+        (f"{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior MTD Total", "#64748b"),
+        (f"{prev_abbr.upper()} 01–{sel_day_num:02d} AVG", f"{prev_as_of_avg_ton:.2f} T/Day", "Prior Daily Baseline", "#64748b"),
+        (f"{curr_abbr.upper()} 01–{sel_day_num:02d} TOTAL", f"{curr_as_of_total_ton:.2f} T", "Current MTD Total", "#2563eb"),
+        (f"{curr_abbr.upper()} 01–{sel_day_num:02d} AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current MTD Pace", "#2563eb"),
         ("LAST DAY REJECTION", f"{total_rej_ton:.3f} T", f"{total_rej_pcs:,} Pcs Lost", "#dc2626"),
         (f"CRITICAL MC (>{min_cutoff})", f"{high_rej_count} MCs", "Lines Exceeding Limit", "#7c3aed"),
     ]
@@ -417,10 +353,10 @@ def m2_generate_scrap_jpg(
         )
         ax.add_patch(top_bar)
         ax.text(
-            x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.6, fontweight="bold", ha="center"
+            x0 + kpi_w / 2, 92.4, title, color="#64748b", fontsize=7.4, fontweight="bold", ha="center"
         )
         ax.text(
-            x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=13.0, fontweight="bold", ha="center"
+            x0 + kpi_w / 2, 89.6, val, color="#0f172a", fontsize=12.5, fontweight="bold", ha="center"
         )
         ax.text(x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center")
 
@@ -534,7 +470,7 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Cards with Enriched Typography
+    # Right Executive Brief: 2 Cards
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -581,8 +517,8 @@ def m2_generate_scrap_jpg(
         f"• Weight Share by Shop Floor:\n"
         f"  - GF Lines: {gf_share_pct:.1f}% of loss wt\n"
         f"  - FF Lines: {ff_share_pct:.1f}% of loss wt\n\n"
-        f"• Monthly Rejection Pace:\n"
-        f"  {curr_as_of_avg_ton:.2f} T/Day (vs {prev_avg_ton:.2f} Prev Mo)."
+        f"• MTD Pace (Day 1–{sel_day_num:02d}):\n"
+        f"  {curr_as_of_avg_ton:.2f} T/Day (vs {prev_as_of_avg_ton:.2f} {prev_abbr} Pace)."
     )
     ax.text(78.6, 34.6, t2, color="#166534", fontsize=8.2, linespacing=1.45, va="top")
 
@@ -615,7 +551,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
     ax.text(1.5, 95.8, "Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
     
-    # Span Badge
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
@@ -651,7 +586,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     ax.add_patch(right_card)
     ax.text(78.0, 83.5, "PARETO INTELLIGENCE", color='#0f172a', fontsize=10.5, fontweight='bold')
 
-    # Dual sub-tables inside Left Card
     mid_idx = (len(df_cause) + 1) // 2
     sub_a = df_cause.iloc[:mid_idx].copy()
     sub_b = df_cause.iloc[mid_idx:].copy()
@@ -761,7 +695,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
     ax.text(1.5, 95.8, "Line-Level Quality Logging Activity & Tonnage Accountability  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
     
-    # Span Badge
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
@@ -937,21 +870,25 @@ def render_scrap_module():
         sel_day_num = sel_date_obj.day
         day_formatted = sel_date_obj.strftime("%B %d")
 
+        # Dynamic month labels
+        curr_abbr = df_curr["DateClean"].dt.strftime("%b").iloc[0] if not df_curr.empty else "Sep"
+        prev_abbr = df_prev["DateClean"].dt.strftime("%b").iloc[0] if not df_prev.empty else "Aug"
+
         # 1. Day records & filter
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
         df_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num].copy()
         df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
 
-        # 2. Previous Month Stats (Full Month)
+        # 2. Previous Month Stats (Like-for-Like: Day 1 to N)
         prev_wt_col = get_col(df_prev, ["Weight", "Rejection Ton"], None)
         if not df_prev.empty and prev_wt_col:
-            prev_total_ton = float(pd.to_numeric(df_prev[prev_wt_col], errors="coerce").fillna(0).sum())
-            prev_days_count = df_prev["DateClean"].dt.days_in_month.iloc[0] if not df_prev.empty else 31
-            prev_avg_ton = prev_total_ton / prev_days_count
+            df_prev_as_of = df_prev[df_prev["DateClean"].dt.day <= sel_day_num].copy()
+            prev_as_of_total_ton = float(pd.to_numeric(df_prev_as_of[prev_wt_col], errors="coerce").fillna(0).sum())
+            prev_as_of_avg_ton = prev_as_of_total_ton / sel_day_num
         else:
-            prev_total_ton, prev_avg_ton = 0.0, 0.0
+            prev_as_of_total_ton, prev_as_of_avg_ton = 0.0, 0.0
 
-        # 3. Present Month Stats (As of selected date)
+        # 3. Present Month Stats (Day 1 to N)
         curr_wt_col = get_col(df_curr, ["Weight", "Rejection Ton"], None)
         if not df_as_of.empty and curr_wt_col:
             curr_as_of_total_ton = float(pd.to_numeric(df_as_of[curr_wt_col], errors="coerce").fillna(0).sum())
@@ -959,19 +896,19 @@ def render_scrap_module():
         else:
             curr_as_of_total_ton, curr_as_of_avg_ton = 0.0, 0.0
 
-        # Calculate Variance Metrics
-        diff_ton = curr_as_of_avg_ton - prev_avg_ton
-        pct_diff = (diff_ton / prev_avg_ton * 100.0) if prev_avg_ton > 0 else 0.0
+        # Calculate Like-for-Like Variance Metrics
+        diff_ton = curr_as_of_avg_ton - prev_as_of_avg_ton
+        pct_diff = (diff_ton / prev_as_of_avg_ton * 100.0) if prev_as_of_avg_ton > 0 else 0.0
 
         if diff_ton > 0:
-            variance_line_plain = f"⚠️ Variance: Unfortunately, we are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to last month."
-            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> Unfortunately, we are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to last month.</p>'
+            variance_line_plain = f"⚠️ Variance: Unfortunately, we are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> Unfortunately, we are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
         elif diff_ton < 0:
-            variance_line_plain = f"✅ Variance: We are producing {abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%) less rejection compared to last month."
-            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #16a34a; font-size: 0.85rem;">✅ <b>Variance:</b> We are producing <b>{abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%)</b> less rejection compared to last month.</p>'
+            variance_line_plain = f"✅ Variance: We are producing {abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%) less rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #16a34a; font-size: 0.85rem;">✅ <b>Variance:</b> We are producing <b>{abs(diff_ton):.2f} Tons/Day ({abs(pct_diff):.1f}%)</b> less rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
         else:
-            variance_line_plain = "ℹ️ Variance: Daily rejection rate is on par with last month's baseline."
-            variance_line_html = '<p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.85rem;">ℹ️ <b>Variance:</b> Daily rejection rate is on par with last month\'s baseline.</p>'
+            variance_line_plain = f"ℹ️ Variance: Daily rejection rate is on par with {prev_abbr} 01–{sel_day_num:02d} baseline."
+            variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.85rem;">ℹ️ <b>Variance:</b> Daily rejection rate is on par with {prev_abbr} 01–{sel_day_num:02d} baseline.</p>'
 
         # 4. Daily Totals & Drivers
         qty_col = get_col(df_day, ["Quantity", "Qty", "Rejection Pcs"], None)
@@ -993,14 +930,12 @@ def render_scrap_module():
         high_rej_count = len(df_day_filtered)
         total_day_mcs = df_day[mc_col].nunique() if mc_col in df_day.columns else high_rej_count
 
-        # Compute breakdowns
         df_cause_day = m2_compute_cause_breakdown(df_day)
         df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
         df_lineman_day = m2_compute_lineman_breakdown(df_day)
         df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
-        # Top defect causes list & heaviest machine
         top3_summary_list = []
         if not df_day.empty and cause_col in df_day.columns and qty_col in df_day.columns:
             cause_grp = df_day.groupby(cause_col)[qty_col].sum() * qty_factor
@@ -1037,14 +972,14 @@ def render_scrap_module():
         else:
             top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
 
-        # 5. Visual Export Buttons
+        # Generate Visual Artifacts
         jpg_bytes_daily = m2_generate_scrap_jpg(
             df_day_filtered,
             sel_date_obj,
             total_rej_pcs,
             total_rej_ton,
-            prev_total_ton,
-            prev_avg_ton,
+            prev_as_of_total_ton,
+            prev_as_of_avg_ton,
             curr_as_of_total_ton,
             curr_as_of_avg_ton,
             high_rej_count,
@@ -1058,6 +993,9 @@ def render_scrap_module():
             gf_share_pct,
             ff_share_pct,
             top3_summary_list,
+            prev_abbr=prev_abbr,
+            curr_abbr=curr_abbr,
+            sel_day_num=sel_day_num,
             min_cutoff=min_cutoff,
         )
 
@@ -1084,22 +1022,22 @@ def render_scrap_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 6 KPI Cards in Web Dashboard
+        # 6 KPI Cards in Web Dashboard (Like-for-Like: Day 1 to N)
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
-            f'<div class="kpi-card indigo"><div class="kpi-title">PREV MO. TOTAL</div><div class="kpi-val">{prev_total_ton:.2f} T</div><div class="kpi-sub">Total Rejection</div></div>',
+            f'<div class="kpi-card indigo"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior MTD Total</div></div>',
             unsafe_allow_html=True,
         )
         k2.markdown(
-            f'<div class="kpi-card teal"><div class="kpi-title">PREV MO. AVG</div><div class="kpi-val">{prev_avg_ton:.2f} T/D</div><div class="kpi-sub">Daily Baseline</div></div>',
+            f'<div class="kpi-card teal"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} AVG</div><div class="kpi-val">{prev_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">Prior Daily Baseline</div></div>',
             unsafe_allow_html=True,
         )
         k3.markdown(
-            f'<div class="kpi-card blue"><div class="kpi-title">THIS MO. AS OF</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>',
+            f'<div class="kpi-card blue"><div class="kpi-title">{curr_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">Current MTD Total</div></div>',
             unsafe_allow_html=True,
         )
         k4.markdown(
-            f'<div class="kpi-card purple"><div class="kpi-title">THIS MO. AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">As of Day {sel_day_num}</div></div>',
+            f'<div class="kpi-card purple"><div class="kpi-title">{curr_abbr.upper()} 01–{sel_day_num:02d} AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">Current MTD Pace</div></div>',
             unsafe_allow_html=True,
         )
         k5.markdown(
@@ -1135,8 +1073,8 @@ Dear Sir,
 
 These are the line records from *Plastic-3* where rejection exceeded *{min_cutoff} pieces*:
 
-🔹 *Prev. Month Total:* {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)
-🔹 *Present Month (As of Today):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
+🔹 *Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):* {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)
+🔹 *Present Month ({curr_abbr} 01–{sel_day_num:02d}):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
 {variance_line_plain}
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
@@ -1148,8 +1086,8 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
                     <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
-                    <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month Total:</b> {prev_total_ton:.2f} Tons ({prev_avg_ton:.2f} T/Day)</p>
-                    <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month (As of Today):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):</b> {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month ({curr_abbr} 01–{sel_day_num:02d}):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
                     {variance_line_html}
                     <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
                 </div>""",
@@ -1163,7 +1101,7 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
 
         st.divider()
 
-        # Section 3: Cause-Wise Rejection Defect Analysis with Download Button
+        # Section 3: Cause-Wise Rejection Defect Analysis
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
@@ -1189,7 +1127,7 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
 
         st.divider()
 
-        # Section 4: Lineman-Wise Analysis with Download Button
+        # Section 4: Lineman-Wise Analysis
         c_line_hdr, c_line_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_line_hdr:
             st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
