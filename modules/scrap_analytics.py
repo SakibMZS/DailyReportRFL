@@ -3,10 +3,13 @@ import re
 import textwrap
 import streamlit as st
 import pandas as pd
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-# Centralized Floor Mappings from central config
+# Centralized Floor Mappings from config
 from config import POS_MAP, LINE_MAP
 
 
@@ -132,6 +135,84 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
     if not df_res.empty:
         df_res = df_res.sort_values("Qty", ascending=False).reset_index(drop=True)
     return df_res
+
+
+def m2_export_rejection_excel(df_day_filtered):
+    """Exports daily critical rejection lines (>min_cutoff) matching image_ba46d3.jpg formatting."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Critical Rejection Log"
+    ws.views.sheetView[0].showGridLines = True
+
+    # Styling Palette
+    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    data_font = Font(name="Calibri", size=10, color="000000")
+    summary_font = Font(name="Calibri", size=11, bold=True, color="DC2626")
+    summary_qty_font = Font(name="Calibri", size=11, bold=True, color="000000")
+
+    thin_border = Border(
+        left=Side(style="thin", color="000000"),
+        right=Side(style="thin", color="000000"),
+        top=Side(style="thin", color="000000"),
+        bottom=Side(style="thin", color="000000"),
+    )
+
+    headers = ["Position", "Machine", "Causes", "Qty", "Mold"]
+    ws.append(headers)
+
+    for col_num in range(1, 6):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = yellow_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center" if col_num == 4 else "left", vertical="center")
+        cell.border = thin_border
+
+    ws.row_dimensions[1].height = 24
+
+    current_row = 2
+    for _, row in df_day_filtered.iterrows():
+        ws.cell(row=current_row, column=1, value=str(row["Position"])).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=current_row, column=2, value=str(row["Machine"])).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=current_row, column=3, value=str(row["Causes"])).alignment = Alignment(horizontal="left", vertical="center")
+        ws.cell(row=current_row, column=4, value=int(row["Qty"])).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=current_row, column=5, value=str(row["Mold"])).alignment = Alignment(horizontal="left", vertical="center")
+
+        for col_num in range(1, 6):
+            c = ws.cell(row=current_row, column=col_num)
+            c.font = data_font
+            c.border = thin_border
+
+        ws.row_dimensions[current_row].height = 20
+        current_row += 1
+
+    # Summary Row
+    ws.cell(row=current_row, column=1, value="")
+    ws.cell(row=current_row, column=2, value="")
+    sum_cell = ws.cell(row=current_row, column=3, value="Summary >>")
+    sum_cell.font = summary_font
+    sum_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    qty_sum_cell = ws.cell(row=current_row, column=4, value=f"=SUM(D2:D{current_row-1})")
+    qty_sum_cell.font = summary_qty_font
+    qty_sum_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.cell(row=current_row, column=5, value="")
+
+    for col_num in range(1, 6):
+        ws.cell(row=current_row, column=col_num).border = thin_border
+
+    ws.row_dimensions[current_row].height = 22
+
+    # Column Auto-fit
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def m2_compute_cause_breakdown(df_scope):
@@ -292,7 +373,7 @@ def m2_generate_scrap_jpg(
     date_formatted = sel_date_obj.strftime("%B %d, %Y")
     day_formatted = sel_date_obj.strftime("%B %d")
 
-    # 1. Clean Top Header
+    # Header
     ax.text(
         1.5,
         98.4,
@@ -321,7 +402,7 @@ def m2_generate_scrap_jpg(
         va="top",
     )
 
-    # 2. Dynamic KPI Cards Row (Like-for-Like: Day 1 to N)
+    # Dynamic KPI Cards Row (Like-for-Like: Day 1 to N)
     kpis = [
         (f"{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior MTD Total", "#64748b"),
         (f"{prev_abbr.upper()} 01–{sel_day_num:02d} AVG", f"{prev_as_of_avg_ton:.2f} T/Day", "Prior Daily Baseline", "#64748b"),
@@ -360,7 +441,6 @@ def m2_generate_scrap_jpg(
         )
         ax.text(x0 + kpi_w / 2, 87.8, sub, color="#94a3b8", fontsize=6.8, ha="center")
 
-    # 3. Main Workspace Containers
     left_card = patches.FancyBboxPatch(
         (1.5, 1.5),
         74.0,
@@ -400,7 +480,6 @@ def m2_generate_scrap_jpg(
     ax.add_patch(right_card)
     ax.text(78.0, 83.5, "EXECUTIVE ANALYSIS", color="#0f172a", fontsize=11.0, fontweight="bold")
 
-    # Dynamic Table
     n_count = len(df_day_filtered)
 
     if n_count <= 30:
@@ -470,7 +549,6 @@ def m2_generate_scrap_jpg(
                 ax.text(left_x + 24.0, row_y + 0.35, mold_wrap, color="#334155", fontsize=6.2, va="center")
                 row_y -= row_step
 
-    # Right Executive Brief: 2 Cards
     c1 = patches.FancyBboxPatch(
         (77.5, 42.5),
         20.0,
@@ -547,7 +625,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     tot_entries = df_cause["Entries_Count"].sum()
     tot_causes = len(df_cause)
 
-    # 1. Clean Top Header & Span Badge
     ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
     ax.text(1.5, 95.8, "Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
     
@@ -555,7 +632,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
-    # 2. KPI Cards Row
     top_driver_name = df_cause.iloc[0]["Cause"] if not df_cause.empty else "-"
     top_driver_pct = df_cause.iloc[0]["% Share Raw"] if not df_cause.empty else 0.0
 
@@ -576,7 +652,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
         ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
-    # 3. Main Workspace Containers
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
     ax.text(3.5, 83.5, f"CAUSE-WISE DEFECT VOLUME & TONNAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
@@ -621,7 +696,6 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
             ax.text(left_x + 34.8, row_y + 0.35, f"{share_val:.1f}%", color='#b91c1c' if share_val >= 10 else '#0f172a', fontsize=6.6, fontweight='bold' if share_val >= 10 else 'normal', ha='right', va='center')
             row_y -= row_step
 
-    # 4. Right Side 2 Action Cards
     cum_share = 0.0
     vital_few = []
     for _, r in df_cause.iterrows():
@@ -691,7 +765,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     tot_entries = df_lineman["Logged_Entries"].sum()
     tot_linemen = len(df_lineman)
 
-    # 1. Clean Top Header & Span Badge
     ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
     ax.text(1.5, 95.8, "Line-Level Quality Logging Activity & Tonnage Accountability  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
     
@@ -699,7 +772,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
-    # 2. KPI Cards Row
     top_lineman_name = df_lineman.iloc[0]["Lineman (Added By)"] if not df_lineman.empty else "-"
     top_lineman_pcs = df_lineman.iloc[0]["Rej_Pcs"] if not df_lineman.empty else 0
     top_lineman_pct = df_lineman.iloc[0]["% Pcs Share Raw"] if not df_lineman.empty else 0.0
@@ -721,7 +793,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
         ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
-    # 3. Main Workspace Containers
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
     ax.text(3.5, 83.5, f"LINEMAN REJECTION LOGGING & COVERAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
@@ -731,7 +802,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     ax.add_patch(right_card)
     ax.text(78.0, 83.5, "OPERATIONAL AUDIT", color='#0f172a', fontsize=10.5, fontweight='bold')
 
-    # Table rendering in Left Card
     left_x = 2.6
     tbl_w = 71.3
     tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
@@ -767,7 +837,6 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
         ax.text(left_x + 70.2, row_y + 0.35, f"{ton_share:.1f}%", color='#2563eb' if ton_share >= 12 else '#0f172a', fontsize=6.8, fontweight='bold' if ton_share >= 12 else 'normal', ha='right', va='center')
         row_y -= row_step
 
-    # 4. Right Side 2 Action Cards
     top_3_linemen = df_lineman.head(3)
     top_3_pcs_sum = top_3_linemen["% Pcs Share Raw"].sum()
     c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f8fafc', edgecolor='#cbd5e1', linewidth=0.8)
@@ -860,7 +929,7 @@ def render_scrap_module():
 
         # Control Bar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_cut, c_snap = st.columns([1.5, 1.2, 1.5], gap="medium")
+        c_date, c_cut, c_snap, c_excel = st.columns([1.3, 1.0, 1.2, 1.5], gap="small")
         with c_date:
             sel_date_str = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
         with c_cut:
@@ -999,6 +1068,8 @@ def render_scrap_module():
             min_cutoff=min_cutoff,
         )
 
+        excel_bytes_filtered = m2_export_rejection_excel(df_day_filtered)
+
         jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
             df_cause_as_of,
             sel_date_obj,
@@ -1014,15 +1085,25 @@ def render_scrap_module():
         with c_snap:
             st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label="📸 Download 1-Page JPG Report",
+                label="📸 Download 1-Page JPG",
                 data=jpg_bytes_daily,
                 file_name=f"Daily_Rejection_Report_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
+
+        with c_excel:
+            st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+            st.download_button(
+                label=f"📥 Download Excel (>{min_cutoff} Pcs)",
+                data=excel_bytes_filtered,
+                file_name=f"Rejection_Log_Over{min_cutoff}Pcs_{sel_date_str}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 6 KPI Cards in Web Dashboard (Like-for-Like: Day 1 to N)
+        # 6 KPI Cards in Web Dashboard (Like-for-Like)
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
             f'<div class="kpi-card indigo"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior MTD Total</div></div>',
