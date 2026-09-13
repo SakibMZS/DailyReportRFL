@@ -96,6 +96,7 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["To_DT"] = pd.to_datetime(df_clean[to_col], errors="coerce") if to_col else pd.NaT
     df_clean["Is_Ongoing"] = df_clean["To_DT"].isna()
 
+    # Fallback to prevent data loss when cause wasn't filled yet
     df_clean["CauseClean"] = (
         df_clean[cause_col].fillna("Unassigned / Pending Log*").astype(str).str.replace("*", "", regex=False).str.strip()
     )
@@ -112,9 +113,9 @@ def m3_parse_downtime_workbook(file_bytes):
 
 def slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=None):
     """
-    Slices stoppages into 8 AM to 8 AM operational days.
-    Operational date D = window from (D 08:00:00) to (D+1 08:00:00).
-    Ongoing incidents are capped at cutoff_cutoff_dt (or active operational date at 08:00:00).
+    Slices multi-day and overnight stoppages into 8 AM to 8 AM operational days.
+    Operational day D = window from (D 08:00:00) to (D+1 08:00:00).
+    Ongoing incidents are evaluated up to cutoff_cutoff_dt.
     """
     records = []
 
@@ -355,7 +356,7 @@ def m3_generate_2x2_executive_jpg(
     )
     ax.add_patch(banner)
     ax.text(3.5, 96.8, "OPERATIONAL ANALYTICS — NON-PRODUCTIVE TIME (NPT) REPORT", color="#ffffff", fontsize=14.5, fontweight="bold", va="center")
-    ax.text(3.5, 94.2, f"{span_title}  |  Plastic-3 Production Floor (61 IMMs Standard Baseline | 8 AM–8 AM Production Day)", color="#38bdf8", fontsize=9.5, fontweight="bold", va="center")
+    ax.text(3.5, 94.2, f"{span_title}  |  Plastic-3 Production Floor ({TOTAL_PLANT_MCS} IMMs Standard Baseline | 8 AM–8 AM Production Day)", color="#38bdf8", fontsize=9.5, fontweight="bold", va="center")
     ax.text(96.5, 95.5, f"Report Date: {sel_date_obj.strftime('%d-%m-%Y')}", color="#94a3b8", fontsize=9.0, ha="right", va="center")
 
     w_box, h_box = 47.8, 43.5
@@ -616,7 +617,7 @@ def render_npt_module():
     else:
         df_parsed = m3_parse_downtime_workbook(st.session_state["m3_file_bytes"])
 
-        # Determine preliminary operational day availability (8 AM to 8 AM)
+        # Operational day date options (8 AM to 8 AM window)
         raw_start_dates = (df_parsed["From_DT"].dropna() - pd.Timedelta(hours=8)).dt.normalize()
         avail_dates_list = sorted(raw_start_dates.unique().tolist())
         avail_cutoff_strs = [d.strftime("%Y-%m-%d") for d in avail_dates_list]
@@ -635,10 +636,8 @@ def render_npt_module():
         cutoff_day = sel_date_obj.day
         day_formatted = sel_date_obj.strftime("%d-%b")
 
-        # Set evaluation boundary at cutoff date + 1 day at 08:00:00 AM
+        # Slice all downtime up to cutoff date + 1 day at 08:00:00 AM
         cutoff_eval_dt = sel_date_obj + pd.Timedelta(days=1, hours=8)
-
-        # Slice all downtime records up to the evaluation boundary
         df_downtime = slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=cutoff_eval_dt)
 
         all_months = sorted(df_downtime["YearMonth"].dropna().unique())
@@ -677,7 +676,6 @@ def render_npt_module():
 
         selected_top_causes = st.session_state["top_10_causes_selected"]
 
-        # Filter by selected date and MTD
         df_last_day = active_m_df[active_m_df["DateStr"] == sel_cutoff_str].copy()
         df_mtd = active_m_df[active_m_df["DayNum"] <= cutoff_day].copy()
 
@@ -696,6 +694,15 @@ def render_npt_module():
 
         tot_curr_mtd_hrs = df_mtd["Hours"].sum()
         tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
+
+        # Plant Capacity Math: NPT% = Total Hours / (24 * TOTAL_PLANT_MCS * n)
+        tot_avail_period = TOTAL_PLANT_MCS * 24.0 * max(1, cutoff_day)
+        curr_mtd_npt_pct = (tot_curr_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
+        prev_mtd_npt_pct = (tot_prev_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
+
+        last_day_total_hrs = df_last_day["Hours"].sum()
+        last_day_avail = DAILY_AVAILABLE_HRS  # TOTAL_PLANT_MCS * 24.0
+        last_day_npt_pct = (last_day_total_hrs / last_day_avail * 100.0) if last_day_avail > 0 else 0.0
 
         curr_share_dict = (
             (df_mtd.groupby("Cause")["Hours"].sum() / tot_curr_mtd_hrs * 100).to_dict()
@@ -747,15 +754,34 @@ def render_npt_module():
         st.markdown("</div>", unsafe_allow_html=True)
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.markdown(f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div><div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div><div class="kpi-sub">Pace: {tot_curr_mtd_hrs/cutoff_day:.1f} H/Day</div></div>', unsafe_allow_html=True)
-        k2.markdown(f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div><div class="kpi-val">{size_summary_pct:.2f}%</div><div class="kpi-sub">Of {TOTAL_PLANT_MCS*24*cutoff_day:,.0f} H Available</div></div>', unsafe_allow_html=True)
+        k1.markdown(
+            f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div>'
+            f'<div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div>'
+            f'<div class="kpi-sub">{curr_mtd_npt_pct:.2f}% Plant NPT ({tot_curr_mtd_hrs/cutoff_day:.1f} H/Day)</div></div>',
+            unsafe_allow_html=True,
+        )
+        k2.markdown(
+            f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div>'
+            f'<div class="kpi-val">{size_summary_pct:.2f}%</div>'
+            f'<div class="kpi-sub">Of {tot_avail_period:,.0f} H Available</div></div>',
+            unsafe_allow_html=True,
+        )
         
-        last_day_total_hrs = df_last_day["Hours"].sum()
         ongoing_count = df_last_day["Slice_Ongoing"].sum()
-        k3.markdown(f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div><div class="kpi-val">{last_day_total_hrs:.1f} H</div><div class="kpi-sub">{(last_day_total_hrs/DAILY_AVAILABLE_HRS*100):.1f}% Day Cap ({ongoing_count} Active)</div></div>', unsafe_allow_html=True)
+        k3.markdown(
+            f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div>'
+            f'<div class="kpi-val">{last_day_total_hrs:.1f} H</div>'
+            f'<div class="kpi-sub">{last_day_npt_pct:.2f}% Day NPT ({ongoing_count} Active)</div></div>',
+            unsafe_allow_html=True,
+        )
         
         maint_last_hrs = df_last_day[df_last_day["Is_Maintenance"]]["Hours"].sum()
-        k4.markdown(f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div><div class="kpi-val">{maint_last_hrs:.1f} H</div><div class="kpi-sub">{(maint_last_hrs/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.1f}% NPT Share</div></div>', unsafe_allow_html=True)
+        k4.markdown(
+            f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div>'
+            f'<div class="kpi-val">{maint_last_hrs:.1f} H</div>'
+            f'<div class="kpi-sub">{(maint_last_hrs/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.1f}% NPT Share</div></div>',
+            unsafe_allow_html=True,
+        )
 
         st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
@@ -802,7 +828,7 @@ def render_npt_module():
 
             curr_abbr_txt = curr_month_name[:3].capitalize()
             prev_abbr_txt = prev_month_name[:3].capitalize()
-            comp_like_for_like_str = f"vs. {tot_prev_mtd_hrs:,.2f} Hrs in {prev_abbr_txt} 01–{cutoff_day:02d}"
+            comp_like_for_like_str = f"vs. {tot_prev_mtd_hrs:,.2f} Hrs ({prev_mtd_npt_pct:.2f}% NPT) in {prev_abbr_txt} 01–{cutoff_day:02d}"
 
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
@@ -810,14 +836,14 @@ Dear Sir,
 
 *1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})*
 
-Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_hrs:,.2f} Hours* ({comp_like_for_like_str}).
+Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)* ({comp_like_for_like_str}).
 
 *Top Contributing Causes ({curr_month_name}):*
 {chr(10).join(top_causes_lines)}
 
 *2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})*
 {chr(10).join(maint_lines)}
-*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.0f}% overall plant NPT share)
+*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.0f}% of daily NPT | {(tot_tech_day/DAILY_AVAILABLE_HRS*100):.2f}% daily plant capacity)
 
 *3. Mold Change & SMED Performance (Last Day: {day_formatted})*
 • Mold Changes Completed: *{smed_setups_last} setups*
@@ -832,10 +858,10 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                     <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
                     <h5>1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})</h5>
-                    <p>Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours</b> ({comp_like_for_like_str}).</p>
+                    <p>Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
                     <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
-                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs</p>
+                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/DAILY_AVAILABLE_HRS*100):.2f}% daily plant capacity)</p>
                     <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
                     <p>• Mold Changes Completed: <b>{smed_setups_last} setups</b> ({smed_hrs_last:.2f} Hours | Avg: <b>{smed_avg_min_last:.2f} Min/change</b>)<br>
                     • Involved Machines: {smed_mcs_str}<br>
