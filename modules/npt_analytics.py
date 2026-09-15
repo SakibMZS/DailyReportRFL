@@ -1,10 +1,17 @@
 import io
+import os
+import sys
 import textwrap
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+
+# Ensure project root directory is on sys.path for robust sub-module imports
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 from config import (
     MAINTENANCE_CAUSES,
@@ -70,7 +77,7 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["To_DT"] = pd.to_datetime(df_clean[to_col], errors="coerce") if to_col else pd.NaT
     df_clean["Is_Ongoing"] = df_clean["To_DT"].isna()
 
-    # Fallback to prevent data loss when cause is not yet assigned
+    # Prevent data loss when cause has not been assigned yet
     df_clean["CauseClean"] = (
         df_clean[cause_col].fillna("Unassigned / Pending Log*").astype(str).str.replace("*", "", regex=False).str.strip()
     )
@@ -566,6 +573,7 @@ def render_npt_module():
     st.divider()
 
     if "m3_file_bytes" not in st.session_state:
+        # Data Ingestion Requirement Banner
         st.markdown(
             """
             <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #0284c7; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
@@ -617,7 +625,7 @@ def render_npt_module():
     else:
         df_parsed = m3_parse_downtime_workbook(st.session_state["m3_file_bytes"])
 
-        # Retrieve dynamic floor section properties resolved from file
+        # Auto-detect section configuration dynamically from uploaded report
         detected_sec = df_parsed["Detected_Section"].iloc[0] if "Detected_Section" in df_parsed.columns else "RIP> DPL> Plastic-3"
         sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_nos_map, unique_sizes = resolve_section_config(df_parsed, fallback_name=detected_sec)
 
@@ -626,12 +634,14 @@ def render_npt_module():
         avail_dates_list = sorted(raw_start_dates.unique().tolist())
         avail_cutoff_strs = [d.strftime("%Y-%m-%d") for d in avail_dates_list]
 
+        section_display_name = sec_name.split(">")[-1].strip()
+
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_causes, c_snap = st.columns([1.3, 1.8, 1.3], gap="small")
 
         with c_date:
             sel_cutoff_str = st.selectbox(
-                f"📅 **Operational Cutoff Date (8 AM to 8 AM | {sec_name.split('>')[-1].strip()})**",
+                f"📅 **Operational Cutoff Date (8 AM to 8 AM | {section_display_name})**",
                 avail_cutoff_strs,
                 index=len(avail_cutoff_strs) - 1,
             )
@@ -723,8 +733,6 @@ def render_npt_module():
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day, total_plant_mcs, size_nos_map, unique_sizes)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, daily_avail_hrs, total_plant_mcs, max_days=7)
-
-        section_display_name = sec_name.split(">")[-1].strip()
 
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
