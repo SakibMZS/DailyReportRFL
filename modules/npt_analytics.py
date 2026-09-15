@@ -7,28 +7,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 from config import (
-    TOTAL_PLANT_MCS,
-    DAILY_AVAILABLE_HRS,
-    POS_MAP,
-    LINE_MAP,
     MAINTENANCE_CAUSES,
-    EXCEL_SIZES,
+    parse_machine_size,
+    resolve_section_config,
 )
-
-SIZE_NOS_MAP = {
-    "160": 9,
-    "120": 13,
-    "90": 3,
-    "280": 3,
-    "380": 19,
-    "330": 4,
-    "470": 1,
-    "530": 3,
-    "800": 2,
-    "270": 1,
-    "250": 1,
-    "428": 2,
-}
 
 DEFAULT_TOP_10_CAUSES = [
     "No Demand",
@@ -49,14 +31,6 @@ def get_col(df, candidates, default=None):
         if c in df.columns:
             return c
     return default
-
-
-def extract_mc_size(pos_val, mc_val):
-    text = f"{pos_val} {mc_val}".upper()
-    for sz in sorted(EXCEL_SIZES, key=len, reverse=True):
-        if sz in text:
-            return sz
-    return "Other"
 
 
 # =========================================================
@@ -96,7 +70,7 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["To_DT"] = pd.to_datetime(df_clean[to_col], errors="coerce") if to_col else pd.NaT
     df_clean["Is_Ongoing"] = df_clean["To_DT"].isna()
 
-    # Fallback to prevent data loss when cause wasn't filled yet
+    # Fallback to prevent data loss when cause is not yet assigned
     df_clean["CauseClean"] = (
         df_clean[cause_col].fillna("Unassigned / Pending Log*").astype(str).str.replace("*", "", regex=False).str.strip()
     )
@@ -104,9 +78,12 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["Is_Maintenance"] = df_clean["Cause"].isin(MAINTENANCE_CAUSES)
     df_clean["Is_SMED"] = df_clean["Cause"].astype(str).str.strip() == "Mold Change*"
 
-    df_clean["Position"] = df_clean[mc_col].astype(str).map(POS_MAP).fillna("-")
-    df_clean["Line"] = df_clean[mc_col].astype(str).map(LINE_MAP).fillna("-")
-    df_clean["Size"] = df_clean.apply(lambda r: extract_mc_size(r["Position"], r[mc_col]), axis=1)
+    # Auto-resolve section configuration dynamically
+    sec_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_clean)
+
+    df_clean["Detected_Section"] = sec_name
+    df_clean["Position"] = df_clean[mc_col].astype(str).map(pos_map).fillna(df_clean[mc_col].astype(str))
+    df_clean["Size"] = df_clean[mc_col].apply(parse_machine_size)
 
     return df_clean
 
@@ -170,12 +147,12 @@ def slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=None):
 # =========================================================
 # 2. COMPUTATION HELPERS
 # =========================================================
-def m3_compute_size_wise_npt(df_scope, cutoff_days):
+def m3_compute_size_wise_npt(df_scope, cutoff_days, total_plant_mcs, size_nos_map, unique_sizes):
     records = []
     tot_hrs_all = df_scope["Hours"].sum()
 
-    for sz in EXCEL_SIZES:
-        nos = SIZE_NOS_MAP.get(sz, 0)
+    for sz in unique_sizes:
+        nos = size_nos_map.get(sz, 0)
         sz_hrs = df_scope[df_scope["Size"] == sz]["Hours"].sum()
         avail_hrs = nos * 24.0 * max(1, cutoff_days)
         cap_pct = (sz_hrs / avail_hrs * 100.0) if avail_hrs > 0 else 0.0
@@ -188,7 +165,7 @@ def m3_compute_size_wise_npt(df_scope, cutoff_days):
         })
 
     df_res = pd.DataFrame(records)
-    tot_avail = TOTAL_PLANT_MCS * 24.0 * max(1, cutoff_days)
+    tot_avail = total_plant_mcs * 24.0 * max(1, cutoff_days)
     summary_pct = (tot_hrs_all / tot_avail * 100.0) if tot_avail > 0 else 0.0
 
     return df_res, tot_hrs_all, summary_pct
@@ -224,7 +201,7 @@ def m3_compute_smed_table(df_scope, max_days=7):
     return daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]], tot_mtd_setups, tot_mtd_time, mtd_avg_smed
 
 
-def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
+def m3_compute_maint_daily_table(df_scope, cutoff_days, daily_available_hrs, total_plant_mcs, max_days=7):
     maint_causes = [
         "Machine Problem*",
         "Robot Problem*",
@@ -247,7 +224,7 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
             maint_sum += c_hrs
 
         row["Total Hours"] = round(maint_sum, 2)
-        share_pct = (maint_sum / DAILY_AVAILABLE_HRS * 100.0) if DAILY_AVAILABLE_HRS > 0 else 0.0
+        share_pct = (maint_sum / daily_available_hrs * 100.0) if daily_available_hrs > 0 else 0.0
         row["Total Share"] = f"{round(share_pct):.0f}%"
         records.append(row)
 
@@ -261,7 +238,7 @@ def m3_compute_maint_daily_table(df_scope, cutoff_days, max_days=7):
         tot_maint_all += c_tot
 
     mtd_summary_row["Total Hours"] = round(tot_maint_all, 1)
-    tot_avail_period = TOTAL_PLANT_MCS * 24.0 * max(1, cutoff_days)
+    tot_avail_period = total_plant_mcs * 24.0 * max(1, cutoff_days)
     mtd_share = (tot_maint_all / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
     mtd_summary_row["Total Share"] = f"{round(mtd_share):.0f}%"
 
@@ -283,7 +260,6 @@ def m3_compute_consolidated_daily_log(df_day):
                 )
             )
         )
-        line = grp["Line"].iloc[0]
         day_hrs = grp["Hours"].sum()
         start_t = str(grp["From_DT"].min())[:16]
 
@@ -297,7 +273,6 @@ def m3_compute_consolidated_daily_log(df_day):
         records.append({
             "Position": pos,
             "Machine": mc,
-            "Line": line,
             "Status": status,
             "Combined Causes": causes,
             "Closed Hours": round(day_hrs, 2),
@@ -337,6 +312,8 @@ def m3_generate_2x2_executive_jpg(
     smed_avg_min,
     df_maint_grid,
     maint_summary_dict,
+    section_label,
+    total_plant_mcs,
 ):
     fig, ax = plt.subplots(figsize=(20.0, 11.5), dpi=240)
     fig.patch.set_facecolor("#f8fafc")
@@ -356,7 +333,7 @@ def m3_generate_2x2_executive_jpg(
     )
     ax.add_patch(banner)
     ax.text(3.5, 96.8, "OPERATIONAL ANALYTICS — NON-PRODUCTIVE TIME (NPT) REPORT", color="#ffffff", fontsize=14.5, fontweight="bold", va="center")
-    ax.text(3.5, 94.2, f"{span_title}  |  Plastic-3 Production Floor ({TOTAL_PLANT_MCS} IMMs Standard Baseline | 8 AM–8 AM Production Day)", color="#38bdf8", fontsize=9.5, fontweight="bold", va="center")
+    ax.text(3.5, 94.2, f"{span_title}  |  {section_label} ({total_plant_mcs} Machines Baseline | 8 AM–8 AM Production Day)", color="#38bdf8", fontsize=9.5, fontweight="bold", va="center")
     ax.text(96.5, 95.5, f"Report Date: {sel_date_obj.strftime('%d-%m-%Y')}", color="#94a3b8", fontsize=9.0, ha="right", va="center")
 
     w_box, h_box = 47.8, 43.5
@@ -504,7 +481,7 @@ def m3_generate_2x2_executive_jpg(
 
     ax.add_patch(patches.Rectangle((50.7, y_g2 - 1.1), w_box, step_g2, facecolor="#fff1f2", edgecolor="none"))
     ax.text(54.0, y_g2 + 0.3, "Summary >>", color="#e11d48", fontsize=8.0, fontweight="bold", va="center")
-    ax.text(65.5, y_g2 + 0.3, f"{TOTAL_PLANT_MCS}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
+    ax.text(65.5, y_g2 + 0.3, f"{total_plant_mcs}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
     ax.text(77.5, y_g2 + 0.3, f"{size_tot_hrs:,.1f}", color="#0f172a", fontsize=8.0, fontweight="bold", va="center")
     ax.text(90.5, y_g2 + 0.3, f"{size_summary_pct:.1f}%", color="#dc2626", fontsize=8.2, fontweight="bold", va="center")
 
@@ -589,21 +566,44 @@ def render_npt_module():
     st.divider()
 
     if "m3_file_bytes" not in st.session_state:
+        st.markdown(
+            """
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #0284c7; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
+                <div style="color: #0284c7; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.35rem;">
+                    DATA INGESTION REQUIREMENT
+                </div>
+                <div style="color: #0f172a; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
+                    Operational Date Range Specification
+                </div>
+                <div style="color: #475569; font-size: 0.9rem; line-height: 1.5;">
+                    Please upload the relevant file containing data <b>from the start of the last month to the current month's latest operational date</b>.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         c_up1, c_up2 = st.columns(2, gap="medium")
         with c_up1:
             st.markdown(
-                '<div style="background:#ffffff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #8b5cf6;">'
-                '<h4 style="margin-top:0; color:#0f172a;">📂 1. Primary Downtime Report (Required)</h4>'
-                '<p style="color:#64748b !important; font-size:0.85rem;">Upload the multi-month or 2-month ERP Downtime workbook.</p></div>',
+                """
+                <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #0284c7;">
+                    <h4 style="margin-top:0; color:#0f172a;">📂 1. Primary Downtime Report (Required)</h4>
+                    <p style="color:#64748b !important; font-size:0.85rem;">Ingest the multi-month ERP Downtime workbook spanning prior month to date.</p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             up_dt = st.file_uploader("Select Downtime Workbook (.xlsx)", type=["xlsx", "xls"], key="up_dt_file")
 
         with c_up2:
             st.markdown(
-                '<div style="background:#ffffff; padding:1.5rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #10b981;">'
-                '<h4 style="margin-top:0; color:#0f172a;">🛠️ 2. Service Maintenance Report (Optional)</h4>'
-                '<p style="color:#64748b !important; font-size:0.85rem;">Upload workshop ticket logs for SMS token audit.</p></div>',
+                """
+                <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #10b981;">
+                    <h4 style="margin-top:0; color:#0f172a;">🛠️ 2. Service Maintenance Report (Optional)</h4>
+                    <p style="color:#64748b !important; font-size:0.85rem;">Upload workshop ticket logs for SMS token audit.</p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             up_sm = st.file_uploader("Select Maintenance Ticket Workbook (.xlsx)", type=["xlsx", "xls"], key="up_sm_file")
@@ -617,6 +617,10 @@ def render_npt_module():
     else:
         df_parsed = m3_parse_downtime_workbook(st.session_state["m3_file_bytes"])
 
+        # Retrieve dynamic floor section properties resolved from file
+        detected_sec = df_parsed["Detected_Section"].iloc[0] if "Detected_Section" in df_parsed.columns else "RIP> DPL> Plastic-3"
+        sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_nos_map, unique_sizes = resolve_section_config(df_parsed, fallback_name=detected_sec)
+
         # Operational day date options (8 AM to 8 AM window)
         raw_start_dates = (df_parsed["From_DT"].dropna() - pd.Timedelta(hours=8)).dt.normalize()
         avail_dates_list = sorted(raw_start_dates.unique().tolist())
@@ -627,7 +631,7 @@ def render_npt_module():
 
         with c_date:
             sel_cutoff_str = st.selectbox(
-                "📅 **Operational Cutoff Date (8 AM to 8 AM)**",
+                f"📅 **Operational Cutoff Date (8 AM to 8 AM | {sec_name.split('>')[-1].strip()})**",
                 avail_cutoff_strs,
                 index=len(avail_cutoff_strs) - 1,
             )
@@ -695,13 +699,13 @@ def render_npt_module():
         tot_curr_mtd_hrs = df_mtd["Hours"].sum()
         tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
 
-        # Plant Capacity Math: NPT% = Total Hours / (24 * TOTAL_PLANT_MCS * n)
-        tot_avail_period = TOTAL_PLANT_MCS * 24.0 * max(1, cutoff_day)
+        # Plant Capacity Math: NPT% = Total Hours / (24 * total_plant_mcs * n)
+        tot_avail_period = total_plant_mcs * 24.0 * max(1, cutoff_day)
         curr_mtd_npt_pct = (tot_curr_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
         prev_mtd_npt_pct = (tot_prev_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
 
         last_day_total_hrs = df_last_day["Hours"].sum()
-        last_day_avail = DAILY_AVAILABLE_HRS  # TOTAL_PLANT_MCS * 24.0
+        last_day_avail = daily_avail_hrs
         last_day_npt_pct = (last_day_total_hrs / last_day_avail * 100.0) if last_day_avail > 0 else 0.0
 
         curr_share_dict = (
@@ -716,9 +720,11 @@ def render_npt_module():
         )
         curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
-        df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day)
+        df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, cutoff_day, total_plant_mcs, size_nos_map, unique_sizes)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
-        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, max_days=7)
+        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, cutoff_day, daily_avail_hrs, total_plant_mcs, max_days=7)
+
+        section_display_name = sec_name.split(">")[-1].strip()
 
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
@@ -740,6 +746,8 @@ def render_npt_module():
             smed_avg_min,
             df_maint_grid,
             maint_summary_dict,
+            section_display_name,
+            total_plant_mcs,
         )
 
         with c_snap:
@@ -747,7 +755,7 @@ def render_npt_module():
             st.download_button(
                 label="📸 Download 2×2 JPG Report",
                 data=jpg_bytes,
-                file_name=f"NPT_4Grid_Report_{sel_cutoff_str}.jpg",
+                file_name=f"NPT_4Grid_Report_{section_display_name}_{sel_cutoff_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -757,13 +765,13 @@ def render_npt_module():
         k1.markdown(
             f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div>'
             f'<div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div>'
-            f'<div class="kpi-sub">{curr_mtd_npt_pct:.2f}% Plant NPT ({tot_curr_mtd_hrs/cutoff_day:.1f} H/Day)</div></div>',
+            f'<div class="kpi-sub">{curr_mtd_npt_pct:.2f}% Section NPT ({tot_curr_mtd_hrs/cutoff_day:.1f} H/Day)</div></div>',
             unsafe_allow_html=True,
         )
         k2.markdown(
-            f'<div class="kpi-card purple"><div class="kpi-title">PLANT CAPACITY NPT %</div>'
+            f'<div class="kpi-card purple"><div class="kpi-title">{section_display_name.upper()} CAPACITY NPT %</div>'
             f'<div class="kpi-val">{size_summary_pct:.2f}%</div>'
-            f'<div class="kpi-sub">Of {tot_avail_period:,.0f} H Available</div></div>',
+            f'<div class="kpi-sub">Of {tot_avail_period:,.0f} H Available ({total_plant_mcs} MCs)</div></div>',
             unsafe_allow_html=True,
         )
         
@@ -789,10 +797,10 @@ def render_npt_module():
 
         with col_left:
             st.markdown(f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {sel_date_obj.strftime('%B %d')} (8 AM–8 AM)")
-            st.caption("Consolidated: Prorated daily duration. Active ongoing breakdowns pinned with ⏳ badge.")
+            st.caption(f"{section_display_name}: Prorated daily duration. Active ongoing breakdowns pinned with ⏳ badge.")
             df_cons_log = m3_compute_consolidated_daily_log(df_last_day)
             if not df_cons_log.empty:
-                display_df = df_cons_log[["Position", "Machine", "Line", "Status", "Combined Causes", "Duration", "Start Time"]]
+                display_df = df_cons_log[["Position", "Machine", "Status", "Combined Causes", "Duration", "Start Time"]]
                 st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
             else:
                 st.success("✅ Zero downtime logged for this date!")
@@ -843,7 +851,7 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
 
 *2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})*
 {chr(10).join(maint_lines)}
-*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.0f}% of daily NPT | {(tot_tech_day/DAILY_AVAILABLE_HRS*100):.2f}% daily plant capacity)
+*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.0f}% of daily NPT | {(tot_tech_day/daily_avail_hrs*100):.2f}% daily section capacity)
 
 *3. Mold Change & SMED Performance (Last Day: {day_formatted})*
 • Mold Changes Completed: *{smed_setups_last} setups*
@@ -855,13 +863,13 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
             st.markdown("#### 📝 EXECUTIVE BRIEFING TEXT")
             st.markdown(
                 f"""<div class="narrative-block">
-                    <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 PLASTIC-3 DAILY NPT & DOWNTIME BRIEF</p>
+                    <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 {section_display_name.upper()} DAILY NPT & DOWNTIME BRIEF</p>
                     <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
                     <h5>1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})</h5>
                     <p>Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
                     <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
-                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/DAILY_AVAILABLE_HRS*100):.2f}% daily plant capacity)</p>
+                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/daily_avail_hrs*100):.2f}% daily section capacity)</p>
                     <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
                     <p>• Mold Changes Completed: <b>{smed_setups_last} setups</b> ({smed_hrs_last:.2f} Hours | Avg: <b>{smed_avg_min_last:.2f} Min/change</b>)<br>
                     • Involved Machines: {smed_mcs_str}<br>
@@ -882,7 +890,7 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
         ])
 
         with tab_grid2:
-            st.markdown(f"#### 📏 MC SIZE-WISE NPT BREAKDOWN (Day 1–{cutoff_day})")
+            st.markdown(f"#### 📏 {section_display_name.upper()} SIZE-WISE NPT BREAKDOWN (Day 1–{cutoff_day})")
             st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
 
         with tab_smed:
