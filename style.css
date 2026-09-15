@@ -1,221 +1,163 @@
-/* =========================================================
-   OPERATIONS CONSOLE — ENTERPRISE CLEAN STYLING
-   ========================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-:root {
-    --bg: #f8fafc;
-    --surface: #ffffff;
-    --text-main: #0f172a;
-    --text-muted: #64748b;
-    --border-color: #e2e8f0;
-    --blue-accent: #2563eb;
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #0f172a;
 }
 
-.stApp {
-    background-color: var(--bg) !important;
-    font-family: 'Inter', sans-serif !important;
-    color: var(--text-main) !important;
+/* Header Banner */
+.top-nav-banner {
+    background: #081225;
+    border-radius: 8px;
+    padding: 1.25rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #1e293b;
+    box-shadow: 0 4px 20px -2px rgba(8, 18, 37, 0.2);
+    margin-bottom: 1.5rem;
 }
 
-/* Hide default streamlit clutter */
-header[data-testid="stHeader"], footer, section[data-testid="stSidebar"] {
-    display: none !important;
-}
-
-.block-container {
-    max-width: 1680px !important;
-    padding-top: 1.2rem !important;
-    padding-bottom: 3.5rem !important;
-    padding-left: 2rem !important;
-    padding-right: 2rem !important;
-}
-
-/* ---------------------------------------------------------
-   BUTTONS (Clean White Cards & Dark Primary Action)
-   --------------------------------------------------------- */
-div.stButton > button {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1.5px solid #cbd5e1 !important;
-    border-radius: 8px !important;
-    padding: 0.5rem 1.2rem !important;
-    font-weight: 700 !important;
-    font-size: 0.86rem !important;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
-    transition: all 0.15s ease-in-out !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    min-height: 42px !important;
-}
-
-div.stButton > button:hover {
-    background-color: #f1f5f9 !important;
-    border-color: #94a3b8 !important;
-    color: #2563eb !important;
-    transform: translateY(-1px) !important;
-}
-
-div.stDownloadButton > button {
-    background-color: #0f172a !important;
-    color: #ffffff !important;
-    border: 1.5px solid #0f172a !important;
-    border-radius: 8px !important;
-    padding: 0.5rem 1.2rem !important;
-    font-weight: 700 !important;
-    font-size: 0.86rem !important;
-    min-height: 42px !important;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12) !important;
-}
-
-div.stDownloadButton > button:hover {
-    background-color: #2563eb !important;
-    border-color: #2563eb !important;
-    color: #ffffff !important;
-}
-
-/* ---------------------------------------------------------
-   CONTROL BAR & FORM INPUTS (Light & Crisp)
-   --------------------------------------------------------- */
-.control-bar-card {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 1rem 1.4rem 0.8rem 1.4rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-    margin-bottom: 1.25rem;
-}
-
-div[data-baseweb="input"], 
-div[data-baseweb="select"],
-div[data-baseweb="base-input"] {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border-color: #cbd5e1 !important;
-    border-radius: 8px !important;
-}
-
-div[data-baseweb="input"] input {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    font-weight: 700 !important;
-    font-size: 0.9rem !important;
-}
-
-label[data-testid="stWidgetLabel"] p {
-    color: #475569 !important;
-    font-weight: 700 !important;
-    font-size: 0.84rem !important;
-    margin-bottom: 0.25rem !important;
-}
-
-/* ---------------------------------------------------------
-   TAB NAVIGATION STYLING (Pill Tabs)
-   --------------------------------------------------------- */
-div[data-testid="stTabs"] {
-    margin-top: 0.4rem !important;
-    margin-bottom: 0.8rem !important;
-}
-
-div[data-testid="stTabs"] div[role="tablist"] {
-    gap: 0.6rem !important;
-    border-bottom: 2px solid #e2e8f0 !important;
-    padding-bottom: 0.2rem !important;
-}
-
-div[data-testid="stTabs"] button[role="tab"] {
-    background-color: #f1f5f9 !important;
-    color: #64748b !important;
-    border-radius: 8px !important;
-    padding: 0.45rem 1rem !important;
-    font-weight: 700 !important;
-    font-size: 0.84rem !important;
-    border: 1px solid #e2e8f0 !important;
-    transition: all 0.15s ease !important;
-}
-
-div[data-testid="stTabs"] button[role="tab"]:hover {
-    background-color: #e2e8f0 !important;
-    color: #0f172a !important;
-}
-
-div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    background-color: #2563eb !important;
-    color: #ffffff !important;
-    border-color: #2563eb !important;
-}
-
-/* ---------------------------------------------------------
-   LIGHT DATAFRAME TABLES
-   --------------------------------------------------------- */
-[data-testid="stDataFrame"] {
-    background-color: #ffffff !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03) !important;
-}
-
-/* ---------------------------------------------------------
-   EXPANDER (Approval Box)
-   --------------------------------------------------------- */
-div[data-testid="stExpander"] {
-    background-color: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 10px !important;
-}
-
-/* ---------------------------------------------------------
-   NARRATIVE CARDS
-   --------------------------------------------------------- */
-.narrative-block {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 1.2rem 1.4rem;
-    font-size: 0.88rem;
-    line-height: 1.6;
-    color: #1e293b;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
-}
-
-.kpi-card {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
-    text-align: center;
-    border-top: 4px solid var(--blue-accent);
-}
-
-.kpi-card.indigo { border-top-color: #6366f1; }
-.kpi-card.teal   { border-top-color: #06b6d4; }
-.kpi-card.blue   { border-top-color: #2563eb; }
-.kpi-card.purple { border-top-color: #8b5cf6; }
-.kpi-card.pink   { border-top-color: #dc2626; }
-.kpi-card.yellow { border-top-color: #f59e0b; }
-
-.kpi-title {
+.brand-block .division-tag {
+    color: #38bdf8;
     font-size: 0.72rem;
-    font-weight: 800;
-    color: #64748b;
+    font-weight: 700;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
     margin-bottom: 0.25rem;
 }
 
-.kpi-val {
-    font-size: 1.45rem;
-    font-weight: 900;
-    color: #0f172a;
-    line-height: 1.2;
+.brand-block .main-title {
+    color: #ffffff;
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
 }
 
-.kpi-sub {
-    font-size: 0.74rem;
+.status-block {
+    text-align: right;
+}
+
+.status-block .org-hierarchy {
     color: #94a3b8;
-    margin-top: 0.2rem;
+    font-size: 0.8rem;
     font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.status-block .org-hierarchy span {
+    color: #f8fafc;
+    font-weight: 700;
+}
+
+.status-block .system-status {
+    color: #22c55e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pulse-indicator {
+    width: 7px;
+    height: 7px;
+    background-color: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #22c55e;
+}
+
+/* Executive Cards */
+.exec-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 2rem;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    margin-bottom: 0.75rem;
+}
+
+.npt-card {
+    border-top: 4px solid #0284c7;
+}
+
+.scrap-card {
+    border-top: 4px solid #b91c1c;
+}
+
+.exec-card:hover {
+    border-color: #94a3b8;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    transform: translateY(-2px);
+}
+
+.card-kicker {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #64748b;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+}
+
+.card-heading {
+    color: #0f172a;
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.85rem 0;
+}
+
+.card-summary {
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0 0 1.5rem 0;
+    flex-grow: 1;
+}
+
+.metric-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tag {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 4px;
+}
+
+/* Ingestion Alert Box in Launchers */
+.ingest-spec-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #0284c7;
+    border-radius: 6px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.ingest-spec-card h4 {
+    margin: 0 0 0.4rem 0;
+    color: #0f172a;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.ingest-spec-card p {
+    margin: 0;
+    color: #475569;
+    font-size: 0.85rem;
+    line-height: 1.45;
 }
