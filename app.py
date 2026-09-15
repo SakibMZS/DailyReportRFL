@@ -12,7 +12,7 @@ importlib.reload(scrap_analytics)
 importlib.reload(npt_analytics)
 
 st.set_page_config(
-    page_title="Operations Console | Industrial Engineering",
+    page_title="RFL Operations Intelligence Portal | RIP-DPL",
     page_icon="🏭",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -30,100 +30,111 @@ load_css("style.css")
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "hub_home"
 
-if "selected_floor" not in st.session_state:
-    st.session_state["selected_floor"] = "Plastic-3"
+if "selected_section" not in st.session_state:
+    st.session_state["selected_section"] = "RIP> DPL> Plastic-3"
+
 
 # =========================================================
 # ROUTING CONTROLLER
 # =========================================================
 
 # ---------------------------------------------------------
-# VIEW 1: ENTERPRISE HUB HOME
+# VIEW 1: EXECUTIVE COMMAND CENTER (LANDING)
 # ---------------------------------------------------------
 if st.session_state["active_view"] == "hub_home":
 
-    # Top Brand Navigation Bar
+    # Top Industrial Corporate Header
     st.markdown(
         """
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1.5rem; background: #091e3a; border-radius: 8px; margin-bottom: 1.5rem;">
-            <div>
-                <div style="color: #38bdf8; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Enterprise Industrial Intelligence</div>
-                <div style="color: #ffffff; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.01em;">OPERATIONS ANALYTICS PORTAL</div>
+        <div class="top-nav-banner">
+            <div class="brand-block">
+                <div class="division-tag">PRAN-RFL GROUP &bull; INDUSTRIAL ENGINEERING DIVISION</div>
+                <div class="main-title">PLANT OPERATIONS ANALYTICS PORTAL</div>
             </div>
-            <div style="color: #94a3b8; font-size: 0.85rem; font-weight: 500;">
-                Injection Molding Division
+            <div class="status-block">
+                <div class="org-hierarchy">DIVISION: <span>RIP &gt; DPL</span></div>
+                <div class="system-status"><span class="pulse-indicator"></span>SYSTEM READY</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Global Context Controls
-    c_context, c_action = st.columns([3, 1], vertical_alignment="center")
-    with c_context:
-        floor_options = ["Plastic-3"]  # Expanded automatically when multi-floor config is plugged in
-        selected_fl = st.selectbox(
-            "Select Manufacturing Section / Floor Baseline",
-            floor_options,
-            index=floor_options.index(st.session_state["selected_floor"]),
-            key="plant_floor_select",
-        )
-        st.session_state["selected_floor"] = selected_fl
+    # Operational Scope Control Toolbar
+    c_scope, c_refresh = st.columns([3.5, 1.0], vertical_alignment="center")
 
-    with c_action:
-        if st.button("Clear Cache & Session", use_container_width=True):
+    with c_scope:
+        # Sections under RIP > DPL (configured for scalable floor additions)
+        section_options = [
+            "RIP> DPL> Plastic-3",
+        ]
+        selected_sec = st.selectbox(
+            "SELECT MANUFACTURING SECTION / OPERATIONAL BASELINE",
+            section_options,
+            index=section_options.index(st.session_state["selected_section"]) if st.session_state["selected_section"] in section_options else 0,
+            key="sec_select",
+        )
+        st.session_state["selected_section"] = selected_sec
+
+    with c_refresh:
+        st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
+        if st.button("Reset Session Cache", use_container_width=True):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.session_state["active_view"] = "hub_home"
-            st.session_state["selected_floor"] = "Plastic-3"
+            st.session_state["selected_section"] = "RIP> DPL> Plastic-3"
             st.rerun()
 
     st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
-    # 2 Core Operational Suites
-    col1, col2 = st.columns(2, gap="large")
+    # Executive Suite Selection Cards
+    col_npt, col_scrap = st.columns(2, gap="large")
 
-    with col1:
+    with col_npt:
         st.markdown(
             """
-            <div class="enterprise-module-card">
-                <div class="card-status-pill status-npt">Operational Suite</div>
-                <h3 class="card-title">Non-Productive Time (NPT) Analytics</h3>
-                <p class="card-desc">
-                    Comprehensive machine breakdown tracking, operational day (8 AM–8 AM) duration slicing, 
-                    technical vs. non-technical downtime attribution, mold setup (SMED) benchmarking, and plant capacity impact analysis.
+            <div class="exec-card npt-card">
+                <div class="card-kicker">OPERATIONAL EFFICIENCY</div>
+                <h2 class="card-heading">Non-Productive Time (NPT) Analytics</h2>
+                <p class="card-summary">
+                    Precision machine breakdown accounting, standardized 8:00 AM &ndash; 8:00 AM operational day slicing, 
+                    technical vs. operational stoppage attribution, mold setup (SMED) tracking, and baseline plant capacity impact.
                 </p>
-                <div class="card-data-requirement">
-                    <span class="req-label">Data Ingestion Requirement:</span><br>
-                    Please upload the relevant file containing data from the start of the last month to the current month's latest operational date.
+                <div class="metric-tags">
+                    <span class="tag">8 AM &ndash; 8 AM Cycle</span>
+                    <span class="tag">Capacity Loss %</span>
+                    <span class="tag">SMED Benchmark</span>
+                    <span class="tag">2&times;2 Executive Export</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("Launch NPT Analytics Module", type="primary", key="btn_launch_npt", use_container_width=True):
+        if st.button("Launch NPT Analytics Console", type="primary", key="btn_npt", use_container_width=True):
             st.session_state["active_view"] = "mod_npt"
             st.rerun()
 
-    with col2:
+    with col_scrap:
         st.markdown(
             """
-            <div class="enterprise-module-card">
-                <div class="card-status-pill status-scrap">Quality Control Suite</div>
-                <h3 class="card-title">Rejection & Scrap Analytics</h3>
-                <p class="card-desc">
-                    Item-level defect volume indexing, scrap weight tonnage reconciliation, Pareto root-cause ranking, 
-                    lineman logging audit, and like-for-like month-over-month variance clearance reporting.
+            <div class="exec-card scrap-card">
+                <div class="card-kicker">QUALITY CONTROL & RECOVERY</div>
+                <h2 class="card-heading">Daily Rejection & Defect Analytics</h2>
+                <p class="card-summary">
+                    Item-level defect piece indexing, scrap tonnage variance, 80/20 Pareto root-cause identification, 
+                    lineman floor logging compliance audits, and executive scrap clearance workflows.
                 </p>
-                <div class="card-data-requirement">
-                    <span class="req-label">Data Ingestion Requirement:</span><br>
-                    Please upload the relevant file containing data from the start of the last month to the current month's latest operational date.
+                <div class="metric-tags">
+                    <span class="tag">Threshold Audits</span>
+                    <span class="tag">Loss Tonnage (T)</span>
+                    <span class="tag">Defect Pareto</span>
+                    <span class="tag">Excel & JPG Clearance</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("Launch Rejection Analytics Module", type="primary", key="btn_launch_scrap", use_container_width=True):
+        if st.button("Launch Rejection Analytics Console", type="primary", key="btn_scrap", use_container_width=True):
             st.session_state["active_view"] = "mod_scrap"
             st.rerun()
 
