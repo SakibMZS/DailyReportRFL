@@ -30,10 +30,6 @@ load_css("style.css")
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "hub_home"
 
-if "selected_section" not in st.session_state:
-    st.session_state["selected_section"] = "RIP> DPL> Plastic-3"
-
-
 # =========================================================
 # ROUTING CONTROLLER
 # =========================================================
@@ -53,41 +49,35 @@ if st.session_state["active_view"] == "hub_home":
             </div>
             <div class="status-block">
                 <div class="org-hierarchy">DIVISION: <span>RIP &gt; DPL</span></div>
-                <div class="system-status"><span class="pulse-indicator"></span>SYSTEM READY</div>
+                <div class="system-status"><span class="pulse-indicator"></span>SYSTEM OPERATIONAL</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Operational Scope Control Toolbar
-    c_scope, c_refresh = st.columns([3.5, 1.0], vertical_alignment="center")
-
-    with c_scope:
-        # Sections under RIP > DPL (configured for scalable floor additions)
-        section_options = [
-            "RIP> DPL> Plastic-3",
-        ]
-        selected_sec = st.selectbox(
-            "SELECT MANUFACTURING SECTION / OPERATIONAL BASELINE",
-            section_options,
-            index=section_options.index(st.session_state["selected_section"]) if st.session_state["selected_section"] in section_options else 0,
-            key="sec_select",
+    # Sub-Header Info Strip
+    c_meta, c_action = st.columns([3.5, 1.0], vertical_alignment="center")
+    with c_meta:
+        st.markdown(
+            """
+            <div style="color: #475569; font-size: 0.88rem; font-weight: 500;">
+                Autonomous Plant Floor Analytics Engine &bull; Automatic Multi-Section Resolution (Plastic-3, 6.1, 6.2, 7.1, 7.2, 7.3)
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        st.session_state["selected_section"] = selected_sec
 
-    with c_refresh:
-        st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
+    with c_action:
         if st.button("Reset Session Cache", use_container_width=True):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
             st.session_state["active_view"] = "hub_home"
-            st.session_state["selected_section"] = "RIP> DPL> Plastic-3"
             st.rerun()
 
-    st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 1.75rem;'></div>", unsafe_allow_html=True)
 
-    # Executive Suite Selection Cards
+    # 2 Core Operational Suites
     col_npt, col_scrap = st.columns(2, gap="large")
 
     with col_npt:
@@ -98,12 +88,12 @@ if st.session_state["active_view"] == "hub_home":
                 <h2 class="card-heading">Non-Productive Time (NPT) Analytics</h2>
                 <p class="card-summary">
                     Precision machine breakdown accounting, standardized 8:00 AM &ndash; 8:00 AM operational day slicing, 
-                    technical vs. operational stoppage attribution, mold setup (SMED) tracking, and baseline plant capacity impact.
+                    technical vs. non-technical stoppage attribution, mold setup (SMED) tracking, and section-specific capacity loss analysis.
                 </p>
                 <div class="metric-tags">
-                    <span class="tag">8 AM &ndash; 8 AM Cycle</span>
-                    <span class="tag">Capacity Loss %</span>
-                    <span class="tag">SMED Benchmark</span>
+                    <span class="tag">8 AM &ndash; 8 AM Window</span>
+                    <span class="tag">Auto-Section Capacity</span>
+                    <span class="tag">SMED Benchmarking</span>
                     <span class="tag">2&times;2 Executive Export</span>
                 </div>
             </div>
@@ -121,12 +111,12 @@ if st.session_state["active_view"] == "hub_home":
                 <div class="card-kicker">QUALITY CONTROL & RECOVERY</div>
                 <h2 class="card-heading">Daily Rejection & Defect Analytics</h2>
                 <p class="card-summary">
-                    Item-level defect piece indexing, scrap tonnage variance, 80/20 Pareto root-cause identification, 
-                    lineman floor logging compliance audits, and executive scrap clearance workflows.
+                    Item-level defect volume indexing, scrap tonnage reconciliation, 80/20 Pareto root-cause identification, 
+                    lineman floor logging compliance audits, and executive clearance reporting.
                 </p>
                 <div class="metric-tags">
                     <span class="tag">Threshold Audits</span>
-                    <span class="tag">Loss Tonnage (T)</span>
+                    <span class="tag">Section Tonnage (T)</span>
                     <span class="tag">Defect Pareto</span>
                     <span class="tag">Excel & JPG Clearance</span>
                 </div>
