@@ -254,19 +254,23 @@ def m2_compute_cause_breakdown(df_scope):
     return res
 
 
-def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr):
-    """Computes like-for-like MoM variance at the defect cause level."""
+def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, include_variances=False):
+    """Computes like-for-like MoM variance at the defect cause level with side-by-side metric pairing."""
     cause_col = "Cause"
     grp_c = df_curr_scope.groupby(cause_col).agg(
         Curr_Pcs=("Qty_Pcs", "sum"),
         Curr_Ton=("Weight_Ton", "sum"),
-        Curr_Logs=("Qty_Pcs", "count")
+        Curr_Entries=("Qty_Pcs", "count"),
     )
-    grp_p = df_prev_scope.groupby(cause_col).agg(
-        Prev_Pcs=("Qty_Pcs", "sum"),
-        Prev_Ton=("Weight_Ton", "sum"),
-        Prev_Logs=("Qty_Pcs", "count")
-    ) if not df_prev_scope.empty else pd.DataFrame(columns=["Prev_Pcs", "Prev_Ton", "Prev_Logs"])
+    grp_p = (
+        df_prev_scope.groupby(cause_col).agg(
+            Prev_Pcs=("Qty_Pcs", "sum"),
+            Prev_Ton=("Weight_Ton", "sum"),
+            Prev_Entries=("Qty_Pcs", "count"),
+        )
+        if not df_prev_scope.empty
+        else pd.DataFrame(columns=["Prev_Pcs", "Prev_Ton", "Prev_Entries"])
+    )
 
     merged = pd.merge(grp_c, grp_p, on=cause_col, how="outer").fillna(0.0)
     merged["Diff_Pcs"] = merged["Curr_Pcs"] - merged["Prev_Pcs"]
@@ -274,28 +278,70 @@ def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, cur
     merged["Trend_%"] = np.where(
         merged["Prev_Pcs"] > 0,
         ((merged["Diff_Pcs"] / merged["Prev_Pcs"]) * 100.0).round(1),
-        0.0
+        0.0,
     )
 
     merged = merged.sort_values("Curr_Pcs", ascending=False).reset_index()
-    merged["Cause"] = merged["Cause"].astype(str).str.replace("*", "", regex=False).str.strip()
+    merged["Cause"] = (
+        merged["Cause"]
+        .astype(str)
+        .str.replace("*", "", regex=False)
+        .str.strip()
+    )
 
-    merged["Curr_Pcs"] = merged["Curr_Pcs"].round().astype(int)
-    merged["Prev_Pcs"] = merged["Prev_Pcs"].round().astype(int)
-    merged["Diff_Pcs"] = merged["Diff_Pcs"].round().astype(int)
-    merged["Curr_Ton"] = merged["Curr_Ton"].round(3)
-    merged["Prev_Ton"] = merged["Prev_Ton"].round(3)
-    merged["Diff_Ton"] = merged["Diff_Ton"].round(3)
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
+    c_curr_ent = f"{curr_abbr} Entries"
+    c_prev_ent = f"{prev_abbr} Entries"
 
-    return merged.rename(columns={
-        "Curr_Pcs": f"{curr_abbr} Pcs",
-        "Prev_Pcs": f"{prev_abbr} Pcs",
-        "Diff_Pcs": "Variance (Pcs)",
-        "Curr_Ton": f"{curr_abbr} Ton",
-        "Prev_Ton": f"{prev_abbr} Ton",
-        "Diff_Ton": "Variance (Ton)",
-        "Trend_%": "MoM Trend %",
-    })
+    merged = merged.rename(
+        columns={
+            "Curr_Pcs": c_curr_pcs,
+            "Prev_Pcs": c_prev_pcs,
+            "Curr_Ton": c_curr_ton,
+            "Prev_Ton": c_prev_ton,
+            "Diff_Pcs": "Variance (Pcs)",
+            "Diff_Ton": "Variance (Ton)",
+            "Trend_%": "MoM Trend %",
+            "Curr_Entries": c_curr_ent,
+            "Prev_Entries": c_prev_ent,
+        }
+    )
+
+    merged[c_curr_pcs] = merged[c_curr_pcs].round().astype(int)
+    merged[c_prev_pcs] = merged[c_prev_pcs].round().astype(int)
+    merged["Variance (Pcs)"] = merged["Variance (Pcs)"].round().astype(int)
+    merged[c_curr_ton] = merged[c_curr_ton].round(3)
+    merged[c_prev_ton] = merged[c_prev_ton].round(3)
+    merged["Variance (Ton)"] = merged["Variance (Ton)"].round(3)
+    merged[c_curr_ent] = merged[c_curr_ent].astype(int)
+    merged[c_prev_ent] = merged[c_prev_ent].astype(int)
+
+    base_cols = [
+        "Cause",
+        c_curr_pcs,
+        c_prev_pcs,
+        c_curr_ton,
+        c_prev_ton,
+        c_curr_ent,
+        c_prev_ent,
+    ]
+    if include_variances:
+        base_cols = [
+            "Cause",
+            c_curr_pcs,
+            c_prev_pcs,
+            c_curr_ton,
+            c_prev_ton,
+            "Variance (Pcs)",
+            "Variance (Ton)",
+            "MoM Trend %",
+            c_curr_ent,
+            c_prev_ent,
+        ]
+    return merged[base_cols]
 
 
 def m2_compute_lineman_breakdown(df_scope):
@@ -333,22 +379,32 @@ def m2_compute_lineman_breakdown(df_scope):
     return res
 
 
-def m2_compute_lineman_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, selected_ops):
-    """Computes like-for-like MoM variance for the selected operators."""
+def m2_compute_lineman_mom_comparison(
+    df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, selected_ops, include_variances=False
+):
+    """Computes like-for-like MoM variance for operators with side-by-side metric pairing."""
     lineman_col = "Added By"
-    df_p_filt = df_prev_scope[df_prev_scope[lineman_col].isin(selected_ops)] if not df_prev_scope.empty else pd.DataFrame()
+    df_p_filt = (
+        df_prev_scope[df_prev_scope[lineman_col].isin(selected_ops)]
+        if not df_prev_scope.empty
+        else pd.DataFrame()
+    )
     df_c_filt = df_curr_scope[df_curr_scope[lineman_col].isin(selected_ops)]
 
     grp_c = df_c_filt.groupby(lineman_col).agg(
         Curr_Pcs=("Qty_Pcs", "sum"),
         Curr_Ton=("Weight_Ton", "sum"),
-        Curr_Logs=("Qty_Pcs", "count")
+        Curr_Entries=("Qty_Pcs", "count"),
     )
-    grp_p = df_p_filt.groupby(lineman_col).agg(
-        Prev_Pcs=("Qty_Pcs", "sum"),
-        Prev_Ton=("Weight_Ton", "sum"),
-        Prev_Logs=("Qty_Pcs", "count")
-    ) if not df_p_filt.empty else pd.DataFrame(columns=["Prev_Pcs", "Prev_Ton", "Prev_Logs"])
+    grp_p = (
+        df_p_filt.groupby(lineman_col).agg(
+            Prev_Pcs=("Qty_Pcs", "sum"),
+            Prev_Ton=("Weight_Ton", "sum"),
+            Prev_Entries=("Qty_Pcs", "count"),
+        )
+        if not df_p_filt.empty
+        else pd.DataFrame(columns=["Prev_Pcs", "Prev_Ton", "Prev_Entries"])
+    )
 
     merged = pd.merge(grp_c, grp_p, on=lineman_col, how="outer").fillna(0.0)
     merged["Diff_Pcs"] = merged["Curr_Pcs"] - merged["Prev_Pcs"]
@@ -356,28 +412,64 @@ def m2_compute_lineman_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, c
     merged["Trend_%"] = np.where(
         merged["Prev_Pcs"] > 0,
         ((merged["Diff_Pcs"] / merged["Prev_Pcs"]) * 100.0).round(1),
-        0.0
+        0.0,
     )
 
     merged = merged.sort_values("Curr_Pcs", ascending=False).reset_index()
-    merged = merged.rename(columns={lineman_col: "Lineman (Added By)"})
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
+    c_curr_ent = f"{curr_abbr} Entries"
+    c_prev_ent = f"{prev_abbr} Entries"
 
-    merged["Curr_Pcs"] = merged["Curr_Pcs"].round().astype(int)
-    merged["Prev_Pcs"] = merged["Prev_Pcs"].round().astype(int)
-    merged["Diff_Pcs"] = merged["Diff_Pcs"].round().astype(int)
-    merged["Curr_Ton"] = merged["Curr_Ton"].round(3)
-    merged["Prev_Ton"] = merged["Prev_Ton"].round(3)
-    merged["Diff_Ton"] = merged["Diff_Ton"].round(3)
+    merged = merged.rename(
+        columns={
+            lineman_col: "Lineman (Added By)",
+            "Curr_Pcs": c_curr_pcs,
+            "Prev_Pcs": c_prev_pcs,
+            "Curr_Ton": c_curr_ton,
+            "Prev_Ton": c_prev_ton,
+            "Diff_Pcs": "Variance (Pcs)",
+            "Diff_Ton": "Variance (Ton)",
+            "Trend_%": "MoM Trend %",
+            "Curr_Entries": c_curr_ent,
+            "Prev_Entries": c_prev_ent,
+        }
+    )
 
-    return merged.rename(columns={
-        "Curr_Pcs": f"{curr_abbr} Pcs",
-        "Prev_Pcs": f"{prev_abbr} Pcs",
-        "Diff_Pcs": "Variance (Pcs)",
-        "Curr_Ton": f"{curr_abbr} Ton",
-        "Prev_Ton": f"{prev_abbr} Ton",
-        "Diff_Ton": "Variance (Ton)",
-        "Trend_%": "MoM Trend %",
-    })
+    merged[c_curr_pcs] = merged[c_curr_pcs].round().astype(int)
+    merged[c_prev_pcs] = merged[c_prev_pcs].round().astype(int)
+    merged["Variance (Pcs)"] = merged["Variance (Pcs)"].round().astype(int)
+    merged[c_curr_ton] = merged[c_curr_ton].round(3)
+    merged[c_prev_ton] = merged[c_prev_ton].round(3)
+    merged["Variance (Ton)"] = merged["Variance (Ton)"].round(3)
+    merged[c_curr_ent] = merged[c_curr_ent].astype(int)
+    merged[c_prev_ent] = merged[c_prev_ent].astype(int)
+
+    base_cols = [
+        "Lineman (Added By)",
+        c_curr_pcs,
+        c_prev_pcs,
+        c_curr_ton,
+        c_prev_ton,
+        c_curr_ent,
+        c_prev_ent,
+    ]
+    if include_variances:
+        base_cols = [
+            "Lineman (Added By)",
+            c_curr_pcs,
+            c_prev_pcs,
+            c_curr_ton,
+            c_prev_ton,
+            "Variance (Pcs)",
+            "Variance (Ton)",
+            "MoM Trend %",
+            c_curr_ent,
+            c_prev_ent,
+        ]
+    return merged[base_cols]
 
 
 def m2_compute_shift_breakdown(df_scope):
@@ -417,8 +509,8 @@ def m2_compute_operator_defect_pivot(df_scope):
         aggfunc="count",
         fill_value=0,
     )
-    pivot["Total Logs"] = pivot.sum(axis=1)
-    pivot = pivot.sort_values("Total Logs", ascending=False).reset_index()
+    pivot["Total Entries"] = pivot.sum(axis=1)
+    pivot = pivot.sort_values("Total Entries", ascending=False).reset_index()
     pivot[cause_col] = pivot[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
     return pivot.rename(columns={cause_col: "Defect Cause Mode"})
 
@@ -437,7 +529,7 @@ def m2_compute_operator_rankings(df_scope):
         ).sort_values("rej_pcs", ascending=False).head(5)
 
         top_items = [
-            f"{c.replace('*', '').strip()} ({int(r['entry_count'])} logs, {int(round(r['rej_pcs'])):,} pcs)"
+            f"{c.replace('*', '').strip()} ({int(r['entry_count'])} entries, {int(round(r['rej_pcs'])):,} pcs)"
             for c, r in cause_agg.iterrows()
         ]
         row = {"Operator": op}
@@ -1037,7 +1129,6 @@ def render_scrap_module():
 
         df_cause_day = m2_compute_cause_breakdown(df_day)
         df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
-        df_cause_mom = m2_compute_cause_mom_comparison(df_prev_as_of, df_as_of, prev_abbr, curr_abbr)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
         top3_summary_list = []
@@ -1219,7 +1310,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 3: Cause-Wise Defect Analysis (With Option B MoM Comparison Toggle)
+        # Section 3: Cause-Wise Defect Analysis
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### CAUSE-WISE REJECTION DEFECT ANALYSIS")
@@ -1232,13 +1323,17 @@ These are the line records from *{section_display_name}* where rejection exceede
                 use_container_width=True,
             )
 
-        c_tgl_c, _ = st.columns([2.5, 1.5], vertical_alignment="center")
+        c_tgl_c, c_chk_var_c = st.columns([2.2, 2.0], vertical_alignment="center")
         with c_tgl_c:
             show_cause_mom = st.toggle(
                 f"Compare with Prior Month ({prev_abbr} 01–{sel_day_num:02d} vs {curr_abbr} 01–{sel_day_num:02d})",
                 value=False,
                 key="tgl_cause_mom"
             )
+        with c_chk_var_c:
+            show_cause_variances = False
+            if show_cause_mom:
+                show_cause_variances = st.checkbox("Show Variance & Trend Details", value=False, key="chk_cause_var")
 
         tab_cause_day, tab_cause_asof = st.tabs([
             f"Selected Date ({day_formatted})",
@@ -1251,7 +1346,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with tab_cause_asof:
             if show_cause_mom:
-                st.caption(f"Showing Like-for-Like Root Cause Variance: **{prev_abbr} 01–{sel_day_num:02d}** vs **{curr_abbr} 01–{sel_day_num:02d}**")
+                st.caption(f"Showing Side-by-Side Root Cause Comparison: **{curr_abbr} 01–{sel_day_num:02d}** vs **{prev_abbr} 01–{sel_day_num:02d}**")
+                df_cause_mom = m2_compute_cause_mom_comparison(
+                    df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=show_cause_variances
+                )
                 st.dataframe(df_cause_mom, use_container_width=True, hide_index=True)
             else:
                 display_cause_cols = ["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]
@@ -1259,7 +1357,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 4: Lineman & Shift Quality Audit (With NPT-Style Popover & Option B MoM Toggle)
+        # Section 4: Lineman & Shift Quality Audit
         c_l_title, c_down_line = st.columns([3, 1.4], vertical_alignment="center")
         with c_l_title:
             st.markdown("#### LINEMAN & SHIFT QUALITY AUDIT (ADDED BY)")
@@ -1272,7 +1370,7 @@ These are the line records from *{section_display_name}* where rejection exceede
             default_core = [op for op in all_operators if op_counts.get(op, 0) >= 30]
             st.session_state["selected_linemen_roster"] = default_core if default_core else all_operators
 
-        c_pop_op, c_tgl_op = st.columns([2.2, 2.8], vertical_alignment="center")
+        c_pop_op, c_tgl_op, c_chk_var_op = st.columns([1.5, 1.8, 1.4], vertical_alignment="center")
 
         with c_pop_op:
             num_sel_ops = len(st.session_state["selected_linemen_roster"])
@@ -1284,7 +1382,7 @@ These are the line records from *{section_display_name}* where rejection exceede
                 for op_item in all_operators:
                     is_op_checked = op_item in st.session_state["selected_linemen_roster"]
                     op_entry_cnt = op_counts.get(op_item, 0)
-                    chk = st.checkbox(f"{op_item} ({op_entry_cnt} logs)", value=is_op_checked, key=f"chk_op_{op_item}")
+                    chk = st.checkbox(f"{op_item} ({op_entry_cnt} entries)", value=is_op_checked, key=f"chk_op_{op_item}")
                     if chk:
                         updated_ops.append(op_item)
 
@@ -1300,17 +1398,21 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with c_tgl_op:
             show_lineman_mom = st.toggle(
-                f"Compare Operators MoM ({prev_abbr} 01–{sel_day_num:02d} vs {curr_abbr} 01–{sel_day_num:02d})",
+                f"Compare Operators ({prev_abbr} 01–{sel_day_num:02d} vs {curr_abbr} 01–{sel_day_num:02d})",
                 value=False,
                 key="tgl_lineman_mom"
             )
+
+        with c_chk_var_op:
+            show_line_variances = False
+            if show_lineman_mom:
+                show_line_variances = st.checkbox("Show Variance Details", value=False, key="chk_line_var")
 
         active_ops = st.session_state["selected_linemen_roster"]
         df_as_of_filtered_ops = df_as_of[df_as_of[lineman_col].isin(active_ops)].copy()
         df_day_filtered_ops = df_day[df_day[lineman_col].isin(active_ops)].copy()
 
         df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of_filtered_ops)
-        df_lineman_mom = m2_compute_lineman_mom_comparison(df_prev_as_of, df_as_of, prev_abbr, curr_abbr, active_ops)
         df_shift_as_of = m2_compute_shift_breakdown(df_as_of)
         df_op_matrix = m2_compute_operator_defect_pivot(df_as_of_filtered_ops)
         df_op_ranks = m2_compute_operator_rankings(df_as_of_filtered_ops)
@@ -1340,7 +1442,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with tab_line_asof:
             if show_lineman_mom:
-                st.caption(f"Comparing Operator Performance: **{prev_abbr} 01–{sel_day_num:02d}** vs **{curr_abbr} 01–{sel_day_num:02d}**")
+                st.caption(f"Comparing Side-by-Side Operator Performance: **{curr_abbr} 01–{sel_day_num:02d}** vs **{prev_abbr} 01–{sel_day_num:02d}**")
+                df_lineman_mom = m2_compute_lineman_mom_comparison(
+                    df_prev_as_of, df_as_of, prev_abbr, curr_abbr, active_ops, include_variances=show_line_variances
+                )
                 if not df_lineman_mom.empty:
                     st.dataframe(df_lineman_mom, use_container_width=True, hide_index=True)
                 else:
