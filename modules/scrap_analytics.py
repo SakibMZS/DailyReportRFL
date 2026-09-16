@@ -582,20 +582,88 @@ def m2_compute_operator_rankings(df_scope):
     return df_rank
 
 
-def m2_compute_tonnage_comparison(df_prev, df_curr):
-    if not df_prev.empty and "Weight_Ton" in df_prev.columns:
-        t_prev = df_prev.groupby(df_prev["DateClean"].dt.day)["Weight_Ton"].sum().reset_index()
-        t_prev.columns = ["Day", "Prev_Month_Ton"]
-    else:
-        t_prev = pd.DataFrame(columns=["Day", "Prev_Month_Ton"])
+def m2_compute_daily_trend_comparison(df_prev, df_curr, prev_abbr="Aug", curr_abbr="Sep", shift_filter="All (24 Hrs)", include_variances=False):
+    """
+    Computes daily Day-of-Month comparison pairing pieces before tons:
+    [Day of Month, Curr Pcs, Prev Pcs, Curr Ton, Prev Ton, (Optional Variances)]
+    Supports 3-way shift filtering: All, Day Shift (A), Night Shift (B).
+    """
+    p = df_prev.copy()
+    c = df_curr.copy()
 
-    if not df_curr.empty and "Weight_Ton" in df_curr.columns:
-        t_curr = df_curr.groupby(df_curr["DateClean"].dt.day)["Weight_Ton"].sum().reset_index()
-        t_curr.columns = ["Day", "Curr_Month_Ton"]
-    else:
-        t_curr = pd.DataFrame(columns=["Day", "Curr_Month_Ton"])
+    if shift_filter == "Day Shift (Shift A)":
+        p = p[p["Shift"].str.contains("Shift A", na=False)] if not p.empty else p
+        c = c[c["Shift"].str.contains("Shift A", na=False)] if not c.empty else c
+    elif shift_filter == "Night Shift (Shift B)":
+        p = p[p["Shift"].str.contains("Shift B", na=False)] if not p.empty else p
+        c = c[c["Shift"].str.contains("Shift B", na=False)] if not c.empty else c
 
-    return pd.merge(t_prev, t_curr, on="Day", how="outer").sort_values("Day").fillna(0.0)
+    t_prev = (
+        p.groupby("Day").agg(
+            Prev_Pcs=("Qty_Pcs", "sum"),
+            Prev_Ton=("Weight_Ton", "sum")
+        ).reset_index()
+        if not p.empty
+        else pd.DataFrame(columns=["Day", "Prev_Pcs", "Prev_Ton"])
+    )
+
+    t_curr = (
+        c.groupby("Day").agg(
+            Curr_Pcs=("Qty_Pcs", "sum"),
+            Curr_Ton=("Weight_Ton", "sum")
+        ).reset_index()
+        if not c.empty
+        else pd.DataFrame(columns=["Day", "Curr_Pcs", "Curr_Ton"])
+    )
+
+    merged = pd.merge(t_curr, t_prev, on="Day", how="outer").sort_values("Day").fillna(0.0)
+
+    merged["Diff_Pcs"] = merged["Curr_Pcs"] - merged["Prev_Pcs"]
+    merged["Diff_Ton"] = merged["Curr_Ton"] - merged["Prev_Ton"]
+    merged["Trend_%"] = np.where(
+        merged["Prev_Pcs"] > 0,
+        ((merged["Diff_Pcs"] / merged["Prev_Pcs"]) * 100.0).round(1),
+        0.0,
+    )
+
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
+
+    merged = merged.rename(
+        columns={
+            "Day": "Day of Month",
+            "Curr_Pcs": c_curr_pcs,
+            "Prev_Pcs": c_prev_pcs,
+            "Curr_Ton": c_curr_ton,
+            "Prev_Ton": c_prev_ton,
+            "Diff_Pcs": "Variance (Pcs)",
+            "Diff_Ton": "Variance (Ton)",
+            "Trend_%": "MoM Trend %",
+        }
+    )
+
+    merged[c_curr_pcs] = merged[c_curr_pcs].round().astype(int)
+    merged[c_prev_pcs] = merged[c_prev_pcs].round().astype(int)
+    merged["Variance (Pcs)"] = merged["Variance (Pcs)"].round().astype(int)
+    merged[c_curr_ton] = merged[c_curr_ton].round(3)
+    merged[c_prev_ton] = merged[c_prev_ton].round(3)
+    merged["Variance (Ton)"] = merged["Variance (Ton)"].round(3)
+
+    cols = ["Day of Month", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton]
+    if include_variances:
+        cols = [
+            "Day of Month",
+            c_curr_pcs,
+            c_prev_pcs,
+            c_curr_ton,
+            c_prev_ton,
+            "Variance (Pcs)",
+            "Variance (Ton)",
+            "MoM Trend %",
+        ]
+    return merged[cols]
 
 
 def m2_generate_scrap_jpg(
@@ -812,7 +880,7 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, sel_day_num, sectio
         top_bar = patches.FancyBboxPatch((x0 + 0.1, 93.75), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor='none')
         ax.add_patch(top_bar)
         ax.text(x0 + kpi_w/2, 92.4, title, color='#64748b', fontsize=7.6, fontweight='bold', ha='center')
-        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=12.5, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
@@ -1178,7 +1246,6 @@ def render_scrap_module():
 
         df_cause_day = m2_compute_cause_breakdown(df_day)
         df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
-        df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
         top3_summary_list = []
         cause_col = get_col(df_day, ["Cause", "Causes"], "Cause")
@@ -1565,13 +1632,28 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 5: Month-over-Month Daily Trend
-        st.markdown("#### MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
-        trend_display = df_trend.rename(
-            columns={
-                "Day": "Day of Month",
-                "Prev_Month_Ton": "Previous Month Rejection (Tons)",
-                "Curr_Month_Ton": "Current Month Rejection (Tons)",
-            }
+        # Section 5: Month-over-Month Daily Trend (With 3-Way Shift Filter)
+        c_tr_title, c_tr_chk = st.columns([2.8, 1.6], vertical_alignment="center")
+        with c_tr_title:
+            st.markdown("#### MONTH-OVER-MONTH DAILY REJECTION TREND (PIECES & TONNAGE)")
+        with c_tr_chk:
+            show_trend_variances = st.checkbox("Show Daily Variance Details", value=False, key="chk_trend_var")
+
+        # 3-Parameter Shift Selector: All by default, Day Shift, Night Shift
+        trend_shift_filter = st.radio(
+            "Filter Daily Trend by Operational Shift:",
+            options=["All (24 Hrs)", "Day Shift (Shift A)", "Night Shift (Shift B)"],
+            index=0,
+            horizontal=True,
+            key="rad_trend_shift",
+        )
+
+        trend_display = m2_compute_daily_trend_comparison(
+            df_prev,
+            df_curr,
+            prev_abbr=prev_abbr,
+            curr_abbr=curr_abbr,
+            shift_filter=trend_shift_filter,
+            include_variances=show_trend_variances,
         )
         st.dataframe(trend_display, use_container_width=True, hide_index=True)
