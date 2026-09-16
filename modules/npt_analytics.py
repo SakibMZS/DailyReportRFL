@@ -156,11 +156,11 @@ def slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=None):
 # =========================================================
 def m3_compute_size_wise_npt(df_scope, cutoff_days, total_plant_mcs, size_nos_map, unique_sizes):
     records = []
-    tot_hrs_all = df_scope["Hours"].sum()
+    tot_hrs_all = df_scope["Hours"].sum() if not df_scope.empty else 0.0
 
     for sz in unique_sizes:
         nos = size_nos_map.get(sz, 0)
-        sz_hrs = df_scope[df_scope["Size"] == sz]["Hours"].sum()
+        sz_hrs = df_scope[df_scope["Size"] == sz]["Hours"].sum() if not df_scope.empty else 0.0
         avail_hrs = nos * 24.0 * max(1, cutoff_days)
         cap_pct = (sz_hrs / avail_hrs * 100.0) if avail_hrs > 0 else 0.0
 
@@ -176,6 +176,41 @@ def m3_compute_size_wise_npt(df_scope, cutoff_days, total_plant_mcs, size_nos_ma
     summary_pct = (tot_hrs_all / tot_avail * 100.0) if tot_avail > 0 else 0.0
 
     return df_res, tot_hrs_all, summary_pct
+
+
+def m3_compute_size_wise_mom(df_curr_mtd, df_prev_mtd, cutoff_days, total_plant_mcs, size_nos_map, unique_sizes, prev_abbr="Aug", curr_abbr="Sep", include_variances=False):
+    """Computes side-by-side MoM capacity loss by machine size."""
+    records = []
+    c_curr_hrs = f"{curr_abbr} NPT (Hrs)"
+    c_prev_hrs = f"{prev_abbr} NPT (Hrs)"
+    c_curr_pct = f"{curr_abbr} NPT %"
+    c_prev_pct = f"{prev_abbr} NPT %"
+
+    for sz in unique_sizes:
+        nos = size_nos_map.get(sz, 0)
+        c_hrs = df_curr_mtd[df_curr_mtd["Size"] == sz]["Hours"].sum() if not df_curr_mtd.empty else 0.0
+        p_hrs = df_prev_mtd[df_prev_mtd["Size"] == sz]["Hours"].sum() if not df_prev_mtd.empty else 0.0
+        avail_hrs = nos * 24.0 * max(1, cutoff_days)
+
+        c_cap_pct = (c_hrs / avail_hrs * 100.0) if avail_hrs > 0 else 0.0
+        p_cap_pct = (p_hrs / avail_hrs * 100.0) if avail_hrs > 0 else 0.0
+        diff_hrs = c_hrs - p_hrs
+        diff_pct = c_cap_pct - p_cap_pct
+
+        row = {
+            "MC Size": sz,
+            "Nos": nos,
+            c_curr_hrs: round(c_hrs, 1),
+            c_prev_hrs: round(p_hrs, 1),
+            c_curr_pct: round(c_cap_pct, 1),
+            c_prev_pct: round(p_cap_pct, 1),
+        }
+        if include_variances:
+            row["Variance (Hrs)"] = round(diff_hrs, 1)
+            row["Variance (NPT %)"] = round(diff_pct, 1)
+        records.append(row)
+
+    return pd.DataFrame(records)
 
 
 def m3_compute_smed_table(df_scope, max_days=7):
@@ -271,10 +306,10 @@ def m3_compute_consolidated_daily_log(df_day):
         start_t = str(grp["From_DT"].min())[:16]
 
         if has_ongoing:
-            status = "Active / In Progress ⏳"
+            status = "Active / In Progress (Active)"
             dur_display = f"{day_hrs:.2f} h (Active)"
         else:
-            status = "Closed ✅"
+            status = "Closed"
             dur_display = f"{day_hrs:.2f} h"
 
         records.append({
@@ -555,25 +590,29 @@ def m3_generate_2x2_executive_jpg(
 def render_npt_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
-        if st.button("⬅️ Back to Operations Hub", use_container_width=True):
+        if st.button("Back to Operations Hub", use_container_width=True):
             st.session_state["active_view"] = "hub_home"
             st.rerun()
     with c_title:
         st.markdown(
-            "<h3 style='margin:0; text-align:center; font-weight:800; color:#0f172a;'>⏱️ NON-PRODUCTIVE TIME (NPT) ANALYTICS</h3>",
+            """
+            <div style="text-align:center;">
+                <div style="color: #0284c7; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;">Operational Efficiency Division</div>
+                <h3 style="margin:0; font-weight:800; color:#0f172a; letter-spacing: -0.01em;">NON-PRODUCTIVE TIME (NPT) ANALYTICS</h3>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
     with c_act:
         if "m3_file_bytes" in st.session_state:
-            if st.button("🔄 Change Files", use_container_width=True):
+            if st.button("Change Files", use_container_width=True):
                 st.session_state.pop("m3_file_bytes", None)
                 st.session_state.pop("m3_sm_bytes", None)
                 st.rerun()
 
-    st.divider()
+    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
     if "m3_file_bytes" not in st.session_state:
-        # Data Ingestion Requirement Banner
         st.markdown(
             """
             <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #0284c7; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
@@ -596,7 +635,7 @@ def render_npt_module():
             st.markdown(
                 """
                 <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #0284c7;">
-                    <h4 style="margin-top:0; color:#0f172a;">📂 1. Primary Downtime Report (Required)</h4>
+                    <h4 style="margin-top:0; color:#0f172a;">1. Primary Downtime Report (Required)</h4>
                     <p style="color:#64748b !important; font-size:0.85rem;">Ingest the multi-month ERP Downtime workbook spanning prior month to date.</p>
                 </div>
                 """,
@@ -608,7 +647,7 @@ def render_npt_module():
             st.markdown(
                 """
                 <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #10b981;">
-                    <h4 style="margin-top:0; color:#0f172a;">🛠️ 2. Service Maintenance Report (Optional)</h4>
+                    <h4 style="margin-top:0; color:#0f172a;">2. Service Maintenance Report (Optional)</h4>
                     <p style="color:#64748b !important; font-size:0.85rem;">Upload workshop ticket logs for SMS token audit.</p>
                 </div>
                 """,
@@ -617,7 +656,7 @@ def render_npt_module():
             up_sm = st.file_uploader("Select Maintenance Ticket Workbook (.xlsx)", type=["xlsx", "xls"], key="up_sm_file")
 
         if up_dt is not None:
-            if st.button("🚀 Ingest Workbooks & Launch Console", type="primary", use_container_width=True):
+            if st.button("Ingest Workbooks & Launch Console", type="primary", use_container_width=True):
                 st.session_state["m3_file_bytes"] = up_dt.getvalue()
                 st.session_state["m3_sm_bytes"] = up_sm.getvalue() if up_sm is not None else None
                 st.rerun()
@@ -625,23 +664,22 @@ def render_npt_module():
     else:
         df_parsed = m3_parse_downtime_workbook(st.session_state["m3_file_bytes"])
 
-        # Auto-detect section configuration dynamically from uploaded report
         detected_sec = df_parsed["Detected_Section"].iloc[0] if "Detected_Section" in df_parsed.columns else "RIP> DPL> Plastic-3"
         sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_nos_map, unique_sizes = resolve_section_config(df_parsed, fallback_name=detected_sec)
 
-        # Operational day date options (8 AM to 8 AM window)
         raw_start_dates = (df_parsed["From_DT"].dropna() - pd.Timedelta(hours=8)).dt.normalize()
         avail_dates_list = sorted(raw_start_dates.unique().tolist())
         avail_cutoff_strs = [d.strftime("%Y-%m-%d") for d in avail_dates_list]
 
         section_display_name = sec_name.split(">")[-1].strip()
 
+        # Grouped Industrial Toolbar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_causes, c_snap = st.columns([1.3, 1.8, 1.3], gap="small")
+        c_date, c_causes, c_snap = st.columns([1.5, 1.8, 1.4], gap="small")
 
         with c_date:
             sel_cutoff_str = st.selectbox(
-                f"📅 **Operational Cutoff Date (8 AM to 8 AM | {section_display_name})**",
+                f"Cutoff Date (8 AM–8 AM | {section_display_name})",
                 avail_cutoff_strs,
                 index=len(avail_cutoff_strs) - 1,
             )
@@ -650,7 +688,6 @@ def render_npt_module():
         cutoff_day = sel_date_obj.day
         day_formatted = sel_date_obj.strftime("%d-%b")
 
-        # Slice all downtime up to cutoff date + 1 day at 08:00:00 AM
         cutoff_eval_dt = sel_date_obj + pd.Timedelta(days=1, hours=8)
         df_downtime = slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=cutoff_eval_dt)
 
@@ -668,10 +705,10 @@ def render_npt_module():
             st.session_state["top_10_causes_selected"] = [c for c in DEFAULT_TOP_10_CAUSES if c in all_present_causes]
 
         with c_causes:
-            st.markdown("<div style='margin-top:0.25rem;'></div>", unsafe_allow_html=True)
-            with st.popover(f"🎯 Select Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
-                st.markdown("##### 📌 Choose up to 10 Causes to Compare")
-                st.caption("Checked causes will be included in the impact analysis and chart:")
+            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
+            with st.popover(f"Select Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
+                st.markdown("##### Choose up to 10 Causes to Compare")
+                st.caption("Selected causes are tracked in impact charts and reports:")
                 
                 updated_selection = []
                 for c_item in all_present_causes:
@@ -681,7 +718,7 @@ def render_npt_module():
                         updated_selection.append(c_item)
 
                 if len(updated_selection) > 10:
-                    st.warning("⚠️ Maximum 10 causes allowed! Keeping first 10 selected.")
+                    st.warning("Maximum 10 causes allowed! Keeping first 10 selected.")
                     updated_selection = updated_selection[:10]
 
                 if st.button("Apply Selected Causes", type="primary", use_container_width=True):
@@ -693,7 +730,6 @@ def render_npt_module():
         df_last_day = active_m_df[active_m_df["DateStr"] == sel_cutoff_str].copy()
         df_mtd = active_m_df[active_m_df["DayNum"] <= cutoff_day].copy()
 
-        # Prior Month Like-for-Like Calculation (Day 1 to N)
         month_idx = all_months.index(active_month) if active_month in all_months else -1
         if month_idx > 0:
             prev_month = all_months[month_idx - 1]
@@ -706,10 +742,12 @@ def render_npt_module():
             prev_month_name = "Prior"
             prev_m_mtd = df_mtd
 
+        curr_abbr = curr_month_name[:3].capitalize()
+        prev_abbr = prev_month_name[:3].capitalize()
+
         tot_curr_mtd_hrs = df_mtd["Hours"].sum()
         tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
 
-        # Plant Capacity Math: NPT% = Total Hours / (24 * total_plant_mcs * n)
         tot_avail_period = total_plant_mcs * 24.0 * max(1, cutoff_day)
         curr_mtd_npt_pct = (tot_curr_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
         prev_mtd_npt_pct = (tot_prev_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
@@ -759,9 +797,9 @@ def render_npt_module():
         )
 
         with c_snap:
-            st.markdown("<div style='margin-top: 1.65rem;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label="📸 Download 2×2 JPG Report",
+                label="Download 2×2 JPG Report",
                 data=jpg_bytes,
                 file_name=f"NPT_4Grid_Report_{section_display_name}_{sel_cutoff_str}.jpg",
                 mime="image/jpeg",
@@ -769,9 +807,10 @@ def render_npt_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # 4 Standard KPI Cards Matching Scrap Module Styling
         k1, k2, k3, k4 = st.columns(4)
         k1.markdown(
-            f'<div class="kpi-card blue"><div class="kpi-title">MTD TOTAL NPT (Day 1–{cutoff_day})</div>'
+            f'<div class="kpi-card blue"><div class="kpi-title">{curr_abbr.upper()} 01–{cutoff_day:02d} TOTAL NPT</div>'
             f'<div class="kpi-val">{tot_curr_mtd_hrs:,.1f} H</div>'
             f'<div class="kpi-sub">{curr_mtd_npt_pct:.2f}% Section NPT ({tot_curr_mtd_hrs/cutoff_day:.1f} H/Day)</div></div>',
             unsafe_allow_html=True,
@@ -779,13 +818,13 @@ def render_npt_module():
         k2.markdown(
             f'<div class="kpi-card purple"><div class="kpi-title">{section_display_name.upper()} CAPACITY NPT %</div>'
             f'<div class="kpi-val">{size_summary_pct:.2f}%</div>'
-            f'<div class="kpi-sub">Of {tot_avail_period:,.0f} H Available ({total_plant_mcs} MCs)</div></div>',
+            f'<div class="kpi-sub">Of {tot_avail_period:,.0f} H Total ({total_plant_mcs} MCs)</div></div>',
             unsafe_allow_html=True,
         )
         
         ongoing_count = df_last_day["Slice_Ongoing"].sum()
         k3.markdown(
-            f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div>'
+            f'<div class="kpi-card red"><div class="kpi-title">LAST DAY NPT ({day_formatted})</div>'
             f'<div class="kpi-val">{last_day_total_hrs:.1f} H</div>'
             f'<div class="kpi-sub">{last_day_npt_pct:.2f}% Day NPT ({ongoing_count} Active)</div></div>',
             unsafe_allow_html=True,
@@ -793,25 +832,32 @@ def render_npt_module():
         
         maint_last_hrs = df_last_day[df_last_day["Is_Maintenance"]]["Hours"].sum()
         k4.markdown(
-            f'<div class="kpi-card yellow"><div class="kpi-title">LAST DAY MAINT. IMPACT</div>'
+            f'<div class="kpi-card amber"><div class="kpi-title">LAST DAY MAINT. IMPACT</div>'
             f'<div class="kpi-val">{maint_last_hrs:.1f} H</div>'
             f'<div class="kpi-sub">{(maint_last_hrs/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.1f}% NPT Share</div></div>',
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
-        col_left, col_right = st.columns([1.5, 1.1], gap="large")
+        col_left, col_right = st.columns([1.55, 0.95], gap="large")
 
         with col_left:
-            st.markdown(f"#### ⚙️ MACHINE NPT INCIDENTS LOG — {sel_date_obj.strftime('%B %d')} (8 AM–8 AM)")
-            st.caption(f"{section_display_name}: Prorated daily duration. Active ongoing breakdowns pinned with ⏳ badge.")
+            st.markdown(
+                f"""
+                <div class="section-panel-header">
+                    <h4 class="section-panel-title">{section_display_name.upper()} MACHINE NPT INCIDENTS LOG</h4>
+                    <span style="color: #64748b; font-size: 0.8rem; font-weight: 600;">{day_formatted} (8 AM–8 AM)</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             df_cons_log = m3_compute_consolidated_daily_log(df_last_day)
             if not df_cons_log.empty:
                 display_df = df_cons_log[["Position", "Machine", "Status", "Combined Causes", "Duration", "Start Time"]]
-                st.dataframe(display_df, use_container_width=True, hide_index=True, height=400)
+                st.dataframe(display_df, use_container_width=True, hide_index=True, height=390)
             else:
-                st.success("✅ Zero downtime logged for this date!")
+                st.success("Zero downtime logged for this date.")
 
         with col_right:
             top_mtd_causes = df_mtd.groupby("Cause")["Hours"].sum().sort_values(ascending=False).head(4)
@@ -846,6 +892,7 @@ def render_npt_module():
             prev_abbr_txt = prev_month_name[:3].capitalize()
             comp_like_for_like_str = f"vs. {tot_prev_mtd_hrs:,.2f} Hrs ({prev_mtd_npt_pct:.2f}% NPT) in {prev_abbr_txt} 01–{cutoff_day:02d}"
 
+            # WhatsApp briefing preserves emojis
             whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
 
 Dear Sir,
@@ -868,11 +915,19 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
 • Involved Machines: {smed_mcs_str}
 • Month-to-Date SMED: *{smed_tot_qty} setups* completed totaling *{smed_tot_time:.2f} Hours* (MTD Avg: *{smed_avg_min:.2f} Min*)"""
 
-            st.markdown("#### 📝 EXECUTIVE BRIEFING TEXT")
+            st.markdown(
+                """
+                <div class="section-panel-header">
+                    <h4 class="section-panel-title">EXECUTIVE BRIEFING TEXT</h4>
+                    <span style="color: #64748b; font-size: 0.8rem; font-weight: 600;">Daily Stoppage Summary</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.markdown(
                 f"""<div class="narrative-block">
-                    <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">📋 {section_display_name.upper()} DAILY NPT & DOWNTIME BRIEF</p>
-                    <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;">📅 <b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
+                    <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">{section_display_name.upper()} DAILY NPT & DOWNTIME BRIEF</p>
+                    <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;"><b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
                     <h5>1. Overall Monthly NPT Analysis (MTD Like-for-Like: Day 1–{cutoff_day:02d})</h5>
                     <p>Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)</b> ({comp_like_for_like_str}).</p>
                     <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
@@ -886,25 +941,47 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                 unsafe_allow_html=True,
             )
 
-            with st.expander("📋 Copy Plain Text Brief"):
+            with st.expander("Copy Plain Text Brief for WhatsApp"):
                 st.text_area("Brief Text", value=whatsapp_msg, height=200, label_visibility="collapsed")
 
         st.divider()
 
-        tab_grid2, tab_smed, tab_maint = st.tabs([
-            "📏 MC Size-Wise Capacity Loss",
-            "⏱️ SMED (Mold Changeover)",
-            "🛠️ Maintenance & SMS Audit",
+        # Detailed Analytical Tabs with MoM Support
+        tab_size, tab_smed, tab_maint = st.tabs([
+            "MC Size-Wise Capacity Loss",
+            "SMED (Mold Changeover)",
+            "Maintenance & SMS Audit",
         ])
 
-        with tab_grid2:
-            st.markdown(f"#### 📏 {section_display_name.upper()} SIZE-WISE NPT BREAKDOWN (Day 1–{cutoff_day})")
-            st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
+        with tab_size:
+            c_sz_title, c_sz_tgl, c_sz_chk = st.columns([2.5, 1.8, 1.4], vertical_alignment="center")
+            with c_sz_title:
+                st.markdown(f"#### {section_display_name.upper()} SIZE-WISE CAPACITY LOSS (DAY 1–{cutoff_day})")
+            with c_sz_tgl:
+                show_size_mom = st.toggle(
+                    f"Compare with Prior Month ({curr_abbr} 01–{cutoff_day:02d} vs {prev_abbr} 01–{cutoff_day:02d})",
+                    value=False,
+                    key="tgl_size_mom",
+                )
+            with c_sz_chk:
+                show_size_variances = False
+                if show_size_mom:
+                    show_size_variances = st.checkbox("Show Variance Details", value=False, key="chk_sz_var")
+
+            if show_size_mom:
+                st.caption(f"Showing Side-by-Side Size Comparison: **{curr_abbr} 01–{cutoff_day:02d}** vs **{prev_abbr} 01–{cutoff_day:02d}**")
+                df_size_mom = m3_compute_size_wise_mom(
+                    df_mtd, prev_m_mtd, cutoff_day, total_plant_mcs, size_nos_map, unique_sizes,
+                    prev_abbr=prev_abbr, curr_abbr=curr_abbr, include_variances=show_size_variances,
+                )
+                st.dataframe(df_size_mom, use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
 
         with tab_smed:
-            st.markdown(f"#### ⏱️ SMED CHANGEOVER PERFORMANCE (Day 1–{cutoff_day})")
+            st.markdown(f"#### SMED CHANGEOVER PERFORMANCE (DAY 1–{cutoff_day})")
             st.dataframe(df_smed_grid, use_container_width=True, hide_index=True)
 
         with tab_maint:
-            st.markdown(f"#### 🛠️ TECHNICAL & BREAKDOWN TREND (Day 1–{cutoff_day})")
+            st.markdown(f"#### TECHNICAL & BREAKDOWN TREND (DAY 1–{cutoff_day})")
             st.dataframe(df_maint_grid, use_container_width=True, hide_index=True)
