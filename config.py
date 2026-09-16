@@ -10,8 +10,8 @@ MAINTENANCE_CAUSES = {
     "Power Breakdown (Unscheduled)*",
 }
 
-# Master Section Registry
-# Key: Section name as formatted in ERP Reports (Column: 'Section')
+# Master Section Registry parsed from machine_id.xlsx
+# Key: Exact Section string as formatted in ERP Reports
 SECTION_CONFIG = {
     "RIP> DPL> Plastic-3": {
         "total_mcs": 61,
@@ -155,7 +155,7 @@ def resolve_section_config(df=None, fallback_name=DEFAULT_SECTION):
     """
     Auto-detects factory section from the DataFrame's 'Section' column.
     Falls back gracefully if section not directly registered.
-    Returns: (section_name, total_mcs, daily_avail_hrs, pos_map, size_nos_map, unique_sizes)
+    Returns: (section_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes)
     """
     section_name = fallback_name
     if df is not None and "Section" in df.columns:
@@ -179,3 +179,13 @@ def resolve_section_config(df=None, fallback_name=DEFAULT_SECTION):
 
     unique_sizes = sorted(size_counts.keys(), key=lambda x: (len(x), x), reverse=True)
     return section_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes
+
+
+# =========================================================
+# BACKWARD COMPATIBILITY EXPORTS (PREVENTS SUBMODULE BREAKS)
+# =========================================================
+TOTAL_PLANT_MCS = SECTION_CONFIG[DEFAULT_SECTION]["total_mcs"]
+DAILY_AVAILABLE_HRS = TOTAL_PLANT_MCS * 24.0
+POS_MAP = SECTION_CONFIG[DEFAULT_SECTION]["mapping"]
+LINE_MAP = {k: "-" for k in POS_MAP.keys()}
+EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
