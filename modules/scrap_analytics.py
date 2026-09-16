@@ -255,7 +255,7 @@ def m2_compute_cause_breakdown(df_scope):
 
 
 def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, include_variances=False):
-    """Computes like-for-like MoM variance at the defect cause level with side-by-side metric pairing."""
+    """Computes like-for-like MoM variance at the defect cause level with paired columns."""
     cause_col = "Cause"
     grp_c = df_curr_scope.groupby(cause_col).agg(
         Curr_Pcs=("Qty_Pcs", "sum"),
@@ -382,7 +382,7 @@ def m2_compute_lineman_breakdown(df_scope):
 def m2_compute_lineman_mom_comparison(
     df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, selected_ops, include_variances=False
 ):
-    """Computes like-for-like MoM variance for operators with side-by-side metric pairing."""
+    """Computes like-for-like MoM variance for operators with paired columns."""
     lineman_col = "Added By"
     df_p_filt = (
         df_prev_scope[df_prev_scope[lineman_col].isin(selected_ops)]
@@ -472,28 +472,69 @@ def m2_compute_lineman_mom_comparison(
     return merged[base_cols]
 
 
-def m2_compute_shift_breakdown(df_scope):
-    if df_scope.empty or "Shift" not in df_scope.columns:
+def m2_compute_shift_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, include_variances=False):
+    """Computes Shift A vs Shift B like-for-like MoM variance."""
+    if df_curr_scope.empty or "Shift" not in df_curr_scope.columns:
         return pd.DataFrame()
 
-    res = (
-        df_scope.groupby("Shift")
-        .agg(
-            Rej_Pcs=("Qty_Pcs", "sum"),
-            Rej_Ton=("Weight_Ton", "sum"),
-            Logged_Entries=("Qty_Pcs", "count"),
-            Machines_Covered=("Machine", "nunique"),
-        )
-        .reset_index()
+    grp_c = df_curr_scope.groupby("Shift").agg(
+        Curr_Pcs=("Qty_Pcs", "sum"),
+        Curr_Ton=("Weight_Ton", "sum"),
+        Curr_Entries=("Qty_Pcs", "count"),
     )
-    res["Rej_Pcs"] = res["Rej_Pcs"].round().astype(int)
-    res["Rej_Ton"] = res["Rej_Ton"].round(4)
+    grp_p = (
+        df_prev_scope.groupby("Shift").agg(
+            Prev_Pcs=("Qty_Pcs", "sum"),
+            Prev_Ton=("Weight_Ton", "sum"),
+            Prev_Entries=("Qty_Pcs", "count"),
+        )
+        if not df_prev_scope.empty
+        else pd.DataFrame(columns=["Prev_Pcs", "Prev_Ton", "Prev_Entries"])
+    )
 
-    tot_pcs = res["Rej_Pcs"].sum()
-    tot_ton = res["Rej_Ton"].sum()
-    res["% Pcs Share"] = ((res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0).apply(lambda x: f"{x:.1f}%")
-    res["% Ton Share"] = ((res["Rej_Ton"] / tot_ton * 100.0).round(1) if tot_ton > 0 else 0.0).apply(lambda x: f"{x:.1f}%")
-    return res
+    merged = pd.merge(grp_c, grp_p, on="Shift", how="outer").fillna(0.0)
+    merged["Diff_Pcs"] = merged["Curr_Pcs"] - merged["Prev_Pcs"]
+    merged["Diff_Ton"] = merged["Curr_Ton"] - merged["Prev_Ton"]
+    merged["Trend_%"] = np.where(
+        merged["Prev_Pcs"] > 0,
+        ((merged["Diff_Pcs"] / merged["Prev_Pcs"]) * 100.0).round(1),
+        0.0,
+    )
+
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
+    c_curr_ent = f"{curr_abbr} Entries"
+    c_prev_ent = f"{prev_abbr} Entries"
+
+    merged = merged.reset_index().rename(
+        columns={
+            "Curr_Pcs": c_curr_pcs,
+            "Prev_Pcs": c_prev_pcs,
+            "Curr_Ton": c_curr_ton,
+            "Prev_Ton": c_prev_ton,
+            "Curr_Entries": c_curr_ent,
+            "Prev_Entries": c_prev_ent,
+            "Diff_Pcs": "Variance (Pcs)",
+            "Diff_Ton": "Variance (Ton)",
+            "Trend_%": "MoM Trend %",
+        }
+    )
+
+    merged[c_curr_pcs] = merged[c_curr_pcs].round().astype(int)
+    merged[c_prev_pcs] = merged[c_prev_pcs].round().astype(int)
+    merged["Variance (Pcs)"] = merged["Variance (Pcs)"].round().astype(int)
+    merged[c_curr_ton] = merged[c_curr_ton].round(3)
+    merged[c_prev_ton] = merged[c_prev_ton].round(3)
+    merged["Variance (Ton)"] = merged["Variance (Ton)"].round(3)
+    merged[c_curr_ent] = merged[c_curr_ent].astype(int)
+    merged[c_prev_ent] = merged[c_prev_ent].astype(int)
+
+    cols = ["Shift", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, c_curr_ent, c_prev_ent]
+    if include_variances:
+        cols = ["Shift", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, "Variance (Pcs)", "Variance (Ton)", "MoM Trend %", c_curr_ent, c_prev_ent]
+    return merged[cols]
 
 
 def m2_compute_operator_defect_pivot(df_scope):
@@ -727,8 +768,8 @@ def m2_generate_scrap_jpg(
     return buf.getvalue()
 
 
-def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_label):
-    fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
+def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
+    fig, ax = plt.subplots(figsize=(19, 11.0), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
     ax.set_xlim(0, 100)
@@ -739,26 +780,29 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_la
     year_num = sel_date_obj.year
     span_text = f"{month_name} 01 – {month_name} {sel_day_num:02d}, {year_num}"
 
-    tot_pcs = df_cause["Rej_Pcs"].sum()
-    tot_ton = df_cause["Rej_Ton"].sum()
-    tot_entries = df_cause["Entries_Count"].sum()
-    tot_causes = len(df_cause)
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
 
-    ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, f"Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
+    tot_curr_pcs = df_cause_mom[c_curr_pcs].sum() if c_curr_pcs in df_cause_mom.columns else 0
+    tot_prev_pcs = df_cause_mom[c_prev_pcs].sum() if c_prev_pcs in df_cause_mom.columns else 0
+    tot_curr_ton = df_cause_mom[c_curr_ton].sum() if c_curr_ton in df_cause_mom.columns else 0.0
+    tot_prev_ton = df_cause_mom[c_prev_ton].sum() if c_prev_ton in df_cause_mom.columns else 0.0
+    tot_causes = len(df_cause_mom)
+
+    ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO & MoM REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, f"Like-for-Like Root Cause Breakdown ({curr_abbr} 01–{sel_day_num:02d} vs {prev_abbr} 01–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
     
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
-    top_driver_name = df_cause.iloc[0]["Cause"] if not df_cause.empty else "-"
-    top_driver_pct = df_cause.iloc[0]["% Share Raw"] if not df_cause.empty else 0.0
-
     kpis = [
-        ("CUMULATIVE REJECTION", f"{tot_pcs:,} Pcs", f"{tot_ton:.3f} Metric Tons", "#dc2626"),
-        ("TOTAL DEFECT LOGS", f"{tot_entries:,} Logs", "Entries Across Lines", "#2563eb"),
-        ("ACTIVE DEFECT TYPES", f"{tot_causes} Causes", "Distinct Rejection Modes", "#7c3aed"),
-        ("TOP DEFECT DRIVER", f"{top_driver_name[:16]}", f"{top_driver_pct:.1f}% of Total Rejection", "#f59e0b"),
+        (f"{curr_abbr.upper()} REJECTION", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Tons", "#dc2626"),
+        (f"{prev_abbr.upper()} BASELINE", f"{tot_prev_pcs:,} Pcs", f"{tot_prev_ton:.2f} Tons", "#2563eb"),
+        ("ACTIVE DEFECT MODES", f"{tot_causes} Modes", "Recorded In Span", "#7c3aed"),
+        ("NET MoM VARIANCE", f"{tot_curr_pcs - tot_prev_pcs:+,} Pcs", f"{tot_curr_ton - tot_prev_ton:+.2f} Tons", "#f59e0b"),
     ]
     kpi_w, kpi_gap = 23.0, 1.33
     for i, (title, val, sub, col_bar) in enumerate(kpis):
@@ -768,76 +812,78 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_la
         top_bar = patches.FancyBboxPatch((x0 + 0.1, 93.75), kpi_w - 0.2, 0.45, boxstyle="round,pad=0.03,rounding_size=0.2", facecolor=col_bar, edgecolor='none')
         ax.add_patch(top_bar)
         ax.text(x0 + kpi_w/2, 92.4, title, color='#64748b', fontsize=7.6, fontweight='bold', ha='center')
-        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=13.0, fontweight='bold', ha='center')
+        ax.text(x0 + kpi_w/2, 89.6, val, color='#0f172a', fontsize=12.5, fontweight='bold', ha='center')
         ax.text(x0 + kpi_w/2, 87.8, sub, color='#94a3b8', fontsize=6.8, ha='center')
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(3.5, 83.5, f"CAUSE-WISE DEFECT VOLUME & TONNAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
-    ax.text(73.0, 83.5, f"{tot_causes} Defect Modes Logged", color='#64748b', fontsize=7.8, ha='right')
+    ax.text(3.5, 83.5, f"CAUSE-WISE DEFECT VOLUME & TONNAGE MoM COMPARISON — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(73.0, 83.5, f"{tot_causes} Defect Modes Benchmarked", color='#64748b', fontsize=7.8, ha='right')
 
     right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(right_card)
-    ax.text(78.0, 83.5, "PARETO INTELLIGENCE", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(78.0, 83.5, "PARETO & MoM SHIFT", color='#0f172a', fontsize=10.5, fontweight='bold')
 
-    mid_idx = (len(df_cause) + 1) // 2
-    sub_a = df_cause.iloc[:mid_idx].copy()
-    sub_b = df_cause.iloc[mid_idx:].copy()
-    sub_configs = [(sub_a, 2.6, 35.6, 1), (sub_b, 38.6, 35.6, mid_idx + 1)]
+    left_x = 2.6
+    tbl_w = 71.3
+    tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
+    ax.add_patch(tbl_hdr)
+    ax.text(left_x + 1.0, 80.8, "#", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+    ax.text(left_x + 3.0, 80.8, "DEFECT CAUSE MODE", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
+    ax.text(left_x + 28.0, 80.8, f"{curr_abbr.upper()} PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 37.0, 80.8, f"{prev_abbr.upper()} PCS", color='#cbd5e1', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 46.5, 80.8, f"{curr_abbr.upper()} TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 55.5, 80.8, f"{prev_abbr.upper()} TON", color='#cbd5e1', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 69.5, 80.8, "VARIANCE", color='#ffffff', fontsize=6.8, fontweight='bold', ha='center', va='center')
 
-    for sub_df, left_x, tbl_w, start_rank in sub_configs:
-        tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
-        ax.add_patch(tbl_hdr)
-        ax.text(left_x + 0.8, 80.8, "#", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
-        ax.text(left_x + 2.5, 80.8, "DEFECT CAUSE MODE", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
-        ax.text(left_x + 19.5, 80.8, "PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-        ax.text(left_x + 25.5, 80.8, "TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-        ax.text(left_x + 30.0, 80.8, "MCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-        ax.text(left_x + 34.8, 80.8, "SHARE", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    row_y = 77.0
+    row_step = min(4.2, 73.0 / max(1, min(16, len(df_cause_mom))))
+    for r_i, (_, r) in enumerate(df_cause_mom.head(16).iterrows()):
+        bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
+        row_bg = patches.Rectangle((left_x, row_y - 1.4), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
+        ax.add_patch(row_bg)
+        ax.plot([left_x, left_x + tbl_w], [row_y - 1.4, row_y - 1.4], color='#e2e8f0', linewidth=0.45)
 
-        row_y = 77.2
-        row_step = min(3.8, 74.0 / max(1, len(sub_df)))
-        for r_i, (_, r) in enumerate(sub_df.iterrows()):
-            bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
-            row_bg = patches.Rectangle((left_x, row_y - 1.2), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
-            ax.add_patch(row_bg)
-            ax.plot([left_x, left_x + tbl_w], [row_y - 1.2, row_y - 1.2], color='#e2e8f0', linewidth=0.45)
+        ax.text(left_x + 1.0, row_y + 0.35, f"{r_i + 1}", color='#64748b', fontsize=6.6, va='center')
+        ax.text(left_x + 3.0, row_y + 0.35, str(r["Cause"])[:22], color='#0f172a', fontsize=6.8, fontweight='bold', va='center')
+        ax.text(left_x + 28.0, row_y + 0.35, f"{int(r[c_curr_pcs]):,}", color='#0f172a', fontsize=6.8, ha='right', va='center')
+        ax.text(left_x + 37.0, row_y + 0.35, f"{int(r[c_prev_pcs]):,}", color='#64748b', fontsize=6.6, ha='right', va='center')
+        ax.text(left_x + 46.5, row_y + 0.35, f"{r[c_curr_ton]:.3f}", color='#0f172a', fontsize=6.8, ha='right', va='center')
+        ax.text(left_x + 55.5, row_y + 0.35, f"{r[c_prev_ton]:.3f}", color='#64748b', fontsize=6.6, ha='right', va='center')
 
-            rank_num = start_rank + r_i
-            ax.text(left_x + 0.8, row_y + 0.35, f"{rank_num}", color='#64748b', fontsize=6.4, va='center')
-            ax.text(left_x + 2.5, row_y + 0.35, str(r["Cause"])[:22], color='#0f172a', fontsize=6.6, fontweight='bold', va='center')
-            ax.text(left_x + 19.5, row_y + 0.35, f"{int(r['Rej_Pcs']):,}", color='#0f172a', fontsize=6.6, ha='right', va='center')
-            ax.text(left_x + 25.5, row_y + 0.35, f"{r['Rej_Ton']:.3f}", color='#0f172a', fontsize=6.4, ha='right', va='center')
-            ax.text(left_x + 30.0, row_y + 0.35, f"{int(r['MC_Count'])}", color='#64748b', fontsize=6.4, ha='right', va='center')
-            
-            share_val = r["% Share Raw"]
-            ax.text(left_x + 34.8, row_y + 0.35, f"{share_val:.1f}%", color='#b91c1c' if share_val >= 10 else '#0f172a', fontsize=6.6, fontweight='bold' if share_val >= 10 else 'normal', ha='right', va='center')
-            row_y -= row_step
+        diff_pcs = r["Variance (Pcs)"] if "Variance (Pcs)" in r else (r[c_curr_pcs] - r[c_prev_pcs])
+        badge_x = left_x + 69.5
+        if diff_pcs > 0:
+            badge_bg = "#fee2e2"
+            badge_fg = "#b91c1c"
+            badge_txt = f"▲ +{int(diff_pcs):,}"
+        else:
+            badge_bg = "#dcfce7"
+            badge_fg = "#15803d"
+            badge_txt = f"▼ {int(diff_pcs):,}"
 
-    cum_share = 0.0
-    vital_few = []
-    for _, r in df_cause.iterrows():
-        cum_share += r["% Share Raw"]
-        vital_few.append(f"{r['Cause']} ({r['% Share Raw']:.1f}%)")
-        if cum_share >= 75.0 or len(vital_few) >= 4:
-            break
+        ax.add_patch(patches.FancyBboxPatch((badge_x - 4.5, row_y - 0.7), 9.0, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
+        ax.text(badge_x, row_y + 0.35, badge_txt, color=badge_fg, fontsize=6.4, fontweight="bold", ha="center", va="center")
+        row_y -= row_step
 
     c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#fff7f7', edgecolor='#fecaca', linewidth=0.8)
     ax.add_patch(c1)
-    ax.text(78.6, 78.8, "Pareto 80/20 Vital Few", color='#b91c1c', fontsize=9.6, fontweight='bold')
+    ax.text(78.6, 78.8, "Key MoM Movers", color='#b91c1c', fontsize=9.6, fontweight='bold')
 
-    vital_text = "\n".join([f"  {idx+1}. {item}" for idx, item in enumerate(vital_few)])
+    df_cause_mom["Temp_Diff"] = df_cause_mom[c_curr_pcs] - df_cause_mom[c_prev_pcs]
+    top_escalating = df_cause_mom.sort_values("Temp_Diff", ascending=False).iloc[0] if not df_cause_mom.empty else None
+    top_declining = df_cause_mom.sort_values("Temp_Diff", ascending=True).iloc[0] if not df_cause_mom.empty else None
+
+    esc_str = f"• Escalating Driver:\n  {top_escalating['Cause']}\n  (+{int(top_escalating['Temp_Diff']):,} pcs vs {prev_abbr})\n\n" if top_escalating is not None else ""
+    dec_str = f"• Improved Defect Mode:\n  {top_declining['Cause']}\n  ({int(top_declining['Temp_Diff']):,} pcs vs {prev_abbr})\n\n" if top_declining is not None else ""
+
     t1 = (
-        f"• Vital Defect Modes ({cum_share:.1f}% Loss):\n"
-        f"{vital_text}\n\n"
-        f"• Critical Focus:\n"
-        f"  Over 70% of factory rejection\n"
-        f"  is concentrated in just {len(vital_few)}\n"
-        f"  defect categories.\n\n"
-        f"• Primary Action Directives:\n"
-        f"  - Mold Fill / Cushion Tuning\n"
-        f"  - Purging standardization\n"
-        f"  - Temperature nozzle balance."
+        f"{esc_str}"
+        f"{dec_str}"
+        f"• Quality Directives:\n"
+        f"  - Cushion stability check\n"
+        f"  - Mold clamping tonnage\n"
+        f"  - Nozzle heat profile."
     )
     ax.text(78.6, 75.2, t1, color='#7f1d1d', fontsize=8.0, linespacing=1.45, va='top')
 
@@ -845,15 +891,15 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_la
     ax.add_patch(c2)
     ax.text(78.6, 38.2, "Cumulative Span Summary", color='#15803d', fontsize=9.6, fontweight='bold')
     t2 = (
-        f"• Monitoring Period:\n"
-        f"  {span_text}\n"
-        f"  (Total {sel_day_num} Days Recorded).\n\n"
-        f"• Total Volume Impact:\n"
-        f"  - Output Lost: {tot_pcs:,} Pcs\n"
-        f"  - Total Rejection: {tot_ton:.3f} Tons\n"
-        f"  - Avg Loss: {tot_ton/sel_day_num:.2f} Tons/Day.\n\n"
-        f"• Shop Floor Quality Gate:\n"
-        f"  Strict line inspection on all\n"
+        f"• Comparison Span:\n"
+        f"  Day 01 to Day {sel_day_num:02d}\n"
+        f"  ({curr_abbr} vs {prev_abbr}).\n\n"
+        f"• Volume Variance:\n"
+        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
+        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n"
+        f"  - Net Shift: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
+        f"• Process Control Gate:\n"
+        f"  Active line inspection on all\n"
         f"  high-volume running molds."
     )
     ax.text(78.6, 34.6, t2, color='#166534', fontsize=8.0, linespacing=1.45, va='top')
@@ -866,8 +912,8 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_la
     return buf.getvalue()
 
 
-def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, section_label):
-    fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
+def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
+    fig, ax = plt.subplots(figsize=(19, 11.0), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
     ax.set_xlim(0, 100)
@@ -878,27 +924,29 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
     year_num = sel_date_obj.year
     span_text = f"{month_name} 01 – {month_name} {sel_day_num:02d}, {year_num}"
 
-    tot_pcs = df_lineman["Rej_Pcs"].sum() if not df_lineman.empty and "Rej_Pcs" in df_lineman.columns else 0
-    tot_ton = df_lineman["Rej_Ton"].sum() if not df_lineman.empty and "Rej_Ton" in df_lineman.columns else 0.0
-    tot_entries = df_lineman["Logged_Entries"].sum() if not df_lineman.empty and "Logged_Entries" in df_lineman.columns else 0
-    tot_linemen = len(df_lineman)
+    c_curr_pcs = f"{curr_abbr} Pcs"
+    c_prev_pcs = f"{prev_abbr} Pcs"
+    c_curr_ton = f"{curr_abbr} Ton"
+    c_prev_ton = f"{prev_abbr} Ton"
 
-    ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, f"Line-Level Quality Logging Activity & Tonnage Accountability  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
+    tot_curr_pcs = df_lineman_mom[c_curr_pcs].sum() if c_curr_pcs in df_lineman_mom.columns else 0
+    tot_prev_pcs = df_lineman_mom[c_prev_pcs].sum() if c_prev_pcs in df_lineman_mom.columns else 0
+    tot_curr_ton = df_lineman_mom[c_curr_ton].sum() if c_curr_ton in df_lineman_mom.columns else 0.0
+    tot_prev_ton = df_lineman_mom[c_prev_ton].sum() if c_prev_ton in df_lineman_mom.columns else 0.0
+    tot_linemen = len(df_lineman_mom)
+
+    ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & MoM AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, f"Operator Shift Performance & Quality Accountability ({curr_abbr} 01–{sel_day_num:02d} vs {prev_abbr} 01–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
     
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
     ax.text(86.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
-    top_lineman_name = df_lineman.iloc[0]["Lineman (Added By)"] if not df_lineman.empty else "-"
-    top_lineman_pcs = df_lineman.iloc[0]["Rej_Pcs"] if not df_lineman.empty and "Rej_Pcs" in df_lineman.columns else 0
-    top_lineman_pct = df_lineman.iloc[0]["% Pcs Share Raw"] if not df_lineman.empty and "% Pcs Share Raw" in df_lineman.columns else 0.0
-
     kpis = [
-        ("TOTAL LOGGED SCRAP", f"{tot_pcs:,} Pcs", f"{tot_ton:.3f} Metric Tons", "#dc2626"),
-        ("LOGGED TRANSACTIONS", f"{tot_entries:,} Entries", "Audit Records Recorded", "#2563eb"),
-        ("ACTIVE LINEMEN", f"{tot_linemen} Personnel", "Logging Rejection on Floor", "#7c3aed"),
-        ("HIGHEST LOGGED VOLUME", f"{top_lineman_name.split('(')[0].strip()}", f"{top_lineman_pcs:,} Pcs ({top_lineman_pct:.1f}%)", "#f59e0b"),
+        (f"{curr_abbr.upper()} OPERATOR SCRAP", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Metric Tons", "#dc2626"),
+        (f"{prev_abbr.upper()} BENCHMARK", f"{tot_prev_pcs:,} Pcs", f"{tot_prev_ton:.2f} Metric Tons", "#2563eb"),
+        ("BENCHMARKED OPERATORS", f"{tot_linemen} Operators", "Core Roster Audited", "#7c3aed"),
+        ("NET SCRAP VARIANCE", f"{tot_curr_pcs - tot_prev_pcs:+,} Pcs", f"{tot_curr_ton - tot_prev_ton:+.2f} Tons", "#f59e0b"),
     ]
     kpi_w, kpi_gap = 23.0, 1.33
     for i, (title, val, sub, col_bar) in enumerate(kpis):
@@ -913,8 +961,8 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 73.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(3.5, 83.5, f"LINEMAN REJECTION LOGGING & COVERAGE MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
-    ax.text(73.0, 83.5, f"{tot_linemen} Active Logging Personnel", color='#64748b', fontsize=7.8, ha='right')
+    ax.text(3.5, 83.5, f"OPERATOR LIKE-FOR-LIKE SCRAP MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(73.0, 83.5, f"{tot_linemen} Core Operators Active", color='#64748b', fontsize=7.8, ha='right')
 
     right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(right_card)
@@ -926,16 +974,15 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
     ax.add_patch(tbl_hdr)
     ax.text(left_x + 1.0, 80.8, "#", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
     ax.text(left_x + 3.0, 80.8, "LINEMAN PERSONNEL (ADDED BY)", color='#ffffff', fontsize=6.8, fontweight='bold', va='center')
-    ax.text(left_x + 34.0, 80.8, "REJ PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-    ax.text(left_x + 42.0, 80.8, "REJ TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-    ax.text(left_x + 50.5, 80.8, "ENTRIES", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-    ax.text(left_x + 58.5, 80.8, "MCS COVERED", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-    ax.text(left_x + 65.0, 80.8, "PCS %", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
-    ax.text(left_x + 70.2, 80.8, "TON %", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 31.0, 80.8, f"{curr_abbr.upper()} PCS", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 40.0, 80.8, f"{prev_abbr.upper()} PCS", color='#cbd5e1', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 49.0, 80.8, f"{curr_abbr.upper()} TON", color='#ffffff', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 57.5, 80.8, f"{prev_abbr.upper()} TON", color='#cbd5e1', fontsize=6.8, fontweight='bold', ha='right', va='center')
+    ax.text(left_x + 69.5, 80.8, "VARIANCE", color='#ffffff', fontsize=6.8, fontweight='bold', ha='center', va='center')
 
     row_y = 77.0
     row_step = min(4.4, 73.0 / max(1, tot_linemen))
-    for r_i, (_, r) in enumerate(df_lineman.iterrows()):
+    for r_i, (_, r) in enumerate(df_lineman_mom.iterrows()):
         bg_c = '#f8fafc' if r_i % 2 == 1 else '#ffffff'
         row_bg = patches.Rectangle((left_x, row_y - 1.4), tbl_w, row_step, facecolor=bg_c, edgecolor='none')
         ax.add_patch(row_bg)
@@ -943,35 +990,38 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
 
         ax.text(left_x + 1.0, row_y + 0.35, f"{r_i + 1}", color='#64748b', fontsize=6.6, va='center')
         ax.text(left_x + 3.0, row_y + 0.35, str(r["Lineman (Added By)"]), color='#0f172a', fontsize=6.8, fontweight='bold', va='center')
-        ax.text(left_x + 34.0, row_y + 0.35, f"{int(r['Rej_Pcs']):,}", color='#0f172a', fontsize=6.8, ha='right', va='center')
-        ax.text(left_x + 42.0, row_y + 0.35, f"{r['Rej_Ton']:.3f}", color='#0f172a', fontsize=6.6, ha='right', va='center')
-        ax.text(left_x + 50.5, row_y + 0.35, f"{int(r['Logged_Entries']):,}", color='#64748b', fontsize=6.6, ha='right', va='center')
-        ax.text(left_x + 58.5, row_y + 0.35, f"{int(r['Machines_Covered'])}", color='#64748b', fontsize=6.6, ha='right', va='center')
-        
-        pcs_share = r["% Pcs Share Raw"] if "% Pcs Share Raw" in r else 0.0
-        ax.text(left_x + 65.0, row_y + 0.35, f"{pcs_share:.1f}%", color='#b91c1c' if pcs_share >= 12 else '#0f172a', fontsize=6.8, fontweight='bold' if pcs_share >= 12 else 'normal', ha='right', va='center')
-        
-        ton_share = r["% Ton Share Raw"] if "% Ton Share Raw" in r else 0.0
-        ax.text(left_x + 70.2, row_y + 0.35, f"{ton_share:.1f}%", color='#2563eb' if ton_share >= 12 else '#0f172a', fontsize=6.8, fontweight='bold' if ton_share >= 12 else 'normal', ha='right', va='center')
+        ax.text(left_x + 31.0, row_y + 0.35, f"{int(r[c_curr_pcs]):,}", color='#0f172a', fontsize=6.8, ha='right', va='center')
+        ax.text(left_x + 40.0, row_y + 0.35, f"{int(r[c_prev_pcs]):,}", color='#64748b', fontsize=6.6, ha='right', va='center')
+        ax.text(left_x + 49.0, row_y + 0.35, f"{r[c_curr_ton]:.3f}", color='#0f172a', fontsize=6.6, ha='right', va='center')
+        ax.text(left_x + 57.5, row_y + 0.35, f"{r[c_prev_ton]:.3f}", color='#64748b', fontsize=6.6, ha='right', va='center')
+
+        diff_pcs = r["Variance (Pcs)"] if "Variance (Pcs)" in r else (r[c_curr_pcs] - r[c_prev_pcs])
+        badge_x = left_x + 69.5
+        if diff_pcs > 0:
+            badge_bg = "#fee2e2"
+            badge_fg = "#b91c1c"
+            badge_txt = f"▲ +{int(diff_pcs):,}"
+        else:
+            badge_bg = "#dcfce7"
+            badge_fg = "#15803d"
+            badge_txt = f"▼ {int(diff_pcs):,}"
+
+        ax.add_patch(patches.FancyBboxPatch((badge_x - 4.5, row_y - 0.7), 9.0, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
+        ax.text(badge_x, row_y + 0.35, badge_txt, color=badge_fg, fontsize=6.4, fontweight="bold", ha="center", va="center")
         row_y -= row_step
 
-    top_3_linemen = df_lineman.head(3)
-    top_3_pcs_sum = top_3_linemen["% Pcs Share Raw"].sum() if "% Pcs Share Raw" in top_3_linemen.columns else 0.0
     c1 = patches.FancyBboxPatch((77.5, 42.5), 20.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f8fafc', edgecolor='#cbd5e1', linewidth=0.8)
     ax.add_patch(c1)
     ax.text(78.6, 78.8, "Shift Accountability Summary", color='#0f172a', fontsize=9.6, fontweight='bold')
-
-    top3_lines = "\n".join([f"  {idx+1}. {r['Lineman (Added By)'].split('(')[0].strip()}: {r.get('% Pcs Share Raw', 0.0):.1f}% ({r.get('Rej_Ton', 0.0):.2f} T)" for idx, (_, r) in enumerate(top_3_linemen.iterrows())])
     t1 = (
-        f"• Top 3 Logging Personnel:\n"
-        f"{top3_lines}\n\n"
-        f"• Volume Concentration:\n"
-        f"  Top 3 contributors logged\n"
-        f"  {top_3_pcs_sum:.1f}% of total rejected\n"
-        f"  pieces across the floor.\n\n"
-        f"• Operational Compliance:\n"
-        f"  Ensure timely entry of mold\n"
-        f"  change scrap & purge weight\n"
+        f"• Benchmarking Scope:\n"
+        f"  Comparing active core team\n"
+        f"  across equal operational days\n"
+        f"  (Day 01–{sel_day_num:02d}).\n\n"
+        f"• Shift Directives:\n"
+        f"  Audit lines with positive\n"
+        f"  scrap escalation (&Delta; Pcs).\n"
+        f"  Ensure purge scrap weighing\n"
         f"  during shift handover."
     )
     ax.text(78.6, 75.2, t1, color='#334155', fontsize=8.0, linespacing=1.45, va='top')
@@ -980,17 +1030,16 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
     ax.add_patch(c2)
     ax.text(78.6, 38.2, "Logging Coverage Audit", color='#1d4ed8', fontsize=9.6, fontweight='bold')
     t2 = (
-        f"• Audit Period:\n"
+        f"• Audit Span:\n"
         f"  {span_text}\n"
-        f"  ({sel_day_num} Days Monitored).\n\n"
-        f"• Transaction Volume:\n"
-        f"  - {tot_entries:,} Rejection entries\n"
-        f"  - {tot_ton:.3f} Metric tons total\n"
-        f"  - {tot_linemen} Active operators.\n\n"
-        f"• Quality Protocol:\n"
-        f"  Daily random verification of\n"
-        f"  logged rejection pieces vs\n"
-        f"  physical scrap bins."
+        f"  ({sel_day_num} Operational Days).\n\n"
+        f"• Shift Output:\n"
+        f"  - {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
+        f"  - Prior: {tot_prev_pcs:,} Pcs\n"
+        f"  - Variance: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
+        f"• Compliance Protocol:\n"
+        f"  Random physical bin audits\n"
+        f"  against ERP recorded logs."
     )
     ax.text(78.6, 34.6, t2, color='#1e3a8a', fontsize=8.0, linespacing=1.45, va='top')
 
@@ -1189,13 +1238,6 @@ def render_scrap_module():
 
         excel_bytes_filtered = m2_export_rejection_excel(df_day_filtered)
 
-        jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
-            df_cause_as_of,
-            sel_date_obj,
-            sel_day_num,
-            section_display_name,
-        )
-
         with c_snap:
             st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
@@ -1311,6 +1353,18 @@ These are the line records from *{section_display_name}* where rejection exceede
         st.divider()
 
         # Section 3: Cause-Wise Defect Analysis
+        df_cause_mom_full = m2_compute_cause_mom_comparison(
+            df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=True
+        )
+        jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
+            df_cause_mom_full,
+            sel_date_obj,
+            sel_day_num,
+            section_display_name,
+            prev_abbr=prev_abbr,
+            curr_abbr=curr_abbr,
+        )
+
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### CAUSE-WISE REJECTION DEFECT ANALYSIS")
@@ -1326,7 +1380,7 @@ These are the line records from *{section_display_name}* where rejection exceede
         c_tgl_c, c_chk_var_c = st.columns([2.2, 2.0], vertical_alignment="center")
         with c_tgl_c:
             show_cause_mom = st.toggle(
-                f"Compare with Prior Month ({prev_abbr} 01–{sel_day_num:02d} vs {curr_abbr} 01–{sel_day_num:02d})",
+                f"Compare with Prior Month ({curr_abbr} 01–{sel_day_num:02d} vs {prev_abbr} 01–{sel_day_num:02d})",
                 value=False,
                 key="tgl_cause_mom"
             )
@@ -1347,10 +1401,10 @@ These are the line records from *{section_display_name}* where rejection exceede
         with tab_cause_asof:
             if show_cause_mom:
                 st.caption(f"Showing Side-by-Side Root Cause Comparison: **{curr_abbr} 01–{sel_day_num:02d}** vs **{prev_abbr} 01–{sel_day_num:02d}**")
-                df_cause_mom = m2_compute_cause_mom_comparison(
+                df_cause_mom_disp = m2_compute_cause_mom_comparison(
                     df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=show_cause_variances
                 )
-                st.dataframe(df_cause_mom, use_container_width=True, hide_index=True)
+                st.dataframe(df_cause_mom_disp, use_container_width=True, hide_index=True)
             else:
                 display_cause_cols = ["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]
                 st.dataframe(df_cause_as_of[display_cause_cols], use_container_width=True, hide_index=True)
@@ -1398,7 +1452,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with c_tgl_op:
             show_lineman_mom = st.toggle(
-                f"Compare Operators ({prev_abbr} 01–{sel_day_num:02d} vs {curr_abbr} 01–{sel_day_num:02d})",
+                f"Compare Operators ({curr_abbr} 01–{sel_day_num:02d} vs {prev_abbr} 01–{sel_day_num:02d})",
                 value=False,
                 key="tgl_lineman_mom"
             )
@@ -1411,17 +1465,20 @@ These are the line records from *{section_display_name}* where rejection exceede
         active_ops = st.session_state["selected_linemen_roster"]
         df_as_of_filtered_ops = df_as_of[df_as_of[lineman_col].isin(active_ops)].copy()
         df_day_filtered_ops = df_day[df_day[lineman_col].isin(active_ops)].copy()
+        df_prev_filtered_ops = df_prev_as_of[df_prev_as_of[lineman_col].isin(active_ops)].copy() if not df_prev_as_of.empty else pd.DataFrame()
 
         df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of_filtered_ops)
-        df_shift_as_of = m2_compute_shift_breakdown(df_as_of)
-        df_op_matrix = m2_compute_operator_defect_pivot(df_as_of_filtered_ops)
-        df_op_ranks = m2_compute_operator_rankings(df_as_of_filtered_ops)
+        df_lineman_mom = m2_compute_lineman_mom_comparison(
+            df_prev_as_of, df_as_of, prev_abbr, curr_abbr, active_ops, include_variances=True
+        )
 
         jpg_bytes_lineman = m2_generate_lineman_report_jpg(
-            df_lineman_as_of,
+            df_lineman_mom,
             sel_date_obj,
             sel_day_num,
             section_display_name,
+            prev_abbr=prev_abbr,
+            curr_abbr=curr_abbr,
         )
 
         with c_down_line:
@@ -1443,11 +1500,11 @@ These are the line records from *{section_display_name}* where rejection exceede
         with tab_line_asof:
             if show_lineman_mom:
                 st.caption(f"Comparing Side-by-Side Operator Performance: **{curr_abbr} 01–{sel_day_num:02d}** vs **{prev_abbr} 01–{sel_day_num:02d}**")
-                df_lineman_mom = m2_compute_lineman_mom_comparison(
+                df_lineman_mom_disp = m2_compute_lineman_mom_comparison(
                     df_prev_as_of, df_as_of, prev_abbr, curr_abbr, active_ops, include_variances=show_line_variances
                 )
-                if not df_lineman_mom.empty:
-                    st.dataframe(df_lineman_mom, use_container_width=True, hide_index=True)
+                if not df_lineman_mom_disp.empty:
+                    st.dataframe(df_lineman_mom_disp, use_container_width=True, hide_index=True)
                 else:
                     st.info("No comparative records found.")
             else:
@@ -1458,27 +1515,53 @@ These are the line records from *{section_display_name}* where rejection exceede
                     st.info("No operator entries matching current filter.")
 
         with tab_shift:
-            if not df_shift_as_of.empty:
-                st.dataframe(df_shift_as_of, use_container_width=True, hide_index=True)
-                s_a = df_shift_as_of[df_shift_as_of["Shift"].str.contains("Shift A", na=False)]
-                s_b = df_shift_as_of[df_shift_as_of["Shift"].str.contains("Shift B", na=False)]
-                pcs_a = int(s_a["Rej_Pcs"].iloc[0]) if not s_a.empty else 0
-                pcs_b = int(s_b["Rej_Pcs"].iloc[0]) if not s_b.empty else 0
-                st.caption(f"Shift Handover Ratio: Shift A (Day) accounted for {pcs_a:,} Pcs vs Shift B (Night) {pcs_b:,} Pcs.")
+            c_sh_hdr, c_sh_chk = st.columns([3, 1.4], vertical_alignment="center")
+            with c_sh_hdr:
+                st.caption(f"Shift Output Comparison (Day 1–{sel_day_num:02d}): **{curr_abbr}** vs **{prev_abbr}**")
+            with c_sh_chk:
+                show_shift_variances = st.checkbox("Show Shift Variances", value=False, key="chk_shift_var")
+
+            df_shift_mom = m2_compute_shift_mom_comparison(
+                df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=show_shift_variances
+            )
+            if not df_shift_mom.empty:
+                st.dataframe(df_shift_mom, use_container_width=True, hide_index=True)
             else:
-                st.info("No shift logs available.")
+                st.info("No shift records available.")
 
         with tab_matrix:
+            c_mat_span, _ = st.columns([2.5, 1.5], vertical_alignment="center")
+            with c_mat_span:
+                matrix_span = st.radio(
+                    "Matrix Period Scope:",
+                    options=[f"Present Month ({curr_abbr} 01–{sel_day_num:02d})", f"Previous Month ({prev_abbr} 01–{sel_day_num:02d})"],
+                    horizontal=True,
+                    key="rad_matrix_span",
+                )
+            
+            target_matrix_df = df_as_of_filtered_ops if curr_abbr in matrix_span else df_prev_filtered_ops
+            df_op_matrix = m2_compute_operator_defect_pivot(target_matrix_df)
             if not df_op_matrix.empty:
                 st.dataframe(df_op_matrix, use_container_width=True, hide_index=True)
             else:
-                st.info("No defect matrix available for current operator selection.")
+                st.info("No defect matrix available for selected period.")
 
         with tab_ranks:
+            c_rnk_span, _ = st.columns([2.5, 1.5], vertical_alignment="center")
+            with c_rnk_span:
+                ranks_span = st.radio(
+                    "Rankings Period Scope:",
+                    options=[f"Present Month ({curr_abbr} 01–{sel_day_num:02d})", f"Previous Month ({prev_abbr} 01–{sel_day_num:02d})"],
+                    horizontal=True,
+                    key="rad_ranks_span",
+                )
+
+            target_ranks_df = df_as_of_filtered_ops if curr_abbr in ranks_span else df_prev_filtered_ops
+            df_op_ranks = m2_compute_operator_rankings(target_ranks_df)
             if not df_op_ranks.empty:
                 st.dataframe(df_op_ranks, use_container_width=True, hide_index=True)
             else:
-                st.info("No ranking breakdown available.")
+                st.info("No ranking breakdown available for selected period.")
 
         st.divider()
 
