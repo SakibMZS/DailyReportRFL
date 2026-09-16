@@ -1,5 +1,7 @@
 import io
+import os
 import re
+import sys
 import textwrap
 import streamlit as st
 import pandas as pd
@@ -9,7 +11,12 @@ from openpyxl.utils import get_column_letter
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-from config import POS_MAP, LINE_MAP
+# Ensure project root directory is on sys.path for robust sub-module imports
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+from config import resolve_section_config
 
 
 def clean_mold_name(val):
@@ -77,6 +84,13 @@ def m2_parse_workbook(file_bytes):
     else:
         df_clean["Weight_Ton"] = 0.0
 
+    # Auto-resolve section configuration dynamically
+    sec_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_clean)
+    df_clean["Detected_Section"] = sec_name
+
+    mc_col = get_col(df_clean, ["Machine", "MC SL"], "Machine")
+    df_clean["Position"] = df_clean[mc_col].astype(str).map(pos_map).fillna(df_clean[mc_col].astype(str))
+
     unique_months = sorted(df_clean["YearMonth"].unique())
     if len(unique_months) >= 2:
         df_prev = df_clean[df_clean["YearMonth"] == unique_months[-2]].copy()
@@ -88,7 +102,7 @@ def m2_parse_workbook(file_bytes):
     return df_prev, df_curr, df_clean
 
 
-def m2_compute_daily_rejection(df_day, min_qty=50):
+def m2_compute_daily_rejection(df_day, pos_map, min_qty=50):
     if df_day.empty:
         return pd.DataFrame()
 
@@ -117,13 +131,11 @@ def m2_compute_daily_rejection(df_day, min_qty=50):
             else "-"
         )
         mold_name = clean_mold_name(raw_mold)
-        pos = POS_MAP.get(str(mc), "-")
-        line = LINE_MAP.get(str(mc), "-")
+        pos = pos_map.get(str(mc), str(mc))
 
         if total_pcs >= min_qty:
             records.append({
                 "Position": pos,
-                "Line": line,
                 "Machine": str(mc),
                 "Causes": causes_str,
                 "Qty": int(round(total_pcs)),
@@ -310,9 +322,9 @@ def m2_generate_scrap_jpg(
     top_wt_mc,
     top_wt_kg,
     top3_pct,
-    gf_share_pct,
-    ff_share_pct,
     top3_summary_list,
+    section_label,
+    total_plant_mcs,
     prev_abbr="Aug",
     curr_abbr="Sep",
     sel_day_num=1,
@@ -329,8 +341,8 @@ def m2_generate_scrap_jpg(
     day_formatted = sel_date_obj.strftime("%B %d")
 
     ax.text(1.5, 98.4, "DAILY REJECTION & DEFECT ANALYTICS REPORT", color="#0f172a", fontsize=16.0, fontweight="bold", va="top")
-    ax.text(1.5, 95.8, f"Plastic-3 Machine Rejection Log (>{min_cutoff} Pcs) & Plant Summary  |  Report Date: {date_formatted}", color="#64748b", fontsize=8.8, va="top")
-    ax.text(98.5, 97.2, "PLASTIC-3 OPERATIONS", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
+    ax.text(1.5, 95.8, f"{section_label} Machine Rejection Log (>{min_cutoff} Pcs) & Section Summary  |  Report Date: {date_formatted}", color="#64748b", fontsize=8.8, va="top")
+    ax.text(98.5, 97.2, f"{section_label.upper()} OPERATIONS", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
 
     kpis = [
         (f"{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior MTD Total", "#64748b"),
@@ -353,7 +365,7 @@ def m2_generate_scrap_jpg(
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 74.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=1)
     ax.add_patch(left_card)
-    ax.text(3.5, 83.5, f"PLASTIC-3 MACHINE REJECTION LOG (>{min_cutoff} Pcs) — {day_formatted}", color="#0f172a", fontsize=11.0, fontweight="bold")
+    ax.text(3.5, 83.5, f"{section_label.upper()} MACHINE REJECTION LOG (>{min_cutoff} Pcs) — {day_formatted}", color="#0f172a", fontsize=11.0, fontweight="bold")
     ax.text(73.5, 83.5, f"{high_rej_count} Machines Active Above Threshold", color="#64748b", fontsize=8.0, ha="right")
 
     right_card = patches.FancyBboxPatch((76.5, 1.5), 22.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor="#ffffff", edgecolor="#cbd5e1", linewidth=1)
@@ -433,7 +445,7 @@ def m2_generate_scrap_jpg(
         f"  {top_wt_mc} ({top_wt_kg:.1f} kg loss).\n\n"
         f"• Critical Observations:\n"
         f"  Repetitive short filling noted\n"
-        f"  on cutlery and box lid molds.\n"
+        f"  on active production molds.\n"
         f"  Color change purging requires\n"
         f"  strict standardization."
     )
@@ -441,18 +453,17 @@ def m2_generate_scrap_jpg(
 
     c2 = patches.FancyBboxPatch((77.5, 2.5), 20.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#f0fdf4", edgecolor="#bbf7d0", linewidth=0.8)
     ax.add_patch(c2)
-    ax.text(78.6, 38.2, "Shop Floor & Plant Distribution", color="#15803d", fontsize=9.6, fontweight="bold")
+    ax.text(78.6, 38.2, "Section Quality Overview", color="#15803d", fontsize=9.6, fontweight="bold")
     t2 = (
-        f"• Total Plant Logged: {total_day_mcs} MCs\n"
+        f"• Section Total Logged: {total_day_mcs} MCs\n"
         f"  - {high_rej_count} Lines > {min_cutoff} pcs (Critical)\n"
-        f"  - {total_day_mcs - high_rej_count} Lines <= {min_cutoff} pcs (Controlled)\n\n"
+        f"  - {total_day_mcs - high_rej_count} Lines <= {min_cutoff} pcs (Controlled)\n"
+        f"  - Baseline Registry: {total_plant_mcs} MCs\n\n"
         f"• Last Day Output Lost:\n"
         f"  {total_rej_pcs:,} Pcs / {total_rej_ton:.3f} Ton.\n\n"
-        f"• Weight Share by Shop Floor:\n"
-        f"  - GF Lines: {gf_share_pct:.1f}% of loss wt\n"
-        f"  - FF Lines: {ff_share_pct:.1f}% of loss wt\n\n"
         f"• MTD Pace (Day 1–{sel_day_num:02d}):\n"
-        f"  {curr_as_of_avg_ton:.2f} T/Day (vs {prev_as_of_avg_ton:.2f} {prev_abbr} Pace)."
+        f"  {curr_as_of_avg_ton:.2f} T/Day\n"
+        f"  (vs {prev_as_of_avg_ton:.2f} T/Day in {prev_abbr})."
     )
     ax.text(78.6, 34.6, t2, color="#166534", fontsize=8.2, linespacing=1.45, va="top")
 
@@ -464,7 +475,7 @@ def m2_generate_scrap_jpg(
     return buf.getvalue()
 
 
-def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
+def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num, section_label):
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
@@ -482,7 +493,7 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     tot_causes = len(df_cause)
 
     ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, "Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
+    ax.text(1.5, 95.8, f"Comprehensive Defect Root Cause Breakdown & Pareto Analytics  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
     
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
@@ -603,7 +614,7 @@ def m2_generate_cause_pareto_jpg(df_cause, sel_date_obj, sel_day_num):
     return buf.getvalue()
 
 
-def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
+def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, section_label):
     fig, ax = plt.subplots(figsize=(18, 10.5), dpi=220)
     fig.patch.set_facecolor('#f1f5f9')
     ax.set_facecolor('#f1f5f9')
@@ -621,7 +632,7 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num):
     tot_linemen = len(df_lineman)
 
     ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & AUDIT REPORT", color='#0f172a', fontsize=16.0, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, "Line-Level Quality Logging Activity & Tonnage Accountability  |  Plastic-3 Plant", color='#64748b', fontsize=8.8, va='top')
+    ax.text(1.5, 95.8, f"Line-Level Quality Logging Activity & Tonnage Accountability  |  {section_label}", color='#64748b', fontsize=8.8, va='top')
     
     span_badge = patches.FancyBboxPatch((74.0, 94.8), 24.5, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
@@ -759,12 +770,33 @@ def render_scrap_module():
     st.divider()
 
     if "m2_file_bytes" not in st.session_state:
+        # Data Ingestion Requirement Banner
+        st.markdown(
+            """
+            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #b91c1c; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
+                <div style="color: #b91c1c; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.35rem;">
+                    DATA INGESTION REQUIREMENT
+                </div>
+                <div style="color: #0f172a; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
+                    Operational Date Range Specification
+                </div>
+                <div style="color: #475569; font-size: 0.9rem; line-height: 1.5;">
+                    Please upload the relevant file containing data <b>from the start of the last month to the current month's latest operational date</b>.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         c_up, _ = st.columns([2, 1])
         with c_up:
             st.markdown(
-                '<div style="background:#ffffff; padding:1.75rem; border-radius:12px; border:1px solid #e2e8f0; border-top:4px solid #dc2626; box-shadow: 0 4px 12px rgba(15,23,42,0.05);">'
-                '<h3 style="margin-top:0; color:#0f172a;">📂 Upload Rejection / Scrap Workbook</h3>'
-                '<p style="color:#64748b !important;">Select the Excel workbook containing monthly defect records (e.g. rej.xlsx).</p></div>',
+                """
+                <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #b91c1c;">
+                    <h4 style="margin-top:0; color:#0f172a;">📂 Ingest Rejection / Scrap Workbook</h4>
+                    <p style="color:#64748b !important; font-size:0.85rem;">Select the Excel workbook containing monthly defect records (e.g. rej.xlsx).</p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
@@ -780,12 +812,22 @@ def render_scrap_module():
                     st.rerun()
     else:
         df_prev, df_curr, df_full = m2_parse_workbook(st.session_state["m2_file_bytes"])
+
+        # Auto-detect section configuration dynamically from uploaded report
+        detected_sec = df_curr["Detected_Section"].iloc[0] if "Detected_Section" in df_curr.columns else "RIP> DPL> Plastic-3"
+        sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_curr, fallback_name=detected_sec)
+
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
+        section_display_name = sec_name.split(">")[-1].strip()
 
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_cut, c_snap, c_excel = st.columns([1.3, 1.0, 1.2, 1.5], gap="small")
         with c_date:
-            sel_date_str = st.selectbox("📅 **Operational Date**", all_dates, index=len(all_dates) - 1)
+            sel_date_str = st.selectbox(
+                f"📅 **Operational Date ({section_display_name})**",
+                all_dates,
+                index=len(all_dates) - 1
+            )
         with c_cut:
             min_cutoff = st.number_input("🔢 **Min Cutoff (Pcs)**", min_value=1, value=50, step=10)
 
@@ -798,7 +840,7 @@ def render_scrap_module():
 
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
         df_as_of = df_curr[df_curr["DateClean"].dt.day <= sel_day_num].copy()
-        df_day_filtered = m2_compute_daily_rejection(df_day, min_qty=min_cutoff)
+        df_day_filtered = m2_compute_daily_rejection(df_day, pos_map=pos_map, min_qty=min_cutoff)
 
         if not df_prev.empty:
             df_prev_as_of = df_prev[df_prev["DateClean"].dt.day <= sel_day_num].copy()
@@ -862,15 +904,8 @@ def render_scrap_module():
             mc_wt_grp = df_day.groupby(mc_col)["Weight_Ton"].sum() * 1000.0
             top_wt_mc = mc_wt_grp.idxmax() if not mc_wt_grp.empty else "-"
             top_wt_kg = float(mc_wt_grp.max()) if not mc_wt_grp.empty else 0.0
-
-            df_day["LineCode"] = df_day[mc_col].map(LINE_MAP).fillna("-")
-            gf_wt = df_day[df_day["LineCode"].str.startswith("GF")]["Weight_Ton"].sum()
-            ff_wt = df_day[df_day["LineCode"].str.startswith("FF")]["Weight_Ton"].sum()
-            tot_w = (gf_wt + ff_wt) if (gf_wt + ff_wt) > 0 else 1.0
-            gf_share_pct = gf_wt / tot_w * 100.0
-            ff_share_pct = ff_wt / tot_w * 100.0
         else:
-            top_wt_mc, top_wt_kg, gf_share_pct, ff_share_pct = "-", 0.0, 80.0, 20.0
+            top_wt_mc, top_wt_kg = "-", 0.0
 
         jpg_bytes_daily = m2_generate_scrap_jpg(
             df_day_filtered,
@@ -889,9 +924,9 @@ def render_scrap_module():
             top_wt_mc,
             top_wt_kg,
             top3_pct,
-            gf_share_pct,
-            ff_share_pct,
             top3_summary_list,
+            section_display_name,
+            total_plant_mcs,
             prev_abbr=prev_abbr,
             curr_abbr=curr_abbr,
             sel_day_num=sel_day_num,
@@ -904,12 +939,14 @@ def render_scrap_module():
             df_cause_as_of,
             sel_date_obj,
             sel_day_num,
+            section_display_name,
         )
 
         jpg_bytes_lineman = m2_generate_lineman_report_jpg(
             df_lineman_as_of,
             sel_date_obj,
             sel_day_num,
+            section_display_name,
         )
 
         with c_snap:
@@ -917,7 +954,7 @@ def render_scrap_module():
             st.download_button(
                 label="📸 Download 1-Page JPG",
                 data=jpg_bytes_daily,
-                file_name=f"Daily_Rejection_Report_{sel_date_str}.jpg",
+                file_name=f"Daily_Rejection_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -927,7 +964,7 @@ def render_scrap_module():
             st.download_button(
                 label=f"📥 Download Excel (>{min_cutoff} Pcs)",
                 data=excel_bytes_filtered,
-                file_name=f"Rejection_Log_Over{min_cutoff}Pcs_{sel_date_str}.xlsx",
+                file_name=f"Rejection_Log_Over{min_cutoff}Pcs_{section_display_name}_{sel_date_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
@@ -955,7 +992,7 @@ def render_scrap_module():
             unsafe_allow_html=True,
         )
         k6.markdown(
-            f'<div class="kpi-card yellow"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Lines Over Limit</div></div>',
+            f'<div class="kpi-card yellow"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Of {total_plant_mcs} MCs</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -963,7 +1000,7 @@ def render_scrap_module():
 
         col_left, col_right = st.columns([1.55, 0.95], gap="large")
         with col_left:
-            st.markdown(f"#### ⚙️ PLASTIC-3 MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
+            st.markdown(f"#### ⚙️ {section_display_name.upper()} MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
             if not df_day_filtered.empty:
                 st.dataframe(
                     df_day_filtered[["Position", "Machine", "Causes", "Qty", "Weight (kg)", "Mold"]],
@@ -975,12 +1012,12 @@ def render_scrap_module():
                 st.success("✅ No machines exceeded the rejection cutoff threshold today!")
 
         with col_right:
-            approval_text = f"""📋 *PLASTIC-3 DAILY SCRAP & REJECTION BRIEF*
+            approval_text = f"""📋 *{section_display_name.upper()} DAILY SCRAP & REJECTION BRIEF*
 📅 *Date:* {day_formatted}
 
 Dear Sir,
 
-These are the line records from *Plastic-3* where rejection exceeded *{min_cutoff} pieces*:
+These are the line records from *{section_display_name}* where rejection exceeded *{min_cutoff} pieces*:
 
 🔹 *Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):* {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)
 🔹 *Present Month ({curr_abbr} 01–{sel_day_num:02d}):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
@@ -991,10 +1028,10 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
             st.markdown("#### 📝 EXECUTIVE APPROVAL TEXT")
             st.markdown(
                 f"""<div class="narrative-block">
-                    <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 PLASTIC-3 DAILY SCRAP & REJECTION BRIEF</p>
+                    <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 {section_display_name.upper()} DAILY SCRAP & REJECTION BRIEF</p>
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
-                    <p>These are the line records from <b>Plastic-3</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
+                    <p>These are the line records from <b>{section_display_name}</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
                     <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):</b> {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)</p>
                     <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month ({curr_abbr} 01–{sel_day_num:02d}):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
                     {variance_line_html}
@@ -1017,7 +1054,7 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
             st.download_button(
                 label="📸 Download MTD Cause Pareto Report (JPG)",
                 data=jpg_bytes_cause_pareto,
-                file_name=f"MTD_Cause_Pareto_Report_AsOf_{sel_date_str}.jpg",
+                file_name=f"MTD_Cause_Pareto_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -1042,7 +1079,7 @@ These are the line records from *Plastic-3* where rejection exceeded *{min_cutof
             st.download_button(
                 label="📸 Download MTD Lineman Report (JPG)",
                 data=jpg_bytes_lineman,
-                file_name=f"MTD_Lineman_Report_AsOf_{sel_date_str}.jpg",
+                file_name=f"MTD_Lineman_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
