@@ -84,7 +84,6 @@ def m2_parse_workbook(file_bytes):
     else:
         df_clean["Weight_Ton"] = 0.0
 
-    # Auto-resolve section configuration dynamically
     sec_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_clean)
     df_clean["Detected_Section"] = sec_name
 
@@ -197,7 +196,6 @@ def m2_export_rejection_excel(df_day_filtered):
         ws.row_dimensions[current_row].height = 20
         current_row += 1
 
-    # Summary Row
     ws.cell(row=current_row, column=1, value="")
     ws.cell(row=current_row, column=2, value="")
     sum_cell = ws.cell(row=current_row, column=3, value="Summary >>")
@@ -751,26 +749,32 @@ def m2_generate_lineman_report_jpg(df_lineman, sel_date_obj, sel_day_num, sectio
 
 
 def render_scrap_module():
+    # Executive Top Command Bar
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
-        if st.button("⬅️ Back to Operations Hub", use_container_width=True):
+        if st.button("Back to Operations Hub", use_container_width=True):
             st.session_state["active_view"] = "hub_home"
             st.rerun()
     with c_title:
         st.markdown(
-            "<h3 style='margin:0; text-align:center; font-weight:800; color:#0f172a;'>📉 DAILY REJECTION & DEFECT ANALYTICS</h3>",
+            """
+            <div style="text-align:center;">
+                <div style="color: #b91c1c; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;">Quality Control Division</div>
+                <h3 style="margin:0; font-weight:800; color:#0f172a; letter-spacing: -0.01em;">DAILY REJECTION & DEFECT ANALYTICS</h3>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
     with c_act:
         if "m2_file_bytes" in st.session_state:
-            if st.button("🔄 Change Excel File", use_container_width=True):
+            if st.button("Change Excel File", use_container_width=True):
                 st.session_state.pop("m2_file_bytes", None)
                 st.rerun()
 
-    st.divider()
+    st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
     if "m2_file_bytes" not in st.session_state:
-        # Data Ingestion Requirement Banner
+        # Prominent Data Ingestion Requirement Banner
         st.markdown(
             """
             <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #b91c1c; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
@@ -793,7 +797,7 @@ def render_scrap_module():
             st.markdown(
                 """
                 <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #b91c1c;">
-                    <h4 style="margin-top:0; color:#0f172a;">📂 Ingest Rejection / Scrap Workbook</h4>
+                    <h4 style="margin-top:0; color:#0f172a;">Ingest Rejection / Scrap Workbook</h4>
                     <p style="color:#64748b !important; font-size:0.85rem;">Select the Excel workbook containing monthly defect records (e.g. rej.xlsx).</p>
                 </div>
                 """,
@@ -806,30 +810,30 @@ def render_scrap_module():
             )
             if uploaded_file is not None:
                 if st.button(
-                    "🚀 Ingest Rejection Data & Launch", type="primary", use_container_width=True
+                    "Ingest Rejection Data & Launch", type="primary", use_container_width=True
                 ):
                     st.session_state["m2_file_bytes"] = uploaded_file.getvalue()
                     st.rerun()
     else:
         df_prev, df_curr, df_full = m2_parse_workbook(st.session_state["m2_file_bytes"])
 
-        # Auto-detect section configuration dynamically from uploaded report
         detected_sec = df_curr["Detected_Section"].iloc[0] if "Detected_Section" in df_curr.columns else "RIP> DPL> Plastic-3"
         sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_curr, fallback_name=detected_sec)
 
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
         section_display_name = sec_name.split(">")[-1].strip()
 
+        # Grouped Industrial Toolbar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_cut, c_snap, c_excel = st.columns([1.3, 1.0, 1.2, 1.5], gap="small")
+        c_date, c_cut, c_snap, c_excel = st.columns([1.4, 1.0, 1.3, 1.5], gap="small")
         with c_date:
             sel_date_str = st.selectbox(
-                f"📅 **Operational Date ({section_display_name})**",
+                f"Operational Date ({section_display_name})",
                 all_dates,
                 index=len(all_dates) - 1
             )
         with c_cut:
-            min_cutoff = st.number_input("🔢 **Min Cutoff (Pcs)**", min_value=1, value=50, step=10)
+            min_cutoff = st.number_input("Min Cutoff (Pcs)", min_value=1, value=50, step=10)
 
         sel_date_obj = pd.to_datetime(sel_date_str)
         sel_day_num = sel_date_obj.day
@@ -855,6 +859,7 @@ def render_scrap_module():
         diff_ton = curr_as_of_avg_ton - prev_as_of_avg_ton
         pct_diff = (diff_ton / prev_as_of_avg_ton * 100.0) if prev_as_of_avg_ton > 0 else 0.0
 
+        # WhatsApp text (Preserves Emojis for readability in chat)
         if diff_ton > 0:
             variance_line_plain = f"⚠️ Variance: We are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} 01–{sel_day_num:02d}."
             variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> We are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} 01–{sel_day_num:02d}.</p>'
@@ -950,9 +955,9 @@ def render_scrap_module():
         )
 
         with c_snap:
-            st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label="📸 Download 1-Page JPG",
+                label="Download 1-Page JPG",
                 data=jpg_bytes_daily,
                 file_name=f"Daily_Rejection_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
@@ -960,9 +965,9 @@ def render_scrap_module():
             )
 
         with c_excel:
-            st.markdown("<div style='margin-top: 1.6rem;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label=f"📥 Download Excel (>{min_cutoff} Pcs)",
+                label=f"Download Excel (>{min_cutoff} Pcs)",
                 data=excel_bytes_filtered,
                 file_name=f"Rejection_Log_Over{min_cutoff}Pcs_{section_display_name}_{sel_date_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -970,9 +975,10 @@ def render_scrap_module():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
+        # 6 Executive Styled KPI Cards
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
-            f'<div class="kpi-card indigo"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior MTD Total</div></div>',
+            f'<div class="kpi-card slate"><div class="kpi-title">{prev_abbr.upper()} 01–{sel_day_num:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior MTD Total</div></div>',
             unsafe_allow_html=True,
         )
         k2.markdown(
@@ -988,19 +994,27 @@ def render_scrap_module():
             unsafe_allow_html=True,
         )
         k5.markdown(
-            f'<div class="kpi-card pink"><div class="kpi-title">LAST DAY REJECTION</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs</div></div>',
+            f'<div class="kpi-card red"><div class="kpi-title">LAST DAY REJECTION</div><div class="kpi-val">{total_rej_ton:.3f} T</div><div class="kpi-sub">{total_rej_pcs:,} Pcs Lost</div></div>',
             unsafe_allow_html=True,
         )
         k6.markdown(
-            f'<div class="kpi-card yellow"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Of {total_plant_mcs} MCs</div></div>',
+            f'<div class="kpi-card amber"><div class="kpi-title">CRITICAL MC (&gt;{min_cutoff})</div><div class="kpi-val">{high_rej_count}</div><div class="kpi-sub">Of {total_plant_mcs} Active MCs</div></div>',
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom: 1.5rem;'></div>", unsafe_allow_html=True)
 
         col_left, col_right = st.columns([1.55, 0.95], gap="large")
         with col_left:
-            st.markdown(f"#### ⚙️ {section_display_name.upper()} MACHINE REJECTION LOG (&gt;{min_cutoff} Pcs) — {day_formatted}")
+            st.markdown(
+                f"""
+                <div class="section-panel-header">
+                    <h4 class="section-panel-title">{section_display_name.upper()} MACHINE REJECTION LOG (&gt;{min_cutoff} PCS)</h4>
+                    <span style="color: #64748b; font-size: 0.8rem; font-weight: 600;">{day_formatted}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             if not df_day_filtered.empty:
                 st.dataframe(
                     df_day_filtered[["Position", "Machine", "Causes", "Qty", "Weight (kg)", "Mold"]],
@@ -1009,7 +1023,7 @@ def render_scrap_module():
                     height=390,
                 )
             else:
-                st.success("✅ No machines exceeded the rejection cutoff threshold today!")
+                st.success("No machines exceeded the rejection cutoff threshold today.")
 
         with col_right:
             approval_text = f"""📋 *{section_display_name.upper()} DAILY SCRAP & REJECTION BRIEF*
@@ -1025,22 +1039,30 @@ These are the line records from *{section_display_name}* where rejection exceede
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
 
-            st.markdown("#### 📝 EXECUTIVE APPROVAL TEXT")
+            st.markdown(
+                """
+                <div class="section-panel-header">
+                    <h4 class="section-panel-title">EXECUTIVE APPROVAL TEXT</h4>
+                    <span style="color: #64748b; font-size: 0.8rem; font-weight: 600;">Handover Clearance</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.markdown(
                 f"""<div class="narrative-block">
-                    <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">📋 {section_display_name.upper()} DAILY SCRAP & REJECTION BRIEF</p>
-                    <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;">📅 <b>Date:</b> {day_formatted}</p>
+                    <p style="margin: 0 0 0.5rem 0; font-weight: 800; color: #1e293b;">{section_display_name.upper()} DAILY SCRAP & REJECTION BRIEF</p>
+                    <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;"><b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
                     <p>These are the line records from <b>{section_display_name}</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
-                    <p style="margin: 0.5rem 0 0.2rem 0;">🔹 <b>Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):</b> {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)</p>
-                    <p style="margin: 0 0 0.2rem 0;">🔹 <b>Present Month ({curr_abbr} 01–{sel_day_num:02d}):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0.5rem 0 0.2rem 0;">&bull; <b>Prev. Month ({prev_abbr} 01–{sel_day_num:02d}):</b> {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0 0 0.2rem 0;">&bull; <b>Present Month ({curr_abbr} 01–{sel_day_num:02d}):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
                     {variance_line_html}
-                    <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">📌 Please grant your approval to send these items for rejection clearance.</p>
+                    <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">Please grant your approval to send these items for rejection clearance.</p>
                 </div>""",
                 unsafe_allow_html=True,
             )
 
-            with st.expander("📋 Copy Plain Text for Approval / WhatsApp"):
+            with st.expander("Copy Plain Text for Approval / WhatsApp"):
                 st.text_area(
                     "Approval Text", value=approval_text, height=180, label_visibility="collapsed"
                 )
@@ -1049,10 +1071,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
-            st.markdown("#### 🔍 CAUSE-WISE REJECTION DEFECT ANALYSIS")
+            st.markdown("#### CAUSE-WISE REJECTION DEFECT ANALYSIS")
         with c_cause_btn:
             st.download_button(
-                label="📸 Download MTD Cause Pareto Report (JPG)",
+                label="Download MTD Cause Pareto Report (JPG)",
                 data=jpg_bytes_cause_pareto,
                 file_name=f"MTD_Cause_Pareto_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
@@ -1060,8 +1082,8 @@ These are the line records from *{section_display_name}* where rejection exceede
             )
 
         tab_cause_day, tab_cause_asof = st.tabs([
-            f"📅 Selected Date ({day_formatted})",
-            f"📈 As of Month-to-Date Defect Pareto (Day 1 – {sel_day_num})",
+            f"Selected Date ({day_formatted})",
+            f"As of Month-to-Date Defect Pareto (Day 1 – {sel_day_num})",
         ])
         
         display_cause_cols = ["Cause", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Entries_Count", "MC_Count", "% Share"]
@@ -1074,10 +1096,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         c_line_hdr, c_line_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_line_hdr:
-            st.markdown("#### 👷 LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
+            st.markdown("#### LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
         with c_line_btn:
             st.download_button(
-                label="📸 Download MTD Lineman Report (JPG)",
+                label="Download MTD Lineman Report (JPG)",
                 data=jpg_bytes_lineman,
                 file_name=f"MTD_Lineman_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
@@ -1085,8 +1107,8 @@ These are the line records from *{section_display_name}* where rejection exceede
             )
 
         tab_line_day, tab_line_asof = st.tabs([
-            f"📅 Selected Date Linemen Activity ({day_formatted})",
-            f"📈 As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
+            f"Selected Date Linemen Activity ({day_formatted})",
+            f"As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
         ])
         
         display_lineman_cols = ["Lineman (Added By)", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Logged_Entries", "Machines_Covered", "% Pcs Share", "% Ton Share"]
@@ -1103,7 +1125,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        st.markdown("#### 📅 MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
+        st.markdown("#### MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
         trend_display = df_trend.rename(
             columns={
                 "Day": "Day of Month",
