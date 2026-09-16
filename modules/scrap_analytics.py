@@ -42,7 +42,7 @@ def m2_parse_workbook(file_bytes):
     sheet_name = (
         "RejectionReport"
         if "RejectionReport" in xls.sheet_names
-        else ("This Month" if "This Month" in xls.sheet_names else xls.sheet_names[0])
+        else ("Rejection" if "Rejection" in xls.sheet_names else ("This Month" if "This Month" in xls.sheet_names else xls.sheet_names[0]))
     )
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
 
@@ -70,6 +70,10 @@ def m2_parse_workbook(file_bytes):
     df_clean = df_clean.dropna(subset=["DateClean"]).sort_values("DateClean")
     df_clean["DateStr"] = df_clean["DateClean"].dt.strftime("%Y-%m-%d")
     df_clean["YearMonth"] = df_clean["DateClean"].dt.to_period("M")
+
+    # Shift Assignment: 12:00 - 23:59 -> Shift A (Day); 00:00 - 11:59 -> Shift B (Night)
+    entry_hours = df_clean["DateClean"].dt.hour
+    df_clean["Shift"] = entry_hours.apply(lambda h: "Shift A (Day)" if 12 <= h <= 23 else "Shift B (Night)")
 
     # Global Quantity Conversion (Raw ERP Quantity is logged in thousands)
     qty_col = get_col(df_clean, ["Quantity", "Qty", "Rejection Pcs", "Qty (Pcs)"])
@@ -285,6 +289,78 @@ def m2_compute_lineman_breakdown(df_scope):
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
     res = res.rename(columns={lineman_col: "Lineman (Added By)"})
     return res
+
+
+def m2_compute_shift_breakdown(df_scope):
+    """Calculates Shift A vs Shift B performance metrics from timestamps."""
+    if df_scope.empty or "Shift" not in df_scope.columns:
+        return pd.DataFrame()
+
+    res = (
+        df_scope.groupby("Shift")
+        .agg(
+            Rej_Pcs=("Qty_Pcs", "sum"),
+            Rej_Ton=("Weight_Ton", "sum"),
+            Logged_Entries=("Qty_Pcs", "count"),
+            Machines_Covered=("Machine", "nunique"),
+        )
+        .reset_index()
+    )
+    res["Rej_Pcs"] = res["Rej_Pcs"].round().astype(int)
+    res["Rej_Ton"] = res["Rej_Ton"].round(4)
+
+    tot_pcs = res["Rej_Pcs"].sum()
+    tot_ton = res["Rej_Ton"].sum()
+    res["% Pcs Share"] = ((res["Rej_Pcs"] / tot_pcs * 100.0).round(1) if tot_pcs > 0 else 0.0).apply(lambda x: f"{x:.1f}%")
+    res["% Ton Share"] = ((res["Rej_Ton"] / tot_ton * 100.0).round(1) if tot_ton > 0 else 0.0).apply(lambda x: f"{x:.1f}%")
+    return res
+
+
+def m2_compute_operator_defect_pivot(df_scope):
+    """Recreates the Sr Op Entry cross-tabulation of defect causes across operators."""
+    if df_scope.empty:
+        return pd.DataFrame()
+    cause_col = get_col(df_scope, ["Cause", "Causes", "Defect"], "Cause")
+    lineman_col = get_col(df_scope, ["Added By", "AddedBy", "Lineman"], "Added By")
+
+    pivot = df_scope.pivot_table(
+        index=cause_col,
+        columns=lineman_col,
+        values="Qty_Pcs",
+        aggfunc="count",
+        fill_value=0,
+    )
+    pivot["Total Logs"] = pivot.sum(axis=1)
+    pivot = pivot.sort_values("Total Logs", ascending=False).reset_index()
+    pivot[cause_col] = pivot[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
+    return pivot.rename(columns={cause_col: "Defect Cause Mode"})
+
+
+def m2_compute_operator_rankings(df_scope):
+    """Recreates the Ranking sheet showing the top 5 defects per operator."""
+    if df_scope.empty:
+        return pd.DataFrame()
+    cause_col = get_col(df_scope, ["Cause", "Causes", "Defect"], "Cause")
+    lineman_col = get_col(df_scope, ["Added By", "AddedBy", "Lineman"], "Added By")
+
+    rankings = []
+    for op, grp in df_scope.groupby(lineman_col):
+        cause_agg = grp.groupby(cause_col).agg(
+            entry_count=("Qty_Pcs", "count"),
+            rej_pcs=("Qty_Pcs", "sum"),
+        ).sort_values("rej_pcs", ascending=False).head(5)
+
+        top_items = [
+            f"{c.replace('*', '').strip()} ({int(r['entry_count'])} logs, {int(round(r['rej_pcs'])):,} pcs)"
+            for c, r in cause_agg.iterrows()
+        ]
+        row = {"Operator": op}
+        for i, item in enumerate(top_items):
+            row[f"Rank {i+1} Driver"] = item
+        rankings.append(row)
+
+    df_rank = pd.DataFrame(rankings)
+    return df_rank
 
 
 def m2_compute_tonnage_comparison(df_prev, df_curr):
@@ -830,7 +906,7 @@ def render_scrap_module():
             sel_date_str = st.selectbox(
                 f"Operational Date ({section_display_name})",
                 all_dates,
-                index=len(all_dates) - 1
+                index=len(all_dates) - 1,
             )
         with c_cut:
             min_cutoff = st.number_input("Min Cutoff (Pcs)", min_value=1, value=50, step=10)
@@ -878,8 +954,6 @@ def render_scrap_module():
 
         df_cause_day = m2_compute_cause_breakdown(df_day)
         df_cause_as_of = m2_compute_cause_breakdown(df_as_of)
-        df_lineman_day = m2_compute_lineman_breakdown(df_day)
-        df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of)
         df_trend = m2_compute_tonnage_comparison(df_prev, df_curr)
 
         top3_summary_list = []
@@ -942,13 +1016,6 @@ def render_scrap_module():
 
         jpg_bytes_cause_pareto = m2_generate_cause_pareto_jpg(
             df_cause_as_of,
-            sel_date_obj,
-            sel_day_num,
-            section_display_name,
-        )
-
-        jpg_bytes_lineman = m2_generate_lineman_report_jpg(
-            df_lineman_as_of,
             sel_date_obj,
             sel_day_num,
             section_display_name,
@@ -1069,6 +1136,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
+        # Section 3: Cause-Wise Defect Analysis
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
             st.markdown("#### CAUSE-WISE REJECTION DEFECT ANALYSIS")
@@ -1094,37 +1162,92 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        c_line_hdr, c_line_btn = st.columns([3, 1.4], vertical_alignment="center")
-        with c_line_hdr:
-            st.markdown("#### LINEMAN-WISE REJECTION LOG ANALYSIS (ADDED BY)")
-        with c_line_btn:
+        # Section 4: Lineman & Shift Quality Audit
+        st.markdown("#### LINEMAN & SHIFT QUALITY AUDIT (ADDED BY)")
+
+        # Extract available operators and pre-select core team (>=30 entries)
+        lineman_col = get_col(df_as_of, ["Added By", "AddedBy", "Lineman"], "Added By")
+        all_operators = sorted([str(op).strip() for op in df_as_of[lineman_col].dropna().unique() if str(op).strip()])
+        op_counts = df_as_of[lineman_col].value_counts().to_dict()
+        default_selected_ops = [op for op in all_operators if op_counts.get(op, 0) >= 30]
+        if not default_selected_ops:
+            default_selected_ops = all_operators
+
+        c_filter_ops, c_down_line = st.columns([3, 1.4], vertical_alignment="center")
+        with c_filter_ops:
+            selected_operators = st.multiselect(
+                "Filter Operators to Benchmark (Uncheck casual/relieving staff as needed):",
+                options=all_operators,
+                default=default_selected_ops,
+                help="Benchmark your core team like-for-like without casual shift relief distorting rankings.",
+            )
+
+        # Filter MTD scope by selected operators
+        df_as_of_filtered_ops = df_as_of[df_as_of[lineman_col].isin(selected_operators)].copy()
+        df_day_filtered_ops = df_day[df_day[lineman_col].isin(selected_operators)].copy()
+
+        df_lineman_as_of = m2_compute_lineman_breakdown(df_as_of_filtered_ops)
+        df_lineman_day = m2_compute_lineman_breakdown(df_day_filtered_ops)
+        df_shift_as_of = m2_compute_shift_breakdown(df_as_of)
+        df_op_matrix = m2_compute_operator_defect_pivot(df_as_of_filtered_ops)
+        df_op_ranks = m2_compute_operator_rankings(df_as_of_filtered_ops)
+
+        jpg_bytes_lineman = m2_generate_lineman_report_jpg(
+            df_lineman_as_of,
+            sel_date_obj,
+            sel_day_num,
+            section_display_name,
+        )
+
+        with c_down_line:
             st.download_button(
-                label="Download MTD Lineman Report (JPG)",
+                label="Download Lineman Audit (JPG)",
                 data=jpg_bytes_lineman,
                 file_name=f"MTD_Lineman_Report_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
 
-        tab_line_day, tab_line_asof = st.tabs([
-            f"Selected Date Linemen Activity ({day_formatted})",
-            f"As of Month-to-Date Linemen Overview (Day 1 – {sel_day_num})",
+        tab_line_asof, tab_shift, tab_matrix, tab_ranks = st.tabs([
+            f"Senior Operator Overview (Day 1 – {sel_day_num})",
+            "Shift A vs Shift B Audit",
+            "Defect Cause x Operator Matrix",
+            "Top 5 Defect Drivers by Operator",
         ])
-        
+
         display_lineman_cols = ["Lineman (Added By)", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Logged_Entries", "Machines_Covered", "% Pcs Share", "% Ton Share"]
-        with tab_line_day:
-            if not df_lineman_day.empty:
-                st.dataframe(df_lineman_day[display_lineman_cols], use_container_width=True, hide_index=True)
-            else:
-                st.info("No lineman entries logged for this date.")
         with tab_line_asof:
             if not df_lineman_as_of.empty:
                 st.dataframe(df_lineman_as_of[display_lineman_cols], use_container_width=True, hide_index=True)
             else:
-                st.info("No lineman entries logged for the current month.")
+                st.info("No operator entries matching current filter.")
+
+        with tab_shift:
+            if not df_shift_as_of.empty:
+                st.dataframe(df_shift_as_of, use_container_width=True, hide_index=True)
+                s_a = df_shift_as_of[df_shift_as_of["Shift"].str.contains("Shift A", na=False)]
+                s_b = df_shift_as_of[df_shift_as_of["Shift"].str.contains("Shift B", na=False)]
+                pcs_a = int(s_a["Rej_Pcs"].iloc[0]) if not s_a.empty else 0
+                pcs_b = int(s_b["Rej_Pcs"].iloc[0]) if not s_b.empty else 0
+                st.caption(f"Shift Handover Ratio: Shift A (Day) accounted for {pcs_a:,} Pcs vs Shift B (Night) {pcs_b:,} Pcs.")
+            else:
+                st.info("No shift logs available.")
+
+        with tab_matrix:
+            if not df_op_matrix.empty:
+                st.dataframe(df_op_matrix, use_container_width=True, hide_index=True)
+            else:
+                st.info("No defect matrix available for current operator selection.")
+
+        with tab_ranks:
+            if not df_op_ranks.empty:
+                st.dataframe(df_op_ranks, use_container_width=True, hide_index=True)
+            else:
+                st.info("No ranking breakdown available.")
 
         st.divider()
 
+        # Section 5: Month-over-Month Daily Trend
         st.markdown("#### MONTH-OVER-MONTH DAILY REJECTION TONNAGE TREND")
         trend_display = df_trend.rename(
             columns={
