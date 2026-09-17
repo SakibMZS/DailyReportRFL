@@ -153,7 +153,7 @@ def m2_compute_daily_rejection(df_day, pos_map, min_qty=50):
 
 
 def m2_compute_daily_rejection_all(df_day, pos_map):
-    """Computes rejection for ALL unique operating machines on floor for on-screen dashboard."""
+    """Computes rejection for all unique operating machines on floor for on-screen dashboard."""
     if df_day.empty:
         return pd.DataFrame()
 
@@ -1289,7 +1289,7 @@ def render_scrap_module():
         day_formatted = sel_date_obj.strftime("%B %d")
 
         with c_x_day:
-            start_day = st.number_input("From Day (x)", min_value=1, max_value=max(1, n_day), value=1, step=1)
+            start_day = st.number_input("Start Day", min_value=1, max_value=max(1, n_day), value=1, step=1)
         with c_cut:
             min_cutoff = st.number_input("Min Cutoff (Pcs)", min_value=1, value=50, step=10)
 
@@ -1298,7 +1298,7 @@ def render_scrap_module():
 
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
         
-        # Sliced range from x to n
+        # Sliced range from Start Day to Cutoff Day
         df_as_of = df_curr[(df_curr["DateClean"].dt.day >= start_day) & (df_curr["DateClean"].dt.day <= n_day)].copy()
         
         # Filtered vs All machines on floor
