@@ -104,7 +104,6 @@ def m2_parse_workbook(file_bytes):
 
 
 def m2_compute_daily_rejection(df_day, pos_map, min_qty=50):
-    """Filtered machine list for Excel and 1-Page JPG export (> min_qty)."""
     if df_day.empty:
         return pd.DataFrame()
 
@@ -153,7 +152,6 @@ def m2_compute_daily_rejection(df_day, pos_map, min_qty=50):
 
 
 def m2_compute_daily_rejection_all(df_day, pos_map):
-    """Computes rejection for all unique operating machines on floor for on-screen dashboard."""
     if df_day.empty:
         return pd.DataFrame()
 
@@ -303,7 +301,6 @@ def m2_compute_cause_breakdown(df_scope):
 
 
 def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, include_variances=False):
-    """Computes like-for-like MoM variance at the defect cause level with paired columns."""
     cause_col = "Cause"
     grp_c = df_curr_scope.groupby(cause_col).agg(
         Curr_Pcs=("Qty_Pcs", "sum"),
@@ -330,12 +327,7 @@ def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, cur
     )
 
     merged = merged.sort_values("Curr_Pcs", ascending=False).reset_index()
-    merged["Cause"] = (
-        merged["Cause"]
-        .astype(str)
-        .str.replace("*", "", regex=False)
-        .str.strip()
-    )
+    merged["Cause"] = merged["Cause"].astype(str).str.replace("*", "", regex=False).str.strip()
 
     c_curr_pcs = f"{curr_abbr} Pcs"
     c_prev_pcs = f"{prev_abbr} Pcs"
@@ -367,28 +359,9 @@ def m2_compute_cause_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, cur
     merged[c_curr_ent] = merged[c_curr_ent].astype(int)
     merged[c_prev_ent] = merged[c_prev_ent].astype(int)
 
-    base_cols = [
-        "Cause",
-        c_curr_pcs,
-        c_prev_pcs,
-        c_curr_ton,
-        c_prev_ton,
-        c_curr_ent,
-        c_prev_ent,
-    ]
+    base_cols = ["Cause", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, c_curr_ent, c_prev_ent]
     if include_variances:
-        base_cols = [
-            "Cause",
-            c_curr_pcs,
-            c_prev_pcs,
-            c_curr_ton,
-            c_prev_ton,
-            "Variance (Pcs)",
-            "Variance (Ton)",
-            "MoM Trend %",
-            c_curr_ent,
-            c_prev_ent,
-        ]
+        base_cols = ["Cause", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, "Variance (Pcs)", "Variance (Ton)", "MoM Trend %", c_curr_ent, c_prev_ent]
     return merged[base_cols]
 
 
@@ -423,20 +396,13 @@ def m2_compute_lineman_breakdown(df_scope):
     res["% Pcs Share"] = res["% Pcs Share Raw"].apply(lambda x: f"{x:.1f}%")
     res["% Ton Share"] = res["% Ton Share Raw"].apply(lambda x: f"{x:.1f}%")
     res = res.sort_values("Rej_Pcs", ascending=False).reset_index(drop=True)
-    res = res.rename(columns={lineman_col: "Lineman (Added By)"})
+    res = res.rename(columns={lineman_col: "Senior Operator (Added By)"})
     return res
 
 
-def m2_compute_lineman_mom_comparison(
-    df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, selected_ops, include_variances=False
-):
-    """Computes like-for-like MoM variance for operators with paired columns."""
+def m2_compute_lineman_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, selected_ops, include_variances=False):
     lineman_col = "Added By"
-    df_p_filt = (
-        df_prev_scope[df_prev_scope[lineman_col].isin(selected_ops)]
-        if not df_prev_scope.empty
-        else pd.DataFrame()
-    )
+    df_p_filt = df_prev_scope[df_prev_scope[lineman_col].isin(selected_ops)] if not df_prev_scope.empty else pd.DataFrame()
     df_c_filt = df_curr_scope[df_curr_scope[lineman_col].isin(selected_ops)]
 
     grp_c = df_c_filt.groupby(lineman_col).agg(
@@ -473,7 +439,7 @@ def m2_compute_lineman_mom_comparison(
 
     merged = merged.rename(
         columns={
-            lineman_col: "Lineman (Added By)",
+            lineman_col: "Senior Operator (Added By)",
             "Curr_Pcs": c_curr_pcs,
             "Prev_Pcs": c_prev_pcs,
             "Curr_Ton": c_curr_ton,
@@ -495,33 +461,13 @@ def m2_compute_lineman_mom_comparison(
     merged[c_curr_ent] = merged[c_curr_ent].astype(int)
     merged[c_prev_ent] = merged[c_prev_ent].astype(int)
 
-    base_cols = [
-        "Lineman (Added By)",
-        c_curr_pcs,
-        c_prev_pcs,
-        c_curr_ton,
-        c_prev_ton,
-        c_curr_ent,
-        c_prev_ent,
-    ]
+    base_cols = ["Senior Operator (Added By)", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, c_curr_ent, c_prev_ent]
     if include_variances:
-        base_cols = [
-            "Lineman (Added By)",
-            c_curr_pcs,
-            c_prev_pcs,
-            c_curr_ton,
-            c_prev_ton,
-            "Variance (Pcs)",
-            "Variance (Ton)",
-            "MoM Trend %",
-            c_curr_ent,
-            c_prev_ent,
-        ]
+        base_cols = ["Senior Operator (Added By)", c_curr_pcs, c_prev_pcs, c_curr_ton, c_prev_ton, "Variance (Pcs)", "Variance (Ton)", "MoM Trend %", c_curr_ent, c_prev_ent]
     return merged[base_cols]
 
 
 def m2_compute_shift_mom_comparison(df_prev_scope, df_curr_scope, prev_abbr, curr_abbr, include_variances=False):
-    """Computes Shift A vs Shift B like-for-like MoM variance."""
     if df_curr_scope.empty or "Shift" not in df_curr_scope.columns:
         return pd.DataFrame()
 
@@ -601,7 +547,7 @@ def m2_compute_operator_defect_pivot(df_scope):
     pivot["Total Entries"] = pivot.sum(axis=1)
     pivot = pivot.sort_values("Total Entries", ascending=False).reset_index()
     pivot[cause_col] = pivot[cause_col].astype(str).str.replace("*", "", regex=False).str.strip()
-    return pivot.rename(columns={cause_col: "Defect Cause Mode"})
+    return pivot.rename(columns={cause_col: "Rejection Reason"})
 
 
 def m2_compute_operator_rankings(df_scope):
@@ -621,7 +567,7 @@ def m2_compute_operator_rankings(df_scope):
             f"{c.replace('*', '').strip()} ({int(r['entry_count'])} entries, {int(round(r['rej_pcs'])):,} pcs)"
             for c, r in cause_agg.iterrows()
         ]
-        row = {"Operator": op}
+        row = {"Senior Operator": op}
         for i, item in enumerate(top_items):
             row[f"Rank {i+1} Driver"] = item
         rankings.append(row)
@@ -631,11 +577,6 @@ def m2_compute_operator_rankings(df_scope):
 
 
 def m2_compute_daily_trend_comparison(df_prev, df_curr, prev_abbr="Aug", curr_abbr="Sep", shift_filter="All (24 Hrs)", include_variances=False):
-    """
-    Computes daily Day-of-Month comparison pairing pieces before tons:
-    [Day of Month, Curr Pcs, Prev Pcs, Curr Ton, Prev Ton, (Optional Variances)]
-    Supports 3-way shift filtering: All, Day Shift (A), Night Shift (B).
-    """
     p = df_prev.copy()
     c = df_curr.copy()
 
@@ -752,13 +693,13 @@ def m2_generate_scrap_jpg(
 
     ax.text(1.5, 98.4, "DAILY REJECTION & DEFECT ANALYTICS REPORT", color="#0f172a", fontsize=16.0, fontweight="bold", va="top")
     ax.text(1.5, 95.8, f"{section_label} Machine Rejection Log (>{min_cutoff} Pcs) & Section Summary  |  Report Date: {date_formatted}", color="#64748b", fontsize=8.8, va="top")
-    ax.text(98.5, 97.2, f"{section_label.upper()} OPERATIONS", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
+    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
 
     kpis = [
-        (f"{prev_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior MTD Total", "#64748b"),
+        (f"{prev_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior Period Total", "#64748b"),
         (f"{prev_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} AVG", f"{prev_as_of_avg_ton:.2f} T/Day", "Prior Daily Baseline", "#64748b"),
-        (f"{curr_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} TOTAL", f"{curr_as_of_total_ton:.2f} T", "Current MTD Total", "#2563eb"),
-        (f"{curr_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current MTD Pace", "#2563eb"),
+        (f"{curr_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} TOTAL", f"{curr_as_of_total_ton:.2f} T", "Current Period Total", "#2563eb"),
+        (f"{curr_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} AVG", f"{curr_as_of_avg_ton:.2f} T/Day", "Current Daily Pace", "#2563eb"),
         ("LAST DAY REJECTION", f"{total_rej_ton:.3f} T", f"{total_rej_pcs:,} Pcs Lost", "#dc2626"),
         (f"CRITICAL MC (>{min_cutoff})", f"{high_rej_count} MCs", "Lines Exceeding Limit", "#7c3aed"),
     ]
@@ -886,10 +827,6 @@ def m2_generate_scrap_jpg(
 
 
 def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
-    """
-    Renders Top 15 Root Causes + Summary Row with perfectly balanced margins.
-    Enlarges right card fonts to 10.5-12.0 for executive readability.
-    """
     fig, ax = plt.subplots(figsize=(19.0, 11.0), dpi=220)
     fig.patch.set_facecolor('#f8fafc')
     ax.set_facecolor('#f8fafc')
@@ -914,8 +851,9 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     net_ton_diff = tot_curr_ton - tot_prev_ton
     tot_causes = len(df_cause_mom)
 
-    ax.text(1.5, 98.4, "MTD CAUSE-WISE REJECTION PARETO & MoM REPORT", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, f"Like-for-Like Root Cause Breakdown ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
+    ax.text(1.5, 98.4, "MONTHLY DEFECT REASON SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, f"Comparison ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
+    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
 
     span_badge = patches.FancyBboxPatch((73.5, 94.8), 25.0, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
@@ -924,8 +862,8 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     kpis = [
         (f"{curr_abbr.upper()} REJECTION", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Tons", "#dc2626"),
         (f"{prev_abbr.upper()} BASELINE", f"{tot_prev_pcs:,} Pcs", f"{tot_prev_ton:.2f} Tons", "#2563eb"),
-        ("ACTIVE DEFECT MODES", f"{tot_causes} Modes", "Recorded In Span", "#7c3aed"),
-        ("NET MoM VARIANCE", f"{net_pcs_diff:+,} Pcs", f"{net_ton_diff:+.2f} Tons", "#f59e0b"),
+        ("ACTIVE DEFECT REASONS", f"{tot_causes} Reasons", "Recorded In Span", "#7c3aed"),
+        ("NET DIFFERENCE", f"{net_pcs_diff:+,} Pcs", f"{net_ton_diff:+.2f} Tons", "#f59e0b"),
     ]
     kpi_w, kpi_gap = 23.0, 1.33
     for i, (title, val, sub, col_bar) in enumerate(kpis):
@@ -940,19 +878,19 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 72.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(3.5, 83.5, f"CAUSE-WISE DEFECT VOLUME & TONNAGE MoM COMPARISON — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
-    ax.text(72.0, 83.5, f"{tot_causes} Defect Modes Benchmarked", color='#64748b', fontsize=8.0, ha='right')
+    ax.text(3.5, 83.5, f"DEFECT REASONS & TONNAGE COMPARISON — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(72.0, 83.5, f"{tot_causes} Reasons Tracked", color='#64748b', fontsize=8.0, ha='right')
 
     right_card = patches.FancyBboxPatch((75.5, 1.5), 23.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(right_card)
-    ax.text(77.5, 83.5, "PARETO & MoM SHIFT", color='#0f172a', fontsize=11.5, fontweight='bold')
+    ax.text(77.5, 83.5, "MAIN DEFECT CHANGES", color='#0f172a', fontsize=11.5, fontweight='bold')
 
     left_x = 2.6
     tbl_w = 70.3
     tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
     ax.add_patch(tbl_hdr)
     ax.text(left_x + 0.8, 80.8, "#", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
-    ax.text(left_x + 2.8, 80.8, "DEFECT CAUSE MODE", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
+    ax.text(left_x + 2.8, 80.8, "REJECTION REASON", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
     ax.text(left_x + 28.5, 80.8, f"{curr_abbr.upper()} PCS", color='#ffffff', fontsize=7.0, fontweight='bold', ha='right', va='center')
     ax.text(left_x + 37.0, 80.8, f"{prev_abbr.upper()} PCS", color='#cbd5e1', fontsize=7.0, fontweight='bold', ha='right', va='center')
     ax.text(left_x + 46.5, 80.8, f"{curr_abbr.upper()} TON", color='#ffffff', fontsize=7.0, fontweight='bold', ha='right', va='center')
@@ -1014,7 +952,7 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
 
     c1 = patches.FancyBboxPatch((76.5, 42.5), 21.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#fff7f7', edgecolor='#fecaca', linewidth=0.8)
     ax.add_patch(c1)
-    ax.text(78.2, 78.5, "Key MoM Movers", color='#b91c1c', fontsize=12.0, fontweight='bold')
+    ax.text(78.2, 78.5, "Main Problem Changes", color='#b91c1c', fontsize=12.0, fontweight='bold')
 
     df_cause_mom["Temp_Diff"] = df_cause_mom[c_curr_pcs] - df_cause_mom[c_prev_pcs]
     top_escalating = df_cause_mom.sort_values("Temp_Diff", ascending=False).iloc[0] if not df_cause_mom.empty else None
@@ -1026,32 +964,32 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     dec_val = int(top_declining['Temp_Diff']) if top_declining is not None else 0
 
     t1 = (
-        f"• Escalating Defect Driver:\n"
+        f"• Biggest Increased Defect:\n"
         f"  {esc_name}\n"
-        f"  (+{esc_val:,} pcs vs {prev_abbr})\n\n"
-        f"• Improved Defect Mode:\n"
+        f"  (+{esc_val:,} pcs more vs {prev_abbr})\n\n"
+        f"• Most Reduced Defect:\n"
         f"  {dec_name}\n"
-        f"  ({dec_val:,} pcs vs {prev_abbr})\n\n"
-        f"• Process Directives:\n"
-        f"  1. Clamp tonnage calibration\n"
-        f"  2. Cushion stability tuning\n"
-        f"  3. Standardized purging."
+        f"  ({dec_val:,} pcs less vs {prev_abbr})\n\n"
+        f"• Production Floor Actions:\n"
+        f"  1. Check mold clamp tonnage\n"
+        f"  2. Stabilize injection cushion\n"
+        f"  3. Follow standard purging."
     )
     ax.text(78.2, 74.5, t1, color='#7f1d1d', fontsize=10.2, linespacing=1.4, va='top')
 
     c2 = patches.FancyBboxPatch((76.5, 2.5), 21.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f0fdf4', edgecolor='#bbf7d0', linewidth=0.8)
     ax.add_patch(c2)
-    ax.text(78.2, 38.0, "Cumulative Summary", color='#15803d', fontsize=12.0, fontweight='bold')
+    ax.text(78.2, 38.0, "Total Period Overview", color='#15803d', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Comparison Span:\n"
+        f"• Audit Period:\n"
         f"  Day {start_day_num:02d} to Day {sel_day_num:02d}\n"
-        f"  ({curr_abbr} vs {prev_abbr} like-for-like).\n\n"
-        f"• Total Span Scrap:\n"
+        f"  ({curr_abbr} vs {prev_abbr} same days).\n\n"
+        f"• Total Rejection:\n"
         f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
         f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n"
-        f"  - Net Shift: {net_pcs_diff:+,} Pcs.\n\n"
-        f"• Quality Protocol:\n"
-        f"  Zero-defect gate on heavy molds."
+        f"  - Net Change: {net_pcs_diff:+,} Pcs.\n\n"
+        f"• Quality Guideline:\n"
+        f"  Strict line inspection on heavy molds."
     )
     ax.text(78.2, 34.0, t2, color='#166534', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1086,8 +1024,9 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     tot_prev_ton = float(df_lineman_mom[c_prev_ton].sum()) if c_prev_ton in df_lineman_mom.columns else 0.0
     tot_linemen = len(df_lineman_mom)
 
-    ax.text(1.5, 98.4, "MTD LINEMAN-WISE REJECTION & MoM AUDIT REPORT", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
-    ax.text(1.5, 95.8, f"Operator Shift Performance & Quality Accountability ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
+    ax.text(1.5, 98.4, "SENIOR OPERATOR SCRAP SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
+    ax.text(1.5, 95.8, f"Operator Accountability ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
+    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
 
     span_badge = patches.FancyBboxPatch((73.5, 94.8), 25.0, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
@@ -1095,9 +1034,9 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
 
     kpis = [
         (f"{curr_abbr.upper()} OPERATOR SCRAP", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Metric Tons", "#dc2626"),
-        (f"{prev_abbr.upper()} BENCHMARK", f"{tot_prev_pcs:,} Pcs", f"{tot_prev_ton:.2f} Metric Tons", "#2563eb"),
-        ("BENCHMARKED OPERATORS", f"{tot_linemen} Operators", "Core Roster Audited", "#7c3aed"),
-        ("NET SCRAP VARIANCE", f"{tot_curr_pcs - tot_prev_pcs:+,} Pcs", f"{tot_curr_ton - tot_prev_ton:+.2f} Tons", "#f59e0b"),
+        (f"{prev_abbr.upper()} BASELINE", f"{tot_prev_pcs:,} Pcs", f"{tot_prev_ton:.2f} Metric Tons", "#2563eb"),
+        ("ACTIVE OPERATORS", f"{tot_linemen} Operators", "Core Roster", "#7c3aed"),
+        ("NET DIFFERENCE", f"{tot_curr_pcs - tot_prev_pcs:+,} Pcs", f"{tot_curr_ton - tot_prev_ton:+.2f} Tons", "#f59e0b"),
     ]
     kpi_w, kpi_gap = 23.0, 1.33
     for i, (title, val, sub, col_bar) in enumerate(kpis):
@@ -1112,19 +1051,19 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
 
     left_card = patches.FancyBboxPatch((1.5, 1.5), 72.5, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(left_card)
-    ax.text(3.5, 83.5, f"OPERATOR LIKE-FOR-LIKE SCRAP MATRIX — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
-    ax.text(72.0, 83.5, f"{tot_linemen} Core Operators Active", color='#64748b', fontsize=8.0, ha='right')
+    ax.text(3.5, 83.5, f"OPERATOR LOGGED REJECTION COMPARISON — {span_text}", color='#0f172a', fontsize=10.5, fontweight='bold')
+    ax.text(72.0, 83.5, f"{tot_linemen} Core Operators", color='#64748b', fontsize=8.0, ha='right')
 
     right_card = patches.FancyBboxPatch((75.5, 1.5), 23.0, 84.0, boxstyle="round,pad=0.25,rounding_size=0.8", facecolor='#ffffff', edgecolor='#cbd5e1', linewidth=1)
     ax.add_patch(right_card)
-    ax.text(77.5, 83.5, "OPERATIONAL AUDIT", color='#0f172a', fontsize=11.5, fontweight='bold')
+    ax.text(77.5, 83.5, "SHIFT ACCOUNTABILITY", color='#0f172a', fontsize=11.5, fontweight='bold')
 
     left_x = 2.6
     tbl_w = 70.3
     tbl_hdr = patches.Rectangle((left_x, 79.5), tbl_w, 2.6, facecolor='#1e293b', edgecolor='none')
     ax.add_patch(tbl_hdr)
     ax.text(left_x + 0.8, 80.8, "#", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
-    ax.text(left_x + 2.8, 80.8, "LINEMAN PERSONNEL (ADDED BY)", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
+    ax.text(left_x + 2.8, 80.8, "SENIOR OPERATOR (ADDED BY)", color='#ffffff', fontsize=7.0, fontweight='bold', va='center')
     ax.text(left_x + 30.5, 80.8, f"{curr_abbr.upper()} PCS", color='#ffffff', fontsize=7.0, fontweight='bold', ha='right', va='center')
     ax.text(left_x + 39.0, 80.8, f"{prev_abbr.upper()} PCS", color='#cbd5e1', fontsize=7.0, fontweight='bold', ha='right', va='center')
     ax.text(left_x + 48.0, 80.8, f"{curr_abbr.upper()} TON", color='#ffffff', fontsize=7.0, fontweight='bold', ha='right', va='center')
@@ -1140,7 +1079,7 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
         ax.plot([left_x, left_x + tbl_w], [row_y - 1.4, row_y - 1.4], color='#e2e8f0', linewidth=0.45)
 
         ax.text(left_x + 0.8, row_y + 0.35, f"{r_i + 1}", color='#64748b', fontsize=6.8, va='center')
-        ax.text(left_x + 2.8, row_y + 0.35, str(r["Lineman (Added By)"]), color='#0f172a', fontsize=7.0, fontweight='bold', va='center')
+        ax.text(left_x + 2.8, row_y + 0.35, str(r["Senior Operator (Added By)"]), color='#0f172a', fontsize=7.0, fontweight='bold', va='center')
         ax.text(left_x + 30.5, row_y + 0.35, f"{int(r[c_curr_pcs]):,}", color='#0f172a', fontsize=7.0, ha='right', va='center')
         ax.text(left_x + 39.0, row_y + 0.35, f"{int(r[c_prev_pcs]):,}", color='#64748b', fontsize=6.8, ha='right', va='center')
         ax.text(left_x + 48.0, row_y + 0.35, f"{r[c_curr_ton]:.3f}", color='#0f172a', fontsize=7.0, ha='right', va='center')
@@ -1163,34 +1102,34 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
 
     c1 = patches.FancyBboxPatch((76.5, 42.5), 21.0, 39.0, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#f8fafc', edgecolor='#cbd5e1', linewidth=0.8)
     ax.add_patch(c1)
-    ax.text(78.2, 78.5, "Shift Accountability Summary", color='#0f172a', fontsize=12.0, fontweight='bold')
+    ax.text(78.2, 78.5, "Shift Handover Review", color='#0f172a', fontsize=12.0, fontweight='bold')
     t1 = (
-        f"• Benchmarking Scope:\n"
-        f"  Comparing active core team\n"
-        f"  across equal operational days\n"
+        f"• Comparison Window:\n"
+        f"  Benchmarking active team\n"
+        f"  across same operational days\n"
         f"  (Day {start_day_num:02d}–{sel_day_num:02d}).\n\n"
-        f"• Shift Directives:\n"
-        f"  Audit lines with positive\n"
-        f"  scrap escalation (&Delta; Pcs).\n"
+        f"• Line Directives:\n"
+        f"  Review machines where scrap\n"
+        f"  increased (+ Pcs).\n"
         f"  Ensure purge scrap weighing\n"
-        f"  during shift handover."
+        f"  before shift handover."
     )
     ax.text(78.2, 74.5, t1, color='#334155', fontsize=10.2, linespacing=1.4, va='top')
 
     c2 = patches.FancyBboxPatch((76.5, 2.5), 21.0, 38.5, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#eff6ff', edgecolor='#bfdbfe', linewidth=0.8)
     ax.add_patch(c2)
-    ax.text(78.2, 38.0, "Logging Coverage Audit", color='#1d4ed8', fontsize=12.0, fontweight='bold')
+    ax.text(78.2, 38.0, "Floor Logging Check", color='#1d4ed8', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Audit Span:\n"
+        f"• Monitored Span:\n"
         f"  {span_text}\n"
         f"  ({sel_day_num - start_day_num + 1} Operational Days).\n\n"
-        f"• Shift Output:\n"
-        f"  - {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
-        f"  - Prior: {tot_prev_pcs:,} Pcs\n"
-        f"  - Variance: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
-        f"• Compliance Protocol:\n"
-        f"  Random physical bin audits\n"
-        f"  against ERP recorded logs."
+        f"• Scrap Logged:\n"
+        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
+        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs\n"
+        f"  - Difference: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
+        f"• Daily Verification:\n"
+        f"  Check physical rejection bins\n"
+        f"  against ERP recorded numbers."
     )
     ax.text(78.2, 34.0, t2, color='#1e3a8a', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1212,7 +1151,7 @@ def render_scrap_module():
         st.markdown(
             """
             <div style="text-align:center;">
-                <div style="color: #b91c1c; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;">Quality Control Division</div>
+                <div style="color: #b91c1c; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;">Plastic Production Division</div>
                 <h3 style="margin:0; font-weight:800; color:#0f172a; letter-spacing: -0.01em;">DAILY REJECTION & DEFECT ANALYTICS</h3>
             </div>
             """,
@@ -1227,43 +1166,42 @@ def render_scrap_module():
     st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
     if "m2_file_bytes" not in st.session_state:
-        st.markdown(
-            """
-            <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #b91c1c; border-radius: 8px; padding: 1.2rem 1.5rem; margin-bottom: 1.5rem;">
-                <div style="color: #b91c1c; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.35rem;">
-                    DATA INGESTION REQUIREMENT
-                </div>
-                <div style="color: #0f172a; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.25rem;">
-                    Operational Date Range Specification
-                </div>
-                <div style="color: #475569; font-size: 0.9rem; line-height: 1.5;">
-                    Please upload the relevant file containing data <b>from the start of the last month to the current month's latest operational date</b>.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        c_up, _ = st.columns([2, 1])
-        with c_up:
+        # Centered Layout
+        _, c_center, _ = st.columns([0.6, 2.8, 0.6])
+        with c_center:
             st.markdown(
                 """
-                <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #b91c1c;">
-                    <h4 style="margin-top:0; color:#0f172a;">Ingest Rejection / Scrap Workbook</h4>
-                    <p style="color:#64748b !important; font-size:0.85rem;">Select the Excel workbook containing monthly defect records (e.g. rej.xlsx).</p>
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 5px solid #b91c1c; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;">
+                    <div style="color: #b91c1c; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.35rem;">
+                        REQUIRED FILE DATE RANGE
+                    </div>
+                    <div style="color: #0f172a; font-size: 1.08rem; font-weight: 800; margin-bottom: 0.35rem;">
+                        Upload Raw "SMS" Rejection File (From 1st of Last Month to Latest Date)
+                    </div>
+                    <div style="color: #475569; font-size: 0.88rem; line-height: 1.55;">
+                        To allow automatic Month-over-Month comparison, your file must contain data from the <b>start of the last month up to the current date</b>.<br>
+                        <span style="color: #0369a1; font-weight: 600;">Example: If today is 16-Sep, your uploaded file must contain records from 01-Aug to 16-Sep.</span>
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+
+            st.markdown(
+                """
+                <div style="background:#ffffff; padding:1.5rem; border-radius:8px; border:1px solid #e2e8f0; border-top:4px solid #b91c1c; margin-bottom: 1rem;">
+                    <h3 style="margin-top:0; color:#0f172a; font-size: 1.2rem; font-weight: 800;">Root Cause Rejection & Scrap Analysis</h3>
+                    <p style="color:#64748b !important; font-size:0.86rem; margin-bottom:0;">Upload your raw "SMS" rejection file to analyze defect causes, line scrap, and shift trends.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             uploaded_file = st.file_uploader(
                 "Select Excel File (.xlsx, .xls)", type=["xlsx", "xls"], key="m2_uploader"
             )
             if uploaded_file is not None:
-                if st.button(
-                    "Ingest Rejection Data & Launch", type="primary", use_container_width=True
-                ):
+                if st.button("Ingest Rejection Data & Launch", type="primary", use_container_width=True):
                     st.session_state["m2_file_bytes"] = uploaded_file.getvalue()
                     st.rerun()
     else:
@@ -1275,8 +1213,9 @@ def render_scrap_module():
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
         section_display_name = sec_name.split(">")[-1].strip()
 
+        # Grouped Industrial Toolbar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_x_day, c_cut, c_snap, c_excel = st.columns([1.5, 0.9, 0.9, 1.3, 1.4], gap="small")
+        c_date, c_x_day, c_cut, c_snap, c_excel = st.columns([1.5, 0.9, 1.1, 1.4, 1.5], gap="small")
         with c_date:
             sel_date_str = st.selectbox(
                 f"Operational Date ({section_display_name})",
@@ -1291,7 +1230,7 @@ def render_scrap_module():
         with c_x_day:
             start_day = st.number_input("Start Day", min_value=1, max_value=max(1, n_day), value=1, step=1)
         with c_cut:
-            min_cutoff = st.number_input("Min Cutoff (Pcs)", min_value=1, value=50, step=10)
+            min_cutoff = st.number_input("Filter Threshold (Pcs)", min_value=1, value=50, step=10, help="Only machines having rejection more than this piece count will be included in the downloads.")
 
         curr_abbr = df_curr["DateClean"].dt.strftime("%b").iloc[0] if not df_curr.empty else "Sep"
         prev_abbr = df_prev["DateClean"].dt.strftime("%b").iloc[0] if not df_prev.empty else "Aug"
@@ -1309,17 +1248,20 @@ def render_scrap_module():
         if not df_prev.empty:
             df_prev_as_of = df_prev[(df_prev["DateClean"].dt.day >= start_day) & (df_prev["DateClean"].dt.day <= n_day)].copy()
             prev_as_of_total_ton = float(df_prev_as_of["Weight_Ton"].sum())
+            prev_as_of_total_pcs = int(round(df_prev_as_of["Qty_Pcs"].sum()))
             prev_as_of_avg_ton = prev_as_of_total_ton / span_days_count
         else:
             df_prev_as_of = pd.DataFrame()
-            prev_as_of_total_ton, prev_as_of_avg_ton = 0.0, 0.0
+            prev_as_of_total_ton, prev_as_of_total_pcs, prev_as_of_avg_ton = 0.0, 0, 0.0
 
         curr_as_of_total_ton = float(df_as_of["Weight_Ton"].sum()) if not df_as_of.empty else 0.0
+        curr_as_of_total_pcs = int(round(df_as_of["Qty_Pcs"].sum())) if not df_as_of.empty else 0
         curr_as_of_avg_ton = curr_as_of_total_ton / span_days_count
 
         diff_ton = curr_as_of_avg_ton - prev_as_of_avg_ton
         pct_diff = (diff_ton / prev_as_of_avg_ton * 100.0) if prev_as_of_avg_ton > 0 else 0.0
 
+        # WhatsApp text with both Pcs and Tons
         if diff_ton > 0:
             variance_line_plain = f"⚠️ Variance: We are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} {start_day:02d}–{n_day:02d}."
             variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> We are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} {start_day:02d}–{n_day:02d}.</p>'
@@ -1401,9 +1343,9 @@ def render_scrap_module():
         with c_snap:
             st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label="Download 1-Page JPG",
+                label="Download Critical MCs (JPG)",
                 data=jpg_bytes_daily,
-                file_name=f"Daily_Rejection_Report_{section_display_name}_{sel_date_str}.jpg",
+                file_name=f"Daily_Critical_Rejection_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -1411,9 +1353,9 @@ def render_scrap_module():
         with c_excel:
             st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
-                label=f"Download Excel (>{min_cutoff} Pcs)",
+                label=f"Download Critical MCs (Excel >{min_cutoff} Pcs)",
                 data=excel_bytes_filtered,
-                file_name=f"Rejection_Log_Over{min_cutoff}Pcs_{section_display_name}_{sel_date_str}.xlsx",
+                file_name=f"Critical_Rejection_Log_Over{min_cutoff}Pcs_{section_display_name}_{sel_date_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
@@ -1421,7 +1363,7 @@ def render_scrap_module():
 
         k1, k2, k3, k4, k5, k6 = st.columns(6)
         k1.markdown(
-            f'<div class="kpi-card slate"><div class="kpi-title">{prev_abbr.upper()} {start_day:02d}–{n_day:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior Span Total</div></div>',
+            f'<div class="kpi-card slate"><div class="kpi-title">{prev_abbr.upper()} {start_day:02d}–{n_day:02d} TOTAL</div><div class="kpi-val">{prev_as_of_total_ton:.2f} T</div><div class="kpi-sub">Prior Period Total</div></div>',
             unsafe_allow_html=True,
         )
         k2.markdown(
@@ -1429,11 +1371,11 @@ def render_scrap_module():
             unsafe_allow_html=True,
         )
         k3.markdown(
-            f'<div class="kpi-card blue"><div class="kpi-title">{curr_abbr.upper()} {start_day:02d}–{n_day:02d} TOTAL</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">Current Span Total</div></div>',
+            f'<div class="kpi-card blue"><div class="kpi-title">{curr_abbr.upper()} {start_day:02d}–{n_day:02d} TOTAL</div><div class="kpi-val">{curr_as_of_total_ton:.2f} T</div><div class="kpi-sub">Current Period Total</div></div>',
             unsafe_allow_html=True,
         )
         k4.markdown(
-            f'<div class="kpi-card purple"><div class="kpi-title">{curr_abbr.upper()} {start_day:02d}–{n_day:02d} AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">Current Span Pace</div></div>',
+            f'<div class="kpi-card purple"><div class="kpi-title">{curr_abbr.upper()} {start_day:02d}–{n_day:02d} AVG</div><div class="kpi-val">{curr_as_of_avg_ton:.2f} T/D</div><div class="kpi-sub">Current Period Pace</div></div>',
             unsafe_allow_html=True,
         )
         k5.markdown(
@@ -1476,8 +1418,8 @@ Dear Sir,
 
 These are the line records from *{section_display_name}* where rejection exceeded *{min_cutoff} pieces*:
 
-🔹 *Prev. Month ({prev_abbr} {start_day:02d}–{n_day:02d}):* {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)
-🔹 *Present Month ({curr_abbr} {start_day:02d}–{n_day:02d}):* {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)
+🔹 *Prev. Month ({prev_abbr} {start_day:02d}–{n_day:02d}):* {prev_as_of_total_ton:.2f} Tons / {prev_as_of_total_pcs:,} Pcs ({prev_as_of_avg_ton:.2f} T/Day)
+🔹 *Present Month ({curr_abbr} {start_day:02d}–{n_day:02d}):* {curr_as_of_total_ton:.2f} Tons / {curr_as_of_total_pcs:,} Pcs ({curr_as_of_avg_ton:.2f} T/Day)
 {variance_line_plain}
 
 📌 *Please grant your approval to send these items for rejection clearance.*"""
@@ -1497,8 +1439,8 @@ These are the line records from *{section_display_name}* where rejection exceede
                     <p style="margin: 0 0 0.75rem 0; color: #64748b; font-size: 0.82rem;"><b>Date:</b> {day_formatted}</p>
                     <p style="margin: 0 0 0.5rem 0;"><b>Dear Sir,</b></p>
                     <p>These are the line records from <b>{section_display_name}</b> where rejection exceeded <b>{min_cutoff} pieces</b>:</p>
-                    <p style="margin: 0.5rem 0 0.2rem 0;">&bull; <b>Prev. Month ({prev_abbr} {start_day:02d}–{n_day:02d}):</b> {prev_as_of_total_ton:.2f} Tons ({prev_as_of_avg_ton:.2f} T/Day)</p>
-                    <p style="margin: 0 0 0.2rem 0;">&bull; <b>Present Month ({curr_abbr} {start_day:02d}–{n_day:02d}):</b> {curr_as_of_total_ton:.2f} Tons ({curr_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0.5rem 0 0.2rem 0;">&bull; <b>Prev. Month ({prev_abbr} {start_day:02d}–{n_day:02d}):</b> {prev_as_of_total_ton:.2f} Tons / {prev_as_of_total_pcs:,} Pcs ({prev_as_of_avg_ton:.2f} T/Day)</p>
+                    <p style="margin: 0 0 0.2rem 0;">&bull; <b>Present Month ({curr_abbr} {start_day:02d}–{n_day:02d}):</b> {curr_as_of_total_ton:.2f} Tons / {curr_as_of_total_pcs:,} Pcs ({curr_as_of_avg_ton:.2f} T/Day)</p>
                     {variance_line_html}
                     <p style="margin: 0.75rem 0 0 0; color: #dc2626; font-weight: 700;">Please grant your approval to send these items for rejection clearance.</p>
                 </div>""",
@@ -1512,7 +1454,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 3: Cause-Wise Defect Analysis
+        # Section 3: Rejection Defect Reason Analysis
         df_cause_mom_full = m2_compute_cause_mom_comparison(
             df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=True
         )
@@ -1528,12 +1470,12 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         c_cause_hdr, c_cause_btn = st.columns([3, 1.4], vertical_alignment="center")
         with c_cause_hdr:
-            st.markdown("#### CAUSE-WISE REJECTION DEFECT ANALYSIS")
+            st.markdown("#### REJECTION DEFECT REASON ANALYSIS")
         with c_cause_btn:
             st.download_button(
-                label="Download MTD Cause Pareto Report (JPG)",
+                label="Download Defect Summary (JPG)",
                 data=jpg_bytes_cause_pareto,
-                file_name=f"MTD_Cause_Pareto_Report_{section_display_name}_{sel_date_str}.jpg",
+                file_name=f"Defect_Reason_Summary_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -1552,7 +1494,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         tab_cause_day, tab_cause_asof = st.tabs([
             f"Selected Date ({day_formatted})",
-            f"Span Defect Pareto (Day {start_day} – {n_day})",
+            f"Span Defect Summary (Day {start_day} – {n_day})",
         ])
 
         with tab_cause_day:
@@ -1561,7 +1503,7 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with tab_cause_asof:
             if show_cause_mom:
-                st.caption(f"Showing Side-by-Side Root Cause Comparison: **{curr_abbr} {start_day:02d}–{n_day:02d}** vs **{prev_abbr} {start_day:02d}–{n_day:02d}**")
+                st.caption(f"Showing Side-by-Side Defect Reason Comparison: **{curr_abbr} {start_day:02d}–{n_day:02d}** vs **{prev_abbr} {start_day:02d}–{n_day:02d}**")
                 df_cause_mom_disp = m2_compute_cause_mom_comparison(
                     df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=show_cause_variances
                 )
@@ -1572,10 +1514,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 4: Lineman & Shift Quality Audit
+        # Section 4: Senior Operator & Shift Quality Audit
         c_l_title, c_down_line = st.columns([3, 1.4], vertical_alignment="center")
         with c_l_title:
-            st.markdown("#### LINEMAN & SHIFT QUALITY AUDIT (ADDED BY)")
+            st.markdown("#### SENIOR OPERATOR & SHIFT QUALITY AUDIT (ADDED BY)")
 
         lineman_col = get_col(df_as_of, ["Added By", "AddedBy", "Lineman"], "Added By")
         all_operators = sorted([str(op).strip() for op in df_as_of[lineman_col].dropna().unique() if str(op).strip()])
@@ -1645,9 +1587,9 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         with c_down_line:
             st.download_button(
-                label="Download Lineman Audit (JPG)",
+                label="Download Operator Audit (JPG)",
                 data=jpg_bytes_lineman,
-                file_name=f"MTD_Lineman_Report_{section_display_name}_{sel_date_str}.jpg",
+                file_name=f"Operator_Scrap_Summary_{section_display_name}_{sel_date_str}.jpg",
                 mime="image/jpeg",
                 use_container_width=True,
             )
@@ -1655,7 +1597,7 @@ These are the line records from *{section_display_name}* where rejection exceede
         tab_line_asof, tab_shift, tab_matrix, tab_ranks = st.tabs([
             f"Senior Operator Overview (Day {start_day} – {n_day})",
             "Shift A vs Shift B Audit",
-            "Defect Cause x Operator Matrix",
+            "Defect Reason x Operator Matrix",
             "Top 5 Defect Drivers by Operator",
         ])
 
@@ -1670,7 +1612,7 @@ These are the line records from *{section_display_name}* where rejection exceede
                 else:
                     st.info("No comparative records found.")
             else:
-                display_lineman_cols = ["Lineman (Added By)", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Logged_Entries", "Machines_Covered", "% Pcs Share", "% Ton Share"]
+                display_lineman_cols = ["Senior Operator (Added By)", "Rej_Pcs", "Rej_Kg", "Rej_Ton", "Logged_Entries", "Machines_Covered", "% Pcs Share", "% Ton Share"]
                 if not df_lineman_as_of.empty:
                     st.dataframe(df_lineman_as_of[display_lineman_cols], use_container_width=True, hide_index=True)
                 else:
@@ -1727,10 +1669,10 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 5: Month-over-Month Daily Trend (With 3-Way Shift Filter)
+        # Section 5: Daily Rejection Trend
         c_tr_title, c_tr_chk = st.columns([2.8, 1.6], vertical_alignment="center")
         with c_tr_title:
-            st.markdown("#### MONTH-OVER-MONTH DAILY REJECTION TREND (PIECES & TONNAGE)")
+            st.markdown("#### DAILY REJECTION COMPARISON TREND (PIECES & TONNAGE)")
         with c_tr_chk:
             show_trend_variances = st.checkbox("Show Daily Variance Details", value=False, key="chk_trend_var")
 
