@@ -700,7 +700,7 @@ def m3_generate_2x2_executive_jpg(
 def render_npt_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
-        if st.button("Back to Operations Hub", use_container_width=True):
+        if st.button("Back to Operations Hub", key="btn_npt_back_hub", use_container_width=True):
             st.session_state["active_view"] = "hub_home"
             st.rerun()
     with c_title:
@@ -715,7 +715,7 @@ def render_npt_module():
         )
     with c_act:
         if "m3_file_bytes" in st.session_state:
-            if st.button("Change Files", use_container_width=True):
+            if st.button("Change Files", key="btn_npt_change_files", use_container_width=True):
                 st.session_state.pop("m3_file_bytes", None)
                 st.session_state.pop("m3_sm_bytes", None)
                 st.rerun()
@@ -766,7 +766,7 @@ def render_npt_module():
             up_sm = st.file_uploader("Select Maintenance Ticket Workbook (.xlsx)", type=["xlsx", "xls"], key="up_sm_file")
 
         if up_dt is not None:
-            if st.button("Ingest Workbooks & Launch Console", type="primary", use_container_width=True):
+            if st.button("Ingest Workbooks & Launch Console", key="btn_npt_ingest_launch", type="primary", use_container_width=True):
                 st.session_state["m3_file_bytes"] = up_dt.getvalue()
                 st.session_state["m3_sm_bytes"] = up_sm.getvalue() if up_sm is not None else None
                 st.rerun()
@@ -806,6 +806,7 @@ def render_npt_module():
                 f"Cutoff Date (8 AM–8 AM)",
                 avail_cutoff_strs,
                 index=len(avail_cutoff_strs) - 1 if avail_cutoff_strs else 0,
+                key="sb_npt_cutoff_date",
             )
 
         all_present_causes = sorted([c for c in df_scoped["Cause"].dropna().unique()])
@@ -816,6 +817,7 @@ def render_npt_module():
                 "🚫 Drop Causes from Analysis:",
                 all_present_causes,
                 default=default_excluded,
+                key="ms_npt_drop_causes",
                 help="Excluded causes will be omitted from total NPT hours and capacity loss metrics.",
             )
 
@@ -861,7 +863,7 @@ def render_npt_module():
                     st.warning("Maximum 10 causes allowed! Keeping first 10 selected.")
                     updated_selection = updated_selection[:10]
 
-                if st.button("Apply Selected Causes", type="primary", use_container_width=True):
+                if st.button("Apply Selected Causes", key="btn_npt_apply_top_causes", type="primary", use_container_width=True):
                     st.session_state["top_10_causes_selected"] = updated_selection
                     st.rerun()
 
@@ -948,6 +950,7 @@ def render_npt_module():
                 data=jpg_bytes,
                 file_name=f"NPT_4Grid_Report_{section_display_name}_{sel_cutoff_str}.jpg",
                 mime="image/jpeg",
+                key="dl_npt_2x2_jpg",
                 use_container_width=True,
             )
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1005,7 +1008,8 @@ def render_npt_module():
                     "📥 Export Daily Incident Log (.xlsx)",
                     convert_df_to_styled_excel(display_df, "Daily_Incidents"),
                     f"Daily_Incidents_{sel_cutoff_str}.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_npt_daily_incidents",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             else:
                 st.success("Zero downtime logged for this date.")
@@ -1093,7 +1097,7 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
             )
 
             with st.expander("Copy Plain Text Brief for WhatsApp"):
-                st.text_area("Brief Text", value=whatsapp_msg, height=200, label_visibility="collapsed")
+                st.text_area("Brief Text", value=whatsapp_msg, height=200, key="ta_npt_brief_text", label_visibility="collapsed")
 
         st.divider()
 
@@ -1131,7 +1135,8 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                     "📥 Export MoM Size Comparison (.xlsx)",
                     convert_df_to_styled_excel(df_size_mom, "Size_MoM_Comparison"),
                     f"Size_MoM_Comparison_{sel_cutoff_str}.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_npt_size_mom",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             else:
                 st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
@@ -1139,7 +1144,8 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                     "📥 Export Size NPT Table (.xlsx)",
                     convert_df_to_styled_excel(df_size_grid, "Size_Wise_NPT"),
                     f"Size_Wise_NPT_{sel_cutoff_str}.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_npt_size_table",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
         with tab_smed:
@@ -1149,7 +1155,8 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                 "📥 Export SMED Daily Performance (.xlsx)",
                 convert_df_to_styled_excel(df_smed_grid, "SMED_Daily"),
                 f"SMED_Performance_{sel_cutoff_str}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_npt_smed_daily",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
         with tab_maint:
@@ -1159,7 +1166,8 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                 "📥 Export Technical Maintenance Log (.xlsx)",
                 convert_df_to_styled_excel(df_maint_grid, "Maintenance_Trend"),
                 f"Maintenance_Trend_{sel_cutoff_str}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_npt_maint_trend",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
         with tab_pareto:
@@ -1222,9 +1230,11 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                 "📥 Export Full Cause Ledger (.xlsx)",
                 convert_df_to_styled_excel(cause_agg, "Cause_Ledger"),
                 f"Full_Cause_Ledger_{sel_cutoff_str}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_npt_cause_ledger",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
 
-# Execute module
-render_npt_module()
+# Execute only when directly launched as a standalone page
+if __name__ == "__main__":
+    render_npt_module()
