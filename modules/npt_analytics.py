@@ -7,6 +7,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 # Ensure project root directory is on sys.path for robust sub-module imports
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -17,6 +24,9 @@ from config import (
     MAINTENANCE_CAUSES,
     parse_machine_size,
     resolve_section_config,
+    resolve_npt_category,
+    NPT_CATEGORIES,
+    EXCEL_SIZES,
 )
 
 DEFAULT_TOP_10_CAUSES = [
@@ -41,6 +51,95 @@ def get_col(df, candidates, default=None):
 
 
 # =========================================================
+# 0. COMPANY STANDARD EXCEL STYLER (.XLSX EXPORT)
+# =========================================================
+def convert_df_to_styled_excel(df, sheet_name="NPT_Report"):
+    """Generates Excel with company yellow headers, thin borders, and bold red subtotals."""
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+
+    header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="000000")
+    data_font = Font(name="Calibri", size=11, bold=False, color="000000")
+    total_font = Font(name="Calibri", size=11, bold=True, color="FF0000")
+
+    thin_border_side = Side(border_style="thin", color="BFBFBF")
+    cell_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
+    double_bottom_side = Side(border_style="double", color="000000")
+    total_top_side = Side(border_style="thin", color="000000")
+    total_border = Border(left=thin_border_side, right=thin_border_side, top=total_top_side, bottom=double_bottom_side)
+
+    for col_num, col_name in enumerate(df.columns, 1):
+        cell = ws.cell(row=1, column=col_num, value=str(col_name))
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = cell_border
+
+    for row_idx, row in df.iterrows():
+        excel_row_num = row_idx + 2
+        is_total_row = any("sub total" in str(v).lower() or "total" in str(v).lower() or "summary >>" in str(v).lower() for v in row.values)
+
+        for col_idx, (col_name, val) in enumerate(row.items(), 1):
+            cell = ws.cell(row=excel_row_num, column=col_idx)
+            col_lower = str(col_name).lower()
+            val_str = str(val).strip()
+
+            if is_total_row:
+                cell.font = total_font
+                cell.border = total_border
+            else:
+                cell.font = data_font
+                cell.border = cell_border
+
+            if isinstance(val, (int, float)) and pd.notna(val):
+                cell.value = val
+                if any(k in col_lower for k in ["qty", "nos", "count", "rank"]):
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                elif any(k in col_lower for k in ["%", "share", "pct", "deviation", "impact"]):
+                    cell.number_format = '0.00%'
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                else:
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+            else:
+                clean_num_str = val_str.replace(",", "").replace("%", "")
+                try:
+                    num_val = float(clean_num_str)
+                    if "%" in val_str:
+                        cell.value = num_val / 100.0
+                        cell.number_format = '0.00%'
+                        cell.alignment = Alignment(horizontal="right", vertical="center")
+                    elif clean_num_str.isdigit():
+                        cell.value = int(clean_num_str)
+                        cell.number_format = '#,##0'
+                        cell.alignment = Alignment(horizontal="right", vertical="center")
+                    else:
+                        cell.value = num_val
+                        cell.number_format = '#,##0.00'
+                        cell.alignment = Alignment(horizontal="right", vertical="center")
+                except ValueError:
+                    cell.value = val_str
+                    if is_total_row:
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    elif col_lower in ["date", "size", "mc size", "rank", "mc sl", "status"]:
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                    else:
+                        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 13)
+
+    wb.save(output)
+    return output.getvalue()
+
+
+# =========================================================
 # 1. PARSING ENGINES (8 AM TO 8 AM PRODUCTION SLICING)
 # =========================================================
 @st.cache_data
@@ -48,9 +147,9 @@ def m3_parse_downtime_workbook(file_bytes):
     file_stream = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(file_stream)
     sheet_name = (
-        "DowntimeReport"
-        if "DowntimeReport" in xls.sheet_names
-        else xls.sheet_names[0]
+        "NPT Details"
+        if "NPT Details" in xls.sheet_names
+        else ("DowntimeReport" if "DowntimeReport" in xls.sheet_names else xls.sheet_names[0])
     )
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
 
@@ -71,19 +170,19 @@ def m3_parse_downtime_workbook(file_bytes):
     to_col = get_col(df_clean, ["To Time", "ToTime", "End Time", "EndTime"])
     from_col = get_col(df_clean, ["From Time", "FromTime", "Start Time", "StartTime"])
     cause_col = get_col(df_clean, ["Cause", "Causes", "Reason", "Defect"], "Cause")
-    mc_col = get_col(df_clean, ["Machine", "MC SL"], "Machine")
+    mc_col = get_col(df_clean, ["Machine", "MC SL", "Smart Manu"], "Machine")
 
     df_clean["From_DT"] = pd.to_datetime(df_clean[from_col], errors="coerce")
     df_clean["To_DT"] = pd.to_datetime(df_clean[to_col], errors="coerce") if to_col else pd.NaT
     df_clean["Is_Ongoing"] = df_clean["To_DT"].isna()
 
     # Prevent data loss when cause has not been assigned yet
-    df_clean["CauseClean"] = (
-        df_clean[cause_col].fillna("Unassigned / Pending Log*").astype(str).str.replace("*", "", regex=False).str.strip()
-    )
-    df_clean["Cause"] = df_clean[cause_col].fillna("Unassigned / Pending Log*")
+    raw_cause = df_clean[cause_col].fillna("Unassigned / Pending Log*").astype(str)
+    df_clean["Cause"] = raw_cause
+    df_clean["CauseClean"] = raw_cause.str.replace("*", "", regex=False).str.strip()
+    df_clean["Category"] = df_clean["Cause"].apply(resolve_npt_category)
     df_clean["Is_Maintenance"] = df_clean["Cause"].isin(MAINTENANCE_CAUSES)
-    df_clean["Is_SMED"] = df_clean["Cause"].astype(str).str.strip() == "Mold Change*"
+    df_clean["Is_SMED"] = df_clean["CauseClean"].str.lower() == "mold change"
 
     # Auto-resolve section configuration dynamically
     sec_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_clean)
@@ -91,6 +190,15 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["Detected_Section"] = sec_name
     df_clean["Position"] = df_clean[mc_col].astype(str).map(pos_map).fillna(df_clean[mc_col].astype(str))
     df_clean["Size"] = df_clean[mc_col].apply(parse_machine_size)
+
+    # Floor Detection for Multi-Floor Plants (Plastic-3 FF: 90/120/160; GF: 250-800)
+    def determine_floor(row):
+        pos = str(row["Position"]).strip().upper()
+        if pos.startswith(("A", "B", "C", "D")) and any(z in pos for z in ["-90", "-120", "-160"]):
+            return "FF"
+        return "GF"
+
+    df_clean["Floor"] = df_clean.apply(determine_floor, axis=1)
 
     return df_clean
 
@@ -302,7 +410,8 @@ def m3_compute_consolidated_daily_log(df_day):
                 )
             )
         )
-        day_hrs = grp["Hours"].sum()
+        cats = ", ".join(sorted(set(str(c).strip() for c in grp["Category"].dropna().unique())))
+        day_hrs = min(24.0, grp["Hours"].sum())  # Strict 24h single-machine physical cap
         start_t = str(grp["From_DT"].min())[:16]
 
         if has_ongoing:
@@ -315,6 +424,7 @@ def m3_compute_consolidated_daily_log(df_day):
         records.append({
             "Position": pos,
             "Machine": mc,
+            "Department": cats,
             "Status": status,
             "Combined Causes": causes,
             "Closed Hours": round(day_hrs, 2),
@@ -667,21 +777,46 @@ def render_npt_module():
         detected_sec = df_parsed["Detected_Section"].iloc[0] if "Detected_Section" in df_parsed.columns else "RIP> DPL> Plastic-3"
         sec_name, total_plant_mcs, daily_avail_hrs, pos_map, size_nos_map, unique_sizes = resolve_section_config(df_parsed, fallback_name=detected_sec)
 
-        raw_start_dates = (df_parsed["From_DT"].dropna() - pd.Timedelta(hours=8)).dt.normalize()
-        avail_dates_list = sorted(raw_start_dates.unique().tolist())
-        avail_cutoff_strs = [d.strftime("%Y-%m-%d") for d in avail_dates_list]
-
         section_display_name = sec_name.split(">")[-1].strip()
 
         # Grouped Industrial Toolbar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
-        c_date, c_causes, c_snap = st.columns([1.5, 1.8, 1.4], gap="small")
+        c_flr, c_date, c_excl, c_causes, c_snap = st.columns([1.1, 1.3, 1.8, 1.4, 1.4], gap="small", vertical_alignment="bottom")
+
+        with c_flr:
+            floor_choice = st.radio("🏢 Floor View:", ["ALL", "FF", "GF"], horizontal=True, key="m3_floor_view")
+
+        if floor_choice == "FF":
+            df_scoped = df_parsed[df_parsed["Floor"] == "FF"].copy()
+            total_plant_mcs = 25
+            daily_avail_hrs = 25 * 24.0
+        elif floor_choice == "GF":
+            df_scoped = df_parsed[df_parsed["Floor"] == "GF"].copy()
+            total_plant_mcs = 36
+            daily_avail_hrs = 36 * 24.0
+        else:
+            df_scoped = df_parsed.copy()
+
+        raw_start_dates = (df_scoped["From_DT"].dropna() - pd.Timedelta(hours=8)).dt.normalize()
+        avail_dates_list = sorted(raw_start_dates.unique().tolist())
+        avail_cutoff_strs = [d.strftime("%Y-%m-%d") for d in avail_dates_list]
 
         with c_date:
             sel_cutoff_str = st.selectbox(
-                f"Cutoff Date (8 AM–8 AM | {section_display_name})",
+                f"Cutoff Date (8 AM–8 AM)",
                 avail_cutoff_strs,
-                index=len(avail_cutoff_strs) - 1,
+                index=len(avail_cutoff_strs) - 1 if avail_cutoff_strs else 0,
+            )
+
+        all_present_causes = sorted([c for c in df_scoped["Cause"].dropna().unique()])
+        default_excluded = [c for c in all_present_causes if "server error" in c.lower()]
+
+        with c_excl:
+            excluded_causes = st.multiselect(
+                "🚫 Drop Causes from Analysis:",
+                all_present_causes,
+                default=default_excluded,
+                help="Excluded causes will be omitted from total NPT hours and capacity loss metrics.",
             )
 
         sel_date_obj = pd.to_datetime(sel_cutoff_str)
@@ -689,7 +824,13 @@ def render_npt_module():
         day_formatted = sel_date_obj.strftime("%d-%b")
 
         cutoff_eval_dt = sel_date_obj + pd.Timedelta(days=1, hours=8)
-        df_downtime = slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=cutoff_eval_dt)
+        df_downtime_raw = slice_downtime_by_operational_days(df_scoped, cutoff_cutoff_dt=cutoff_eval_dt)
+
+        # Apply Cause Exclusion Filter
+        if excluded_causes:
+            df_downtime = df_downtime_raw[~df_downtime_raw["Cause"].isin(excluded_causes)].copy()
+        else:
+            df_downtime = df_downtime_raw.copy()
 
         all_months = sorted(df_downtime["YearMonth"].dropna().unique())
         active_month = sel_date_obj.to_period("M")
@@ -699,19 +840,18 @@ def render_npt_module():
         active_m_df = df_downtime[df_downtime["YearMonth"] == active_month]
         curr_month_name = sel_date_obj.strftime("%B")
 
-        all_present_causes = sorted([c for c in df_downtime["Cause"].dropna().unique() if "Server Error" not in str(c)])
+        valid_causes_for_picker = sorted([c for c in df_downtime["Cause"].dropna().unique() if "Server Error" not in str(c)])
         
         if "top_10_causes_selected" not in st.session_state:
-            st.session_state["top_10_causes_selected"] = [c for c in DEFAULT_TOP_10_CAUSES if c in all_present_causes]
+            st.session_state["top_10_causes_selected"] = [c for c in DEFAULT_TOP_10_CAUSES if c in valid_causes_for_picker]
 
         with c_causes:
-            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
-            with st.popover(f"Select Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
+            with st.popover(f"Top Causes ({len(st.session_state['top_10_causes_selected'])}/10 Selected)"):
                 st.markdown("##### Choose up to 10 Causes to Compare")
                 st.caption("Selected causes are tracked in impact charts and reports:")
                 
                 updated_selection = []
-                for c_item in all_present_causes:
+                for c_item in valid_causes_for_picker:
                     is_currently_checked = c_item in st.session_state["top_10_causes_selected"]
                     chk = st.checkbox(c_item, value=is_currently_checked, key=f"chk_cause_{c_item}")
                     if chk:
@@ -745,14 +885,20 @@ def render_npt_module():
         curr_abbr = curr_month_name[:3].capitalize()
         prev_abbr = prev_month_name[:3].capitalize()
 
-        tot_curr_mtd_hrs = df_mtd["Hours"].sum()
-        tot_prev_mtd_hrs = prev_m_mtd["Hours"].sum()
+        # Cumulative MTD Hours: Accumulates every single day
+        mtd_daily_capped = df_mtd.groupby(["DateClean", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index()
+        tot_curr_mtd_hrs = mtd_daily_capped["Hours"].sum()
+
+        prev_daily_capped = prev_m_mtd.groupby(["DateClean", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index()
+        tot_prev_mtd_hrs = prev_daily_capped["Hours"].sum()
 
         tot_avail_period = total_plant_mcs * 24.0 * max(1, cutoff_day)
         curr_mtd_npt_pct = (tot_curr_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
         prev_mtd_npt_pct = (tot_prev_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
 
-        last_day_total_hrs = df_last_day["Hours"].sum()
+        # Strict Single-Day Physics Cap: Maximum 24.0 Hours per Machine
+        last_day_mc_hrs = df_last_day.groupby("Machine")["Hours"].sum().clip(upper=24.0)
+        last_day_total_hrs = last_day_mc_hrs.sum()
         last_day_avail = daily_avail_hrs
         last_day_npt_pct = (last_day_total_hrs / last_day_avail * 100.0) if last_day_avail > 0 else 0.0
 
@@ -797,7 +943,6 @@ def render_npt_module():
         )
 
         with c_snap:
-            st.markdown("<div style='height: 1.7rem;'></div>", unsafe_allow_html=True)
             st.download_button(
                 label="Download 2×2 JPG Report",
                 data=jpg_bytes,
@@ -854,8 +999,14 @@ def render_npt_module():
             )
             df_cons_log = m3_compute_consolidated_daily_log(df_last_day)
             if not df_cons_log.empty:
-                display_df = df_cons_log[["Position", "Machine", "Status", "Combined Causes", "Duration", "Start Time"]]
+                display_df = df_cons_log[["Position", "Machine", "Department", "Status", "Combined Causes", "Duration", "Start Time"]]
                 st.dataframe(display_df, use_container_width=True, hide_index=True, height=390)
+                st.download_button(
+                    "📥 Export Daily Incident Log (.xlsx)",
+                    convert_df_to_styled_excel(display_df, "Daily_Incidents"),
+                    f"Daily_Incidents_{sel_cutoff_str}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
             else:
                 st.success("Zero downtime logged for this date.")
 
@@ -946,11 +1097,12 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
 
         st.divider()
 
-        # Detailed Analytical Tabs with MoM Support
-        tab_size, tab_smed, tab_maint = st.tabs([
+        # Detailed Analytical Tabs with MoM Support & New Category Pareto
+        tab_size, tab_smed, tab_maint, tab_pareto = st.tabs([
             "MC Size-Wise Capacity Loss",
             "SMED (Mold Changeover)",
             "Maintenance & SMS Audit",
+            "Category Pareto & Cause Comparison",
         ])
 
         with tab_size:
@@ -975,13 +1127,104 @@ Current Month Total NPT ({curr_abbr_txt} 01–{cutoff_day:02d}): *{tot_curr_mtd_
                     prev_abbr=prev_abbr, curr_abbr=curr_abbr, include_variances=show_size_variances,
                 )
                 st.dataframe(df_size_mom, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "📥 Export MoM Size Comparison (.xlsx)",
+                    convert_df_to_styled_excel(df_size_mom, "Size_MoM_Comparison"),
+                    f"Size_MoM_Comparison_{sel_cutoff_str}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
             else:
                 st.dataframe(df_size_grid, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "📥 Export Size NPT Table (.xlsx)",
+                    convert_df_to_styled_excel(df_size_grid, "Size_Wise_NPT"),
+                    f"Size_Wise_NPT_{sel_cutoff_str}.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
 
         with tab_smed:
             st.markdown(f"#### SMED CHANGEOVER PERFORMANCE (DAY 1–{cutoff_day})")
             st.dataframe(df_smed_grid, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Export SMED Daily Performance (.xlsx)",
+                convert_df_to_styled_excel(df_smed_grid, "SMED_Daily"),
+                f"SMED_Performance_{sel_cutoff_str}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
         with tab_maint:
             st.markdown(f"#### TECHNICAL & BREAKDOWN TREND (DAY 1–{cutoff_day})")
             st.dataframe(df_maint_grid, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Export Technical Maintenance Log (.xlsx)",
+                convert_df_to_styled_excel(df_maint_grid, "Maintenance_Trend"),
+                f"Maintenance_Trend_{sel_cutoff_str}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        with tab_pareto:
+            st.markdown(f"#### 80/20 PARETO ANALYSIS & CAUSE LEDGER (DAY 1–{cutoff_day})")
+            cause_agg = df_mtd.groupby(["Category", "CauseClean"])["Hours"].sum().reset_index()
+            cause_agg = cause_agg.sort_values("Hours", ascending=False).reset_index(drop=True)
+            cause_agg["Share %"] = (cause_agg["Hours"] / tot_curr_mtd_hrs * 100.0) if tot_curr_mtd_hrs > 0 else 0.0
+            cause_agg["Cum %"] = cause_agg["Share %"].cumsum()
+
+            c_par1, c_par2 = st.columns([1.6, 1.4])
+            with c_par1:
+                fig_pareto = make_subplots(specs=[[{"secondary_y": True}]])
+                fig_pareto.add_trace(
+                    go.Bar(
+                        x=cause_agg["CauseClean"][:12],
+                        y=cause_agg["Hours"][:12],
+                        name="Downtime (Hrs)",
+                        marker_color="#0284c7",
+                    ),
+                    secondary_y=False,
+                )
+                fig_pareto.add_trace(
+                    go.Scatter(
+                        x=cause_agg["CauseClean"][:12],
+                        y=cause_agg["Cum %"][:12],
+                        name="Cumulative %",
+                        mode="lines+markers",
+                        marker_color="#ef4444",
+                        line=dict(width=2),
+                    ),
+                    secondary_y=True,
+                )
+                fig_pareto.update_layout(
+                    title="Top Downtime Drivers (Pareto 80/20)",
+                    xaxis_tickangle=-45,
+                    height=360,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                fig_pareto.update_yaxes(title_text="Hours Lost", secondary_y=False)
+                fig_pareto.update_yaxes(title_text="Cumulative %", range=[0, 105], secondary_y=True)
+                st.plotly_chart(fig_pareto, use_container_width=True)
+
+            with c_par2:
+                cat_agg = df_mtd.groupby("Category")["Hours"].sum().reset_index()
+                cat_agg["Share %"] = (cat_agg["Hours"] / tot_curr_mtd_hrs * 100.0) if tot_curr_mtd_hrs > 0 else 0.0
+                fig_cat = px.pie(
+                    cat_agg,
+                    names="Category",
+                    values="Hours",
+                    title="Downtime by Industrial Department",
+                    color_discrete_sequence=px.colors.qualitative.Prism,
+                    hole=0.45,
+                )
+                fig_cat.update_layout(height=360, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig_cat, use_container_width=True)
+
+            st.dataframe(cause_agg, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Export Full Cause Ledger (.xlsx)",
+                convert_df_to_styled_excel(cause_agg, "Cause_Ledger"),
+                f"Full_Cause_Ledger_{sel_cutoff_str}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+
+# Execute module
+render_npt_module()
