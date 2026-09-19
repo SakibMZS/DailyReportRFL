@@ -1,6 +1,6 @@
 # =========================================================
 # CONFIG.PY — MULTI-FLOOR INDUSTRIAL ENGINEERING REGISTRY
-# Synchronized with machine_id.xlsx
+# Synchronized with machine_id.xlsx & 2026 NPT Cause Standard
 # =========================================================
 
 MAINTENANCE_CAUSES = {
@@ -184,3 +184,108 @@ DAILY_AVAILABLE_HRS = TOTAL_PLANT_MCS * 24.0
 POS_MAP = SECTION_CONFIG[DEFAULT_SECTION]["mapping"]
 LINE_MAP = {k: "-" for k in POS_MAP.keys()}
 EXCEL_SIZES = ["160", "90", "120", "250", "270", "280", "380", "330", "470", "530", "800", "428"]
+
+
+# =========================================================
+# CENTRAL NPT CAUSE CATEGORIZATION REGISTRY (65 CAUSES)
+# Grouped by Industrial Maintenance & Operational Ownership
+# =========================================================
+NPT_CATEGORIES = {
+    "Planning & Commercial Idle": [
+        "No Demand",
+        "No Demand*",
+        "Over Stock*",
+        "Manpower Short*",
+        "Holiday*",
+        "Shutdown (Scheduled)",
+        "One Machine Idle for Another Machine (Announced)",
+        "Audit",
+        "Line Balancing*",
+        "Machine Transfer*",
+        "Inventory (Raw Materials/Finished Goods/In Process)*",
+    ],
+    "Machine & Technical Breakdown": [
+        "Machine Problem*",
+        "Robot Problem*",
+        "Controller Problem*",
+        "RMCS Problem*",
+        "Oil or water Leakage*",
+        "Barrel Heater Problem*",
+        "Heater problem*",
+        "Heater  problem*",
+        "Machine Heater Problem*",
+        "Lubricant fail*",
+        "Scheduled Maintenance*",
+        "Machine Greasing*",
+        "Blowing machine Gripper Problem*",
+        "Blow pin problem*",
+        "Head lift problem*",
+        "Head polish*",
+        "Twin Barrel Problem*",
+        "Cutter Problem*",
+        "Cutting problem",
+        "Unplanned Downtime",
+        "Alternative Problem*",
+    ],
+    "Mold & Tooling Issues": [
+        "Mold Problem*",
+        "Mold Insert Change*",
+        "Head Change*",
+        "Barrel Change*",
+    ],
+    "SMED & Changeover": [
+        "Mold Change*",
+        "Color Change*",
+        "Item Change*",
+        "Parison Adjusting*",
+        "Pre-Heating Time",
+        "CIP/SIP/COP",
+    ],
+    "Operational & Quality Loss": [
+        "Product Jam*",
+        "Nozzle Jam*",
+        "Hopper Jam*",
+        "Color variation*",
+        "Defective product*",
+        "Over Flash",
+        "Moisture Problem*",
+        "Material Leakage*",
+        "Material Shortage*",
+        "Accessories Shortage*",
+        "Curve problem*",
+        "View strip problem*",
+        "Sample + Mold Test (RND)*",
+        "Machine Cleaning Break*",
+        "Prayer Break*",
+        "Lunch/ Dinner Break",
+        "Meal Break*",
+        "Sehri/ Iftar Time",
+        "Fire Drill",
+    ],
+    "Utilities & Facilities": [
+        "Power Breakdown (Unscheduled)*",
+        "Power Breakdown (Scheduled)*",
+        "Utility (Air, Water & Crane)*",
+        "Utility problem*",
+        "Server Error (Announced)",
+        "Server Error (Unannounced)",
+    ],
+}
+
+# Fast O(1) lookup dictionary for row-level assignment (normalizes asterisks & casing)
+NPT_CAUSE_TO_CATEGORY = {}
+for category_name, causes_list in NPT_CATEGORIES.items():
+    for c_item in causes_list:
+        clean_key = str(c_item).replace("*", "").strip().lower()
+        NPT_CAUSE_TO_CATEGORY[clean_key] = category_name
+
+
+def resolve_npt_category(cause_str):
+    """
+    Resolves any raw NPT cause string to its industrial department/category.
+    Matches variations with/without asterisks, whitespace, or case differences.
+    """
+    if not cause_str or str(cause_str).strip() in ["", "nan", "None"]:
+        return "Unassigned / Pending Log"
+    clean_k = str(cause_str).replace("*", "").strip().lower()
+    return NPT_CAUSE_TO_CATEGORY.get(clean_k, "Other Operational Loss")
