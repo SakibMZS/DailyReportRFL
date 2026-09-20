@@ -183,7 +183,6 @@ def m3_parse_downtime_workbook(file_bytes):
     df_clean["Is_Maintenance"] = df_clean["Cause"].isin(MAINTENANCE_CAUSES)
     df_clean["Is_SMED"] = df_clean["CauseClean"].str.lower() == "mold change"
 
-    # Auto-resolve section configuration dynamically
     sec_name, total_mcs, daily_avail_hrs, pos_map, size_counts, unique_sizes = resolve_section_config(df_clean)
 
     df_clean["Detected_Section"] = sec_name
@@ -194,11 +193,6 @@ def m3_parse_downtime_workbook(file_bytes):
 
 
 def slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=None):
-    """
-    Slices multi-day and overnight stoppages into 8 AM to 8 AM operational days.
-    Operational day D = window from (D 08:00:00) to (D+1 08:00:00).
-    Ongoing incidents are evaluated up to cutoff_cutoff_dt.
-    """
     records = []
 
     for _, row in df_parsed.iterrows():
@@ -277,7 +271,6 @@ def m3_compute_size_wise_npt(df_scope, span_days_count, total_plant_mcs, size_no
 
 
 def m3_compute_size_wise_mom(df_curr_mtd, df_prev_mtd, span_days_count, total_plant_mcs, size_nos_map, unique_sizes, prev_abbr="Aug", curr_abbr="Sep", include_variances=False):
-    """Computes side-by-side MoM capacity loss by machine size over the active span."""
     records = []
     c_curr_hrs = f"{curr_abbr} NPT (Hrs)"
     c_prev_hrs = f"{prev_abbr} NPT (Hrs)"
@@ -311,7 +304,7 @@ def m3_compute_size_wise_mom(df_curr_mtd, df_prev_mtd, span_days_count, total_pl
     return pd.DataFrame(records)
 
 
-def m3_compute_smed_table(df_scope, start_day, cutoff_day):
+def m3_compute_smed_table(df_scope, max_days=7, is_for_jpg=False, start_day=1, cutoff_day=1):
     smed_df = df_scope[df_scope["Is_SMED"]].copy()
     if smed_df.empty:
         return pd.DataFrame(), 0, 0.0, 0.0
@@ -337,10 +330,15 @@ def m3_compute_smed_table(df_scope, start_day, cutoff_day):
     tot_mtd_time = float(daily["Total_Time"].sum())
     mtd_avg_smed = (tot_mtd_time / tot_mtd_setups * 60.0) if tot_mtd_setups > 0 else 0.0
 
-    return daily[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]].reset_index(drop=True), tot_mtd_setups, tot_mtd_time, mtd_avg_smed
+    if is_for_jpg:
+        daily_display = daily.tail(max_days).reset_index(drop=True) if len(daily) > max_days else daily.reset_index(drop=True)
+    else:
+        daily_display = daily.reset_index(drop=True)
+
+    return daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]], tot_mtd_setups, tot_mtd_time, mtd_avg_smed
 
 
-def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs, total_plant_mcs, start_day, cutoff_day):
+def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs, total_plant_mcs, max_days=7, is_for_jpg=False, start_day=1, cutoff_day=1):
     maint_causes = [
         "Machine Problem*",
         "Robot Problem*",
@@ -349,9 +347,10 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
         "Oil or water Leakage*",
     ]
     all_dates = sorted(df_scope["DateClean"].dropna().unique())
+    dates_display = all_dates[-max_days:] if (is_for_jpg and len(all_dates) > max_days) else all_dates
 
     records = []
-    for dt in all_dates:
+    for dt in dates_display:
         dt_df = df_scope[df_scope["DateClean"] == dt]
         row = {"Date": dt.strftime("%-d-%b")}
 
@@ -368,7 +367,8 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
 
     df_display = pd.DataFrame(records)
 
-    mtd_summary_row = {"Date": f"Total Span ({start_day}–{cutoff_day}) >>"}
+    summary_label = f"Total (1-{cutoff_day}) >>" if is_for_jpg else f"Total Span ({start_day}–{cutoff_day}) >>"
+    mtd_summary_row = {"Date": summary_label}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
         c_tot = df_scope[df_scope["Cause"] == mc_cause]["Hours"].sum()
@@ -641,11 +641,11 @@ def m3_generate_2x2_executive_jpg(
         y_g3 -= step_g3
 
     ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
-    ax.text(3.0, y_g3 + 0.2, f"Total Span >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(18.0, y_g3 + 0.2, f"{smed_tot_time:.2f}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(26.0, y_g3 + 0.2, f"{smed_avg_min:.2f}", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
-    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups Span (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
+    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
 
     y_g4 = 38.2
     step_g4 = 4.35
@@ -767,7 +767,6 @@ def render_npt_module():
 
         section_display_name = sec_name.split(">")[-1].strip()
 
-        # Grouped Universal Industrial Toolbar (Aligned with Rejection Module Span Selectors)
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_x_day, c_excl, c_causes, c_snap = st.columns([1.3, 0.9, 1.8, 1.4, 1.4], gap="small", vertical_alignment="bottom")
 
@@ -806,7 +805,6 @@ def render_npt_module():
         cutoff_eval_dt = sel_date_obj + pd.Timedelta(days=1, hours=8)
         df_downtime_raw = slice_downtime_by_operational_days(df_parsed, cutoff_cutoff_dt=cutoff_eval_dt)
 
-        # Apply Cause Exclusion Filter
         if excluded_causes:
             df_downtime = df_downtime_raw[~df_downtime_raw["Cause"].isin(excluded_causes)].copy()
         else:
@@ -893,9 +891,14 @@ def render_npt_module():
         )
         curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
+        # Data for interactive tabs (full x to n span)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, span_days_count, total_plant_mcs, size_nos_map, unique_sizes)
-        df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, start_day, cutoff_day)
-        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, start_day, cutoff_day)
+        df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
+        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
+
+        # Data strictly restricted to last 7 days for the 2x2 JPG report
+        df_smed_jpg, smed_qty_jpg, smed_time_jpg, smed_avg_jpg = m3_compute_smed_table(df_mtd, max_days=7, is_for_jpg=True)
+        df_maint_jpg, maint_dict_jpg = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, max_days=7, is_for_jpg=True)
 
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
@@ -911,12 +914,12 @@ def render_npt_module():
             df_size_grid,
             size_tot_hrs,
             size_summary_pct,
-            df_smed_grid,
-            smed_tot_qty,
-            smed_tot_time,
-            smed_avg_min,
-            df_maint_grid,
-            maint_summary_dict,
+            df_smed_jpg,
+            smed_qty_jpg,
+            smed_time_jpg,
+            smed_avg_jpg,
+            df_maint_jpg,
+            maint_dict_jpg,
             section_display_name,
             total_plant_mcs,
         )
@@ -1209,6 +1212,5 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
             )
 
 
-# Execute only when directly launched as a standalone page
 if __name__ == "__main__":
     render_npt_module()
