@@ -311,7 +311,7 @@ def m3_compute_size_wise_mom(df_curr_mtd, df_prev_mtd, span_days_count, total_pl
     return pd.DataFrame(records)
 
 
-def m3_compute_smed_table(df_scope, max_days=7):
+def m3_compute_smed_table(df_scope, start_day, cutoff_day):
     smed_df = df_scope[df_scope["Is_SMED"]].copy()
     if smed_df.empty:
         return pd.DataFrame(), 0, 0.0, 0.0
@@ -337,11 +337,10 @@ def m3_compute_smed_table(df_scope, max_days=7):
     tot_mtd_time = float(daily["Total_Time"].sum())
     mtd_avg_smed = (tot_mtd_time / tot_mtd_setups * 60.0) if tot_mtd_setups > 0 else 0.0
 
-    daily_display = daily.tail(max_days).reset_index(drop=True) if len(daily) > max_days else daily.reset_index(drop=True)
-    return daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]], tot_mtd_setups, tot_mtd_time, mtd_avg_smed
+    return daily[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]].reset_index(drop=True), tot_mtd_setups, tot_mtd_time, mtd_avg_smed
 
 
-def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs, total_plant_mcs, max_days=7):
+def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs, total_plant_mcs, start_day, cutoff_day):
     maint_causes = [
         "Machine Problem*",
         "Robot Problem*",
@@ -350,10 +349,9 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
         "Oil or water Leakage*",
     ]
     all_dates = sorted(df_scope["DateClean"].dropna().unique())
-    dates_display = all_dates[-max_days:] if len(all_dates) > max_days else all_dates
 
     records = []
-    for dt in dates_display:
+    for dt in all_dates:
         dt_df = df_scope[df_scope["DateClean"] == dt]
         row = {"Date": dt.strftime("%-d-%b")}
 
@@ -370,7 +368,7 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
 
     df_display = pd.DataFrame(records)
 
-    mtd_summary_row = {"Date": f"Total Span >>"}
+    mtd_summary_row = {"Date": f"Total Span ({start_day}–{cutoff_day}) >>"}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
         c_tot = df_scope[df_scope["Cause"] == mc_cause]["Hours"].sum()
@@ -643,11 +641,11 @@ def m3_generate_2x2_executive_jpg(
         y_g3 -= step_g3
 
     ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
-    ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
+    ax.text(3.0, y_g3 + 0.2, f"Total Span >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(18.0, y_g3 + 0.2, f"{smed_tot_time:.2f}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
     ax.text(26.0, y_g3 + 0.2, f"{smed_avg_min:.2f}", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
-    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups MTD (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
+    ax.text(34.0, y_g3 + 0.2, f"{smed_tot_qty} setups Span (Target: 45 min)", color="#64748b", fontsize=6.8, va="center")
 
     y_g4 = 38.2
     step_g4 = 4.35
@@ -896,8 +894,8 @@ def render_npt_module():
         curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, span_days_count, total_plant_mcs, size_nos_map, unique_sizes)
-        df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, max_days=7)
-        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, max_days=7)
+        df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, start_day, cutoff_day)
+        df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, start_day, cutoff_day)
 
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
