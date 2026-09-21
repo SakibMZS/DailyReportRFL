@@ -1,3 +1,6 @@
+# =========================================================
+# MODULE: NPT ANALYTICS — ENTERPRISE MANUFACTURING PORTAL
+# =========================================================
 import io
 import os
 import sys
@@ -15,7 +18,6 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# Ensure project root directory is on sys.path for robust sub-module imports
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -54,7 +56,6 @@ def get_col(df, candidates, default=None):
 # 0. COMPANY STANDARD EXCEL STYLER (.XLSX EXPORT)
 # =========================================================
 def convert_df_to_styled_excel(df, sheet_name="NPT_Report"):
-    """Generates Excel with company yellow headers, thin borders, and bold red subtotals."""
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -302,6 +303,43 @@ def m3_compute_size_wise_mom(df_curr_mtd, df_prev_mtd, span_days_count, total_pl
         records.append(row)
 
     return pd.DataFrame(records)
+
+
+def m3_compute_daily_npt_trend(df_prev, df_curr, span_start, span_end, total_plant_mcs, prev_abbr="Aug", curr_abbr="Sep", include_variances=False):
+    p = df_prev[(df_prev["DayNum"] >= span_start) & (df_prev["DayNum"] <= span_end)].copy() if not df_prev.empty else pd.DataFrame()
+    c = df_curr[(df_curr["DayNum"] >= span_start) & (df_curr["DayNum"] <= span_end)].copy()
+
+    p_daily_mc = p.groupby(["DayNum", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index() if not p.empty else pd.DataFrame(columns=["DayNum", "Machine", "Hours"])
+    t_prev = p_daily_mc.groupby("DayNum")["Hours"].sum().reset_index().rename(columns={"Hours": "Prev_Hrs"}) if not p_daily_mc.empty else pd.DataFrame(columns=["DayNum", "Prev_Hrs"])
+
+    c_daily_mc = c.groupby(["DayNum", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index() if not c.empty else pd.DataFrame(columns=["DayNum", "Machine", "Hours"])
+    t_curr = c_daily_mc.groupby("DayNum")["Hours"].sum().reset_index().rename(columns={"Hours": "Curr_Hrs"}) if not c_daily_mc.empty else pd.DataFrame(columns=["DayNum", "Curr_Hrs"])
+
+    merged = pd.merge(t_curr, t_prev, on="DayNum", how="outer").sort_values("DayNum").fillna(0.0)
+
+    daily_avail = total_plant_mcs * 24.0
+    merged[f"{curr_abbr} NPT %"] = (merged["Curr_Hrs"] / daily_avail * 100.0).round(2)
+    merged[f"{prev_abbr} NPT %"] = (merged["Prev_Hrs"] / daily_avail * 100.0).round(2)
+
+    merged["Variance (Hrs)"] = merged["Curr_Hrs"] - merged["Prev_Hrs"]
+    merged["Variance (NPT %)"] = merged[f"{curr_abbr} NPT %"] - merged[f"{prev_abbr} NPT %"]
+
+    c_curr_hrs = f"{curr_abbr} NPT (Hrs)"
+    c_prev_hrs = f"{prev_abbr} NPT (Hrs)"
+
+    merged = merged.rename(columns={
+        "DayNum": "Day of Month",
+        "Curr_Hrs": c_curr_hrs,
+        "Prev_Hrs": c_prev_hrs,
+    })
+
+    merged[c_curr_hrs] = merged[c_curr_hrs].round(1)
+    merged[c_prev_hrs] = merged[c_prev_hrs].round(1)
+
+    cols = ["Day of Month", c_curr_hrs, c_prev_hrs, f"{curr_abbr} NPT %", f"{prev_abbr} NPT %"]
+    if include_variances:
+        cols = ["Day of Month", c_curr_hrs, c_prev_hrs, f"{curr_abbr} NPT %", f"{prev_abbr} NPT %", "Variance (Hrs)", "Variance (NPT %)"]
+    return merged[cols]
 
 
 def m3_compute_smed_table(df_scope, max_days=7, is_for_jpg=False, start_day=1, cutoff_day=1):
@@ -867,8 +905,8 @@ def render_npt_module():
         mtd_daily_capped = df_mtd.groupby(["DateClean", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index()
         tot_curr_mtd_hrs = mtd_daily_capped["Hours"].sum()
 
-        prev_daily_capped = prev_m_mtd.groupby(["DateClean", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index()
-        tot_prev_mtd_hrs = prev_daily_capped["Hours"].sum()
+        prev_daily_capped = prev_m_mtd.groupby(["DateClean", "Machine"])["Hours"].sum().clip(upper=24.0).reset_index() if not prev_m_mtd.empty else pd.DataFrame(columns=["Hours"])
+        tot_prev_mtd_hrs = prev_daily_capped["Hours"].sum() if not prev_daily_capped.empty else 0.0
 
         tot_avail_period = total_plant_mcs * 24.0 * span_days_count
         curr_mtd_npt_pct = (tot_curr_mtd_hrs / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
@@ -891,12 +929,10 @@ def render_npt_module():
         )
         curr_hours_dict = df_mtd.groupby("Cause")["Hours"].sum().to_dict()
 
-        # Data for interactive tabs (full x to n span)
         df_size_grid, size_tot_hrs, size_summary_pct = m3_compute_size_wise_npt(df_mtd, span_days_count, total_plant_mcs, size_nos_map, unique_sizes)
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
 
-        # Data strictly restricted to last 7 days for the 2x2 JPG report
         df_smed_jpg, smed_qty_jpg, smed_time_jpg, smed_avg_jpg = m3_compute_smed_table(df_mtd, max_days=7, is_for_jpg=True)
         df_maint_jpg, maint_dict_jpg = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, max_days=7, is_for_jpg=True)
 
@@ -994,12 +1030,11 @@ def render_npt_module():
                 st.success("Zero downtime logged for this date.")
 
         with col_right:
-            top_mtd_causes = df_mtd.groupby("Cause")["Hours"].sum().sort_values(ascending=False).head(4)
+            top_mtd_causes = df_mtd.groupby("CauseClean")["Hours"].sum().sort_values(ascending=False).head(3)
             top_causes_lines = []
             for c_n, c_h in top_mtd_causes.items():
-                c_clean = c_n.replace("*", "").strip()
                 c_pct = (c_h / tot_curr_mtd_hrs * 100) if tot_curr_mtd_hrs > 0 else 0.0
-                top_causes_lines.append(f"• {c_clean}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
+                top_causes_lines.append(f"• {c_n}: {c_h:,.2f} Hrs ({c_pct:.2f}% share)")
 
             maint_items = [
                 "Machine Problem*",
@@ -1020,33 +1055,24 @@ def render_npt_module():
             smed_setups_last = len(smed_last_df)
             smed_hrs_last = smed_last_df["Hours"].sum()
             smed_avg_min_last = (smed_hrs_last / smed_setups_last * 60.0) if smed_setups_last > 0 else 0.0
-            smed_mcs_str = ", ".join(sorted(set(str(v) for v in smed_last_df["Position"].unique() if str(v) != "-"))) if smed_setups_last > 0 else "None"
 
             curr_abbr_txt = curr_month_name[:3].capitalize()
             prev_abbr_txt = prev_month_name[:3].capitalize()
-            comp_like_for_like_str = f"vs. {tot_prev_mtd_hrs:,.2f} Hrs ({prev_mtd_npt_pct:.2f}% NPT) in {prev_abbr_txt} {start_day:02d}–{cutoff_day:02d}"
 
-            whatsapp_msg = f"""📅 *Date:* {sel_date_obj.strftime('%d-%m-%Y')}
+            whatsapp_msg = f"""{section_display_name.upper()} DAILY NPT & DOWNTIME BRIEF
+Date: {sel_date_obj.strftime('%d-%m-%Y')}
+📊 *Daily NPT:* {last_day_total_hrs:,.2f} Hrs ({last_day_npt_pct:.2f}% NPT)
 
-Dear Sir,
-
-*1. Overall Span NPT Analysis (Like-for-Like: Day {start_day}–{cutoff_day:02d})*
-
-Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)* ({comp_like_for_like_str}).
-
-*Top Contributing Causes ({curr_month_name}):*
+1. Overall Span NPT Analysis (Like-for-Like: Day {start_day}–{cutoff_day:02d})
+Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)* (vs. *{tot_prev_mtd_hrs:,.2f} Hrs ({prev_mtd_npt_pct:.2f}% NPT)* in {prev_abbr_txt} {start_day:02d}–{cutoff_day:02d}).
 {chr(10).join(top_causes_lines)}
 
-*2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})*
+2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})
 {chr(10).join(maint_lines)}
-*Total Maintenance Impact:* ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/last_day_total_hrs*100 if last_day_total_hrs>0 else 0):.0f}% of daily NPT | {(tot_tech_day/daily_avail_hrs*100):.2f}% daily section capacity)
+Total Maintenance Impact: ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/daily_avail_hrs*100):.2f}% daily section capacity)
 
-*3. Mold Change & SMED Performance (Last Day: {day_formatted})*
-• Mold Changes Completed: *{smed_setups_last} setups*
-• Total Setup Time: *{smed_hrs_last:.2f} Hours*
-• Average SMED: *{smed_avg_min_last:.2f} Min/change*
-• Involved Machines: {smed_mcs_str}
-• Span-to-Date SMED: *{smed_tot_qty} setups* completed totaling *{smed_tot_time:.2f} Hours* (Span Avg: *{smed_avg_min:.2f} Min*)"""
+3. Mold Change & SMED Performance (Last Day: {day_formatted})
+• Mold Changes Completed: *{smed_setups_last} setups* ({smed_hrs_last:.2f} Hours | Avg: *{smed_avg_min_last:.2f} Min/change*)"""
 
             st.markdown(
                 """
@@ -1059,17 +1085,7 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
             )
             st.markdown(
                 f"""<div class="narrative-block">
-                    <p style="margin:0 0 0.5rem 0; font-weight:800; color:#1e293b;">{section_display_name.upper()} DAILY NPT & DOWNTIME BRIEF</p>
-                    <p style="margin:0 0 0.75rem 0; color:#64748b; font-size:0.82rem;"><b>Date:</b> {sel_date_obj.strftime('%d-%m-%Y')}</p>
-                    <h5>1. Overall Span NPT Analysis (Like-for-Like: Day {start_day}–{cutoff_day:02d})</h5>
-                    <p>Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): <b>{tot_curr_mtd_hrs:,.2f} Hours ({curr_mtd_npt_pct:.2f}% NPT)</b> ({comp_like_for_like_str}).</p>
-                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(top_causes_lines)}</p>
-                    <h5>2. Machine Maintenance & Technical NPT (Last Day: {day_formatted})</h5>
-                    <p style="margin:0.25rem 0 0.5rem 0;">{'<br>'.join(maint_lines)}<br><b>Total Maintenance Impact:</b> ~{tot_tech_day:.2f} Hrs ({(tot_tech_day/daily_avail_hrs*100):.2f}% daily section capacity)</p>
-                    <h5>3. Mold Change & SMED Performance (Last Day: {day_formatted})</h5>
-                    <p>&bull; Mold Changes Completed: <b>{smed_setups_last} setups</b> ({smed_hrs_last:.2f} Hours | Avg: <b>{smed_avg_min_last:.2f} Min/change</b>)<br>
-                    &bull; Involved Machines: {smed_mcs_str}<br>
-                    &bull; Span-to-Date SMED: <b>{smed_tot_qty} setups</b> completed totaling <b>{smed_tot_time:.2f} Hours</b> (Span Avg: <b>{smed_avg_min:.2f} Min</b>)</p>
+                    <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; color: #1e293b; font-size: 0.86rem; line-height: 1.5;">{whatsapp_msg}</pre>
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -1079,10 +1095,11 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
 
         st.divider()
 
-        tab_size, tab_smed, tab_maint, tab_pareto = st.tabs([
+        tab_size, tab_smed, tab_maint, tab_trend, tab_pareto = st.tabs([
             "MC Size-Wise Capacity Loss",
             "SMED (Mold Changeover)",
             "Maintenance & SMS Audit",
+            "Daily NPT Trend Comparison",
             "Category Pareto & Cause Comparison",
         ])
 
@@ -1147,20 +1164,57 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
 
+        with tab_trend:
+            c_tr_title, c_tr_chk = st.columns([2.8, 1.6], vertical_alignment="center")
+            with c_tr_title:
+                st.markdown(f"#### DAILY NPT COMPARISON TREND (HOURS & %) — DAY {start_day}–{cutoff_day}")
+            with c_tr_chk:
+                show_trend_variances = st.checkbox("Show Daily Variance Details", value=False, key="chk_npt_trend_var")
+
+            df_npt_trend = m3_compute_daily_npt_trend(
+                prev_m_mtd,
+                df_mtd,
+                span_start=start_day,
+                span_end=cutoff_day,
+                total_plant_mcs=total_plant_mcs,
+                prev_abbr=prev_abbr,
+                curr_abbr=curr_abbr,
+                include_variances=show_trend_variances,
+            )
+            st.dataframe(df_npt_trend, use_container_width=True, hide_index=True)
+            st.download_button(
+                "📥 Export Daily NPT Trend (.xlsx)",
+                convert_df_to_styled_excel(df_npt_trend, "Daily_NPT_Trend"),
+                f"Daily_NPT_Trend_{sel_cutoff_str}.xlsx",
+                key="dl_npt_daily_trend_xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
         with tab_pareto:
-            st.markdown(f"#### 80/20 PARETO ANALYSIS & CAUSE LEDGER (DAY {start_day}–{cutoff_day})")
-            cause_agg = df_mtd.groupby(["Category", "CauseClean"])["Hours"].sum().reset_index()
-            cause_agg = cause_agg.sort_values("Hours", ascending=False).reset_index(drop=True)
-            cause_agg["Share %"] = (cause_agg["Hours"] / tot_curr_mtd_hrs * 100.0) if tot_curr_mtd_hrs > 0 else 0.0
-            cause_agg["Cum %"] = cause_agg["Share %"].cumsum()
+            st.markdown(f"#### TOP 10 ERP CAUSES & 80/20 PARETO ANALYSIS (DAY {start_day}–{cutoff_day})")
+            
+            cause_agg_full = df_mtd.groupby("CauseClean")["Hours"].sum().reset_index()
+            cause_agg_full = cause_agg_full.sort_values("Hours", ascending=False).reset_index(drop=True)
+            tot_span_hrs = cause_agg_full["Hours"].sum()
+
+            if len(cause_agg_full) > 10:
+                top_10_df = cause_agg_full.head(10).copy()
+                others_hrs = cause_agg_full.tail(len(cause_agg_full) - 10)["Hours"].sum()
+                others_row = pd.DataFrame([{"CauseClean": "Others", "Hours": others_hrs}])
+                pareto_df = pd.concat([top_10_df, others_row], ignore_index=True)
+            else:
+                pareto_df = cause_agg_full.copy()
+
+            pareto_df["Share %"] = (pareto_df["Hours"] / tot_span_hrs * 100.0) if tot_span_hrs > 0 else 0.0
+            pareto_df["Cum %"] = pareto_df["Share %"].cumsum()
 
             c_par1, c_par2 = st.columns([1.6, 1.4])
             with c_par1:
                 fig_pareto = make_subplots(specs=[[{"secondary_y": True}]])
                 fig_pareto.add_trace(
                     go.Bar(
-                        x=cause_agg["CauseClean"][:12],
-                        y=cause_agg["Hours"][:12],
+                        x=pareto_df["CauseClean"],
+                        y=pareto_df["Hours"],
                         name="Downtime (Hrs)",
                         marker_color="#0284c7",
                     ),
@@ -1168,8 +1222,8 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
                 )
                 fig_pareto.add_trace(
                     go.Scatter(
-                        x=cause_agg["CauseClean"][:12],
-                        y=cause_agg["Cum %"][:12],
+                        x=pareto_df["CauseClean"],
+                        y=pareto_df["Cum %"],
                         name="Cumulative %",
                         mode="lines+markers",
                         marker_color="#ef4444",
@@ -1178,7 +1232,7 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
                     secondary_y=True,
                 )
                 fig_pareto.update_layout(
-                    title="Top Downtime Drivers (Pareto 80/20)",
+                    title="Top Causes Pareto (Top 10 + Others)",
                     xaxis_tickangle=-45,
                     height=360,
                     margin=dict(l=20, r=20, t=40, b=20),
@@ -1189,24 +1243,29 @@ Current Period Total NPT ({curr_abbr_txt} {start_day:02d}–{cutoff_day:02d}): *
                 st.plotly_chart(fig_pareto, use_container_width=True)
 
             with c_par2:
-                cat_agg = df_mtd.groupby("Category")["Hours"].sum().reset_index()
-                cat_agg["Share %"] = (cat_agg["Hours"] / tot_curr_mtd_hrs * 100.0) if tot_curr_mtd_hrs > 0 else 0.0
-                fig_cat = px.pie(
-                    cat_agg,
-                    names="Category",
+                fig_pie = px.pie(
+                    pareto_df,
+                    names="CauseClean",
                     values="Hours",
-                    title="Downtime by Industrial Department",
+                    title="Downtime Share by Cause (Top 10 + Others)",
                     color_discrete_sequence=px.colors.qualitative.Prism,
                     hole=0.45,
                 )
-                fig_cat.update_layout(height=360, margin=dict(l=20, r=20, t=40, b=20))
-                st.plotly_chart(fig_cat, use_container_width=True)
+                fig_pie.update_layout(height=360, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-            st.dataframe(cause_agg, use_container_width=True, hide_index=True)
+            display_cause_ledger = cause_agg_full.copy()
+            display_cause_ledger["Share %"] = (display_cause_ledger["Hours"] / tot_span_hrs * 100.0) if tot_span_hrs > 0 else 0.0
+            display_cause_ledger["Cum %"] = display_cause_ledger["Share %"].cumsum()
+            display_cause_ledger["Hours"] = display_cause_ledger["Hours"].round(2)
+            display_cause_ledger["Share %"] = display_cause_ledger["Share %"].round(2)
+            display_cause_ledger["Cum %"] = display_cause_ledger["Cum %"].round(2)
+
+            st.dataframe(display_cause_ledger.rename(columns={"CauseClean": "ERP Cause", "Hours": "Total Hours"}), use_container_width=True, hide_index=True)
             st.download_button(
-                "📥 Export Full Cause Ledger (.xlsx)",
-                convert_df_to_styled_excel(cause_agg, "Cause_Ledger"),
-                f"Full_Cause_Ledger_{sel_cutoff_str}.xlsx",
+                "📥 Export Full ERP Cause Ledger (.xlsx)",
+                convert_df_to_styled_excel(display_cause_ledger, "Cause_Ledger"),
+                f"Full_ERP_Cause_Ledger_{sel_cutoff_str}.xlsx",
                 key="dl_npt_cause_ledger",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
