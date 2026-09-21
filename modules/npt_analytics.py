@@ -373,7 +373,20 @@ def m3_compute_smed_table(df_scope, max_days=7, is_for_jpg=False, start_day=1, c
     else:
         daily_display = daily.reset_index(drop=True)
 
-    return daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]], tot_mtd_setups, tot_mtd_time, mtd_avg_smed
+    df_res = daily_display[["Date", "Mold_Change_Qty", "Total_Time", "Avg_SMED", "Involved_Mcs"]]
+    
+    # Append summary row for Streamlit display if not for JPG
+    if not is_for_jpg and not df_res.empty:
+        summary_row = pd.DataFrame([{
+            "Date": f"Total ({start_day}–{cutoff_day}) >>",
+            "Mold_Change_Qty": tot_mtd_setups,
+            "Total_Time": round(tot_mtd_time, 2),
+            "Avg_SMED": round(mtd_avg_smed, 2),
+            "Involved_Mcs": f"{tot_mtd_setups} setups MTD (Target: 45 min)"
+        }])
+        df_res = pd.concat([df_res, summary_row], ignore_index=True)
+
+    return df_res, tot_mtd_setups, tot_mtd_time, mtd_avg_smed
 
 
 def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs, total_plant_mcs, max_days=7, is_for_jpg=False, start_day=1, cutoff_day=1):
@@ -405,7 +418,7 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
 
     df_display = pd.DataFrame(records)
 
-    summary_label = f"Total (1-{cutoff_day}) >>" if is_for_jpg else f"Total Span ({start_day}–{cutoff_day}) >>"
+    summary_label = f"Total ({start_day}–{cutoff_day}) >>"
     mtd_summary_row = {"Date": summary_label}
     tot_maint_all = 0.0
     for mc_cause in maint_causes:
@@ -418,7 +431,12 @@ def m3_compute_maint_daily_table(df_scope, span_days_count, daily_available_hrs,
     mtd_share = (tot_maint_all / tot_avail_period * 100.0) if tot_avail_period > 0 else 0.0
     mtd_summary_row["Total Share"] = f"{round(mtd_share):.0f}%"
 
-    return df_display, mtd_summary_row
+    df_res = df_display.copy()
+    if not is_for_jpg and not df_res.empty:
+        summary_df_row = pd.DataFrame([mtd_summary_row])
+        df_res = pd.concat([df_res, summary_df_row], ignore_index=True)
+
+    return df_res, mtd_summary_row
 
 
 def m3_compute_consolidated_daily_log(df_day):
@@ -665,7 +683,7 @@ def m3_generate_2x2_executive_jpg(
 
     y_g3 = 38.2
     step_g3 = 4.35
-    for idx, r in df_smed_grid.iterrows():
+    for idx, r in df_smed_grid.iloc[:-1].iterrows(): # Exclude summary row from loop
         bg_c = "#f8fafc" if idx % 2 == 1 else "#ffffff"
         ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor=bg_c, edgecolor="none"))
         ax.plot([1.5, 49.3], [y_g3 - 2.0, y_g3 - 2.0], color="#e2e8f0", linewidth=0.45)
@@ -678,6 +696,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(34.0, y_g3 + 0.2, inv_wrap, color="#475569", fontsize=6.2, va="center")
         y_g3 -= step_g3
 
+    # Render SMED summary row in JPG
     ax.add_patch(patches.Rectangle((1.5, y_g3 - 2.0), w_box, step_g3, facecolor="#eff6ff", edgecolor="none"))
     ax.text(3.0, y_g3 + 0.2, f"Total (1-{cutoff_day}) >>", color="#1d4ed8", fontsize=7.6, fontweight="bold", va="center")
     ax.text(10.5, y_g3 + 0.2, f"{smed_tot_qty}", color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
@@ -687,7 +706,7 @@ def m3_generate_2x2_executive_jpg(
 
     y_g4 = 38.2
     step_g4 = 4.35
-    for idx, r in df_maint_grid.iterrows():
+    for idx, r in df_maint_grid.iloc[:-1].iterrows(): # Exclude summary row from loop
         bg_c = "#fefce8" if idx % 2 == 1 else "#ffffff"
         ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor=bg_c, edgecolor="none"))
         ax.plot([50.7, 98.5], [y_g4 - 2.0, y_g4 - 2.0], color="#e2e8f0", linewidth=0.45)
@@ -702,6 +721,7 @@ def m3_generate_2x2_executive_jpg(
         ax.text(x_g4[7], y_g4 + 0.2, str(r["Total Share"]), color="#0f172a", fontsize=7.6, fontweight="bold", va="center")
         y_g4 -= step_g4
 
+    # Render Maint summary row in JPG
     ax.add_patch(patches.Rectangle((50.7, y_g4 - 2.0), w_box, step_g4, facecolor="#ecfdf5", edgecolor="none"))
     ax.text(x_g4[0], y_g4 + 0.2, maint_summary_dict["Date"], color="#047857", fontsize=7.5, fontweight="bold", va="center")
     ax.text(x_g4[1], y_g4 + 0.2, f"{maint_summary_dict['Machine Problem*']:.1f}", color="#0f172a", fontsize=7.2, fontweight="bold", va="center")
@@ -933,8 +953,8 @@ def render_npt_module():
         df_smed_grid, smed_tot_qty, smed_tot_time, smed_avg_min = m3_compute_smed_table(df_mtd, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
         df_maint_grid, maint_summary_dict = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, start_day=start_day, cutoff_day=cutoff_day, is_for_jpg=False)
 
-        df_smed_jpg, smed_qty_jpg, smed_time_jpg, smed_avg_jpg = m3_compute_smed_table(df_mtd, max_days=7, is_for_jpg=True)
-        df_maint_jpg, maint_dict_jpg = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, max_days=7, is_for_jpg=True)
+        df_smed_jpg, smed_qty_jpg, smed_time_jpg, smed_avg_jpg = m3_compute_smed_table(df_mtd, max_days=7, is_for_jpg=True, start_day=start_day, cutoff_day=cutoff_day)
+        df_maint_jpg, maint_dict_jpg = m3_compute_maint_daily_table(df_mtd, span_days_count, daily_avail_hrs, total_plant_mcs, max_days=7, is_for_jpg=True, start_day=start_day, cutoff_day=cutoff_day)
 
         jpg_bytes = m3_generate_2x2_executive_jpg(
             sel_date_obj,
