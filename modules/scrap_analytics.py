@@ -851,16 +851,14 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     net_ton_diff = tot_curr_ton - tot_prev_ton
     tot_causes = len(df_cause_mom)
 
-    # Header Layout with Safe Spacing
+    # Header Layout — Division Label Dropped for Clean Space
     ax.text(1.5, 98.4, "MONTHLY DEFECT REASON SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Comparison ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
-    
-    # Division Label & Shifted Span Badge to prevent overlap
-    ax.text(98.5, 98.4, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
-    
-    span_badge = patches.FancyBboxPatch((68.0, 95.0), 30.5, 3.8, boxstyle="round,pad=0.2,rounding_size=0.4", facecolor='#1e293b', edgecolor='none')
+
+    # Centered Span Badge
+    span_badge = patches.FancyBboxPatch((35.0, 95.0), 30.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(83.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+    ax.text(50.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} REJECTION", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Tons", "#dc2626"),
@@ -981,7 +979,7 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-
+    
 def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
     fig, ax = plt.subplots(figsize=(19.0, 11.0), dpi=220)
     fig.patch.set_facecolor('#f8fafc')
@@ -1005,16 +1003,14 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     tot_prev_ton = float(df_lineman_mom[c_prev_ton].sum()) if c_prev_ton in df_lineman_mom.columns else 0.0
     tot_linemen = len(df_lineman_mom)
 
-    # Header Layout with Safe Spacing
+    # Header Layout — Division Label Dropped for Clean Space
     ax.text(1.5, 98.4, "SENIOR OPERATOR SCRAP SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Operator Accountability ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
-    
-    # Division Label & Shifted Span Badge to prevent overlap
-    ax.text(98.5, 98.4, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
-    
-    span_badge = patches.FancyBboxPatch((68.0, 95.0), 30.5, 3.8, boxstyle="round,pad=0.2,rounding_size=0.4", facecolor='#1e293b', edgecolor='none')
+
+    # Centered Span Badge
+    span_badge = patches.FancyBboxPatch((35.0, 95.0), 30.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(83.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+    ax.text(50.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} OPERATOR SCRAP", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Metric Tons", "#dc2626"),
@@ -1105,7 +1101,7 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-
+    
 def render_scrap_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
