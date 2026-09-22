@@ -851,13 +851,16 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     net_ton_diff = tot_curr_ton - tot_prev_ton
     tot_causes = len(df_cause_mom)
 
+    # Header Layout with Safe Spacing
     ax.text(1.5, 98.4, "MONTHLY DEFECT REASON SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Comparison ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
-    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
-
-    span_badge = patches.FancyBboxPatch((73.5, 94.8), 25.0, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    
+    # Division Label & Shifted Span Badge to prevent overlap
+    ax.text(98.5, 98.4, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
+    
+    span_badge = patches.FancyBboxPatch((68.0, 95.0), 30.5, 3.8, boxstyle="round,pad=0.2,rounding_size=0.4", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(86.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.6, fontweight='bold', ha='center', va='center')
+    ax.text(83.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} REJECTION", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Tons", "#dc2626"),
@@ -916,13 +919,9 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
         diff_pcs = r["Variance (Pcs)"] if "Variance (Pcs)" in r else (r[c_curr_pcs] - r[c_prev_pcs])
         badge_x = left_x + 64.5
         if diff_pcs > 0:
-            badge_bg = "#fee2e2"
-            badge_fg = "#b91c1c"
-            badge_txt = f"▲ +{int(diff_pcs):,}"
+            badge_bg, badge_fg, badge_txt = "#fee2e2", "#b91c1c", f"▲ +{int(diff_pcs):,}"
         else:
-            badge_bg = "#dcfce7"
-            badge_fg = "#15803d"
-            badge_txt = f"▼ {int(diff_pcs):,}"
+            badge_bg, badge_fg, badge_txt = "#dcfce7", "#15803d", f"▼ {int(diff_pcs):,}"
 
         ax.add_patch(patches.FancyBboxPatch((badge_x - 3.8, row_y - 0.7), 7.6, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
         ax.text(badge_x, row_y + 0.35, badge_txt, color=badge_fg, fontsize=6.5, fontweight="bold", ha="center", va="center")
@@ -939,13 +938,9 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
 
     badge_x = left_x + 64.5
     if net_pcs_diff > 0:
-        tot_badge_bg = "#fee2e2"
-        tot_badge_fg = "#b91c1c"
-        tot_badge_txt = f"▲ +{net_pcs_diff:,}"
+        tot_badge_bg, tot_badge_fg, tot_badge_txt = "#fee2e2", "#b91c1c", f"▲ +{net_pcs_diff:,}"
     else:
-        tot_badge_bg = "#dcfce7"
-        tot_badge_fg = "#15803d"
-        tot_badge_txt = f"▼ {net_pcs_diff:,}"
+        tot_badge_bg, tot_badge_fg, tot_badge_txt = "#dcfce7", "#15803d", f"▼ {net_pcs_diff:,}"
 
     ax.add_patch(patches.FancyBboxPatch((badge_x - 3.8, row_y - 0.7), 7.6, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=tot_badge_bg, edgecolor="none"))
     ax.text(badge_x, row_y + 0.35, tot_badge_txt, color=tot_badge_fg, fontsize=6.6, fontweight="bold", ha="center", va="center")
@@ -964,16 +959,9 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     dec_val = int(top_declining['Temp_Diff']) if top_declining is not None else 0
 
     t1 = (
-        f"• Biggest Increased Defect:\n"
-        f"  {esc_name}\n"
-        f"  (+{esc_val:,} pcs more vs {prev_abbr})\n\n"
-        f"• Most Reduced Defect:\n"
-        f"  {dec_name}\n"
-        f"  ({dec_val:,} pcs less vs {prev_abbr})\n\n"
-        f"• Production Floor Actions:\n"
-        f"  1. Check mold clamp tonnage\n"
-        f"  2. Stabilize injection cushion\n"
-        f"  3. Follow standard purging."
+        f"• Biggest Increased Defect:\n  {esc_name}\n  (+{esc_val:,} pcs more vs {prev_abbr})\n\n"
+        f"• Most Reduced Defect:\n  {dec_name}\n  ({dec_val:,} pcs less vs {prev_abbr})\n\n"
+        f"• Production Floor Actions:\n  1. Check mold clamp tonnage\n  2. Stabilize injection cushion\n  3. Follow standard purging."
     )
     ax.text(78.2, 74.5, t1, color='#7f1d1d', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -981,15 +969,9 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     ax.add_patch(c2)
     ax.text(78.2, 38.0, "Total Period Overview", color='#15803d', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Audit Period:\n"
-        f"  Day {start_day_num:02d} to Day {sel_day_num:02d}\n"
-        f"  ({curr_abbr} vs {prev_abbr} same days).\n\n"
-        f"• Total Rejection:\n"
-        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
-        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n"
-        f"  - Net Change: {net_pcs_diff:+,} Pcs.\n\n"
-        f"• Quality Guideline:\n"
-        f"  Strict line inspection on heavy molds."
+        f"• Audit Period:\n  Day {start_day_num:02d} to Day {sel_day_num:02d}\n  ({curr_abbr} vs {prev_abbr} same days).\n\n"
+        f"• Total Rejection:\n  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n  - Net Change: {net_pcs_diff:+,} Pcs.\n\n"
+        f"• Quality Guideline:\n  Strict line inspection on heavy molds."
     )
     ax.text(78.2, 34.0, t2, color='#166534', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -999,7 +981,6 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-
 
 def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
     fig, ax = plt.subplots(figsize=(19.0, 11.0), dpi=220)
@@ -1024,13 +1005,16 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     tot_prev_ton = float(df_lineman_mom[c_prev_ton].sum()) if c_prev_ton in df_lineman_mom.columns else 0.0
     tot_linemen = len(df_lineman_mom)
 
+    # Header Layout with Safe Spacing
     ax.text(1.5, 98.4, "SENIOR OPERATOR SCRAP SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Operator Accountability ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
-    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
-
-    span_badge = patches.FancyBboxPatch((73.5, 94.8), 25.0, 4.2, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    
+    # Division Label & Shifted Span Badge to prevent overlap
+    ax.text(98.5, 98.4, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
+    
+    span_badge = patches.FancyBboxPatch((68.0, 95.0), 30.5, 3.8, boxstyle="round,pad=0.2,rounding_size=0.4", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(86.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.6, fontweight='bold', ha='center', va='center')
+    ax.text(83.25, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} OPERATOR SCRAP", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Metric Tons", "#dc2626"),
@@ -1088,13 +1072,9 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
         diff_pcs = r["Variance (Pcs)"] if "Variance (Pcs)" in r else (r[c_curr_pcs] - r[c_prev_pcs])
         badge_x = left_x + 65.0
         if diff_pcs > 0:
-            badge_bg = "#fee2e2"
-            badge_fg = "#b91c1c"
-            badge_txt = f"▲ +{int(diff_pcs):,}"
+            badge_bg, badge_fg, badge_txt = "#fee2e2", "#b91c1c", f"▲ +{int(diff_pcs):,}"
         else:
-            badge_bg = "#dcfce7"
-            badge_fg = "#15803d"
-            badge_txt = f"▼ {int(diff_pcs):,}"
+            badge_bg, badge_fg, badge_txt = "#dcfce7", "#15803d", f"▼ {int(diff_pcs):,}"
 
         ax.add_patch(patches.FancyBboxPatch((badge_x - 3.8, row_y - 0.7), 7.6, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
         ax.text(badge_x, row_y + 0.35, badge_txt, color=badge_fg, fontsize=6.5, fontweight="bold", ha="center", va="center")
@@ -1104,15 +1084,8 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     ax.add_patch(c1)
     ax.text(78.2, 78.5, "Shift Handover Review", color='#0f172a', fontsize=12.0, fontweight='bold')
     t1 = (
-        f"• Comparison Window:\n"
-        f"  Benchmarking active team\n"
-        f"  across same operational days\n"
-        f"  (Day {start_day_num:02d}–{sel_day_num:02d}).\n\n"
-        f"• Line Directives:\n"
-        f"  Review machines where scrap\n"
-        f"  increased (+ Pcs).\n"
-        f"  Ensure purge scrap weighing\n"
-        f"  before shift handover."
+        f"• Comparison Window:\n  Benchmarking active team\n  across same operational days\n  (Day {start_day_num:02d}–{sel_day_num:02d}).\n\n"
+        f"• Line Directives:\n  Review machines where scrap\n  increased (+ Pcs).\n  Ensure purge scrap weighing\n  before shift handover."
     )
     ax.text(78.2, 74.5, t1, color='#334155', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1120,16 +1093,9 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     ax.add_patch(c2)
     ax.text(78.2, 38.0, "Floor Logging Check", color='#1d4ed8', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Monitored Span:\n"
-        f"  {span_text}\n"
-        f"  ({sel_day_num - start_day_num + 1} Operational Days).\n\n"
-        f"• Scrap Logged:\n"
-        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
-        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs\n"
-        f"  - Difference: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
-        f"• Daily Verification:\n"
-        f"  Check physical rejection bins\n"
-        f"  against ERP recorded numbers."
+        f"• Monitored Span:\n  {span_text}\n  ({sel_day_num - start_day_num + 1} Operational Days).\n\n"
+        f"• Scrap Logged:\n  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n  - {prev_abbr}: {tot_prev_pcs:,} Pcs\n  - Difference: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
+        f"• Daily Verification:\n  Check physical rejection bins\n  against ERP recorded numbers."
     )
     ax.text(78.2, 34.0, t2, color='#1e3a8a', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1139,7 +1105,6 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-
 
 def render_scrap_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
