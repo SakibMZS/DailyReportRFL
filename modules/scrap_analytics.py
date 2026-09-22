@@ -1,3 +1,6 @@
+# =========================================================
+# MODULE: SCRAP & REJECTION ANALYTICS — INDUSTRIAL PORTAL
+# =========================================================
 import io
 import os
 import re
@@ -693,7 +696,11 @@ def m2_generate_scrap_jpg(
 
     ax.text(1.5, 98.4, "DAILY REJECTION & DEFECT ANALYTICS REPORT", color="#0f172a", fontsize=16.0, fontweight="bold", va="top")
     ax.text(1.5, 95.8, f"{section_label} Machine Rejection Log (>{min_cutoff} Pcs) & Section Summary  |  Report Date: {date_formatted}", color="#64748b", fontsize=8.8, va="top")
-    ax.text(98.5, 97.2, "PLASTIC PRODUCTION DIVISION", color="#2563eb", fontsize=8.8, fontweight="bold", ha="right", va="top")
+
+    # Span Badge back in original top-right position (x=67.5, width=31.0 ending at 98.5)
+    span_badge = patches.FancyBboxPatch((67.5, 95.0), 31.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor="#1e293b", edgecolor="none")
+    ax.add_patch(span_badge)
+    ax.text(83.0, 96.9, f"SPAN: {sel_date_obj.strftime('%B')} {start_day_num:02d} – {sel_date_obj.strftime('%B')} {sel_day_num:02d}, {sel_date_obj.year}", color="#ffffff", fontsize=8.2, fontweight="bold", ha="center", va="center")
 
     kpis = [
         (f"{prev_abbr.upper()} {start_day_num:02d}–{sel_day_num:02d} TOTAL", f"{prev_as_of_total_ton:.2f} T", "Prior Period Total", "#64748b"),
@@ -851,14 +858,13 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     net_ton_diff = tot_curr_ton - tot_prev_ton
     tot_causes = len(df_cause_mom)
 
-    # Header Layout — Division Label Dropped for Clean Space
     ax.text(1.5, 98.4, "MONTHLY DEFECT REASON SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Comparison ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
 
-    # Centered Span Badge
-    span_badge = patches.FancyBboxPatch((35.0, 95.0), 30.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    # Span Badge back in original top-right position
+    span_badge = patches.FancyBboxPatch((67.5, 95.0), 31.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(50.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+    ax.text(83.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} REJECTION", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Tons", "#dc2626"),
@@ -917,9 +923,13 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
         diff_pcs = r["Variance (Pcs)"] if "Variance (Pcs)" in r else (r[c_curr_pcs] - r[c_prev_pcs])
         badge_x = left_x + 64.5
         if diff_pcs > 0:
-            badge_bg, badge_fg, badge_txt = "#fee2e2", "#b91c1c", f"▲ +{int(diff_pcs):,}"
+            badge_bg = "#fee2e2"
+            badge_fg = "#b91c1c"
+            badge_txt = f"▲ +{int(diff_pcs):,}"
         else:
-            badge_bg, badge_fg, badge_txt = "#dcfce7", "#15803d", f"▼ {int(diff_pcs):,}"
+            badge_bg = "#dcfce7"
+            badge_fg = "#15803d"
+            badge_txt = f"▼ {int(diff_pcs):,}"
 
         ax.add_patch(patches.FancyBboxPatch((badge_x - 3.8, row_y - 0.7), 7.6, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=badge_bg, edgecolor="none"))
         ax.text(badge_x, row_y + 0.35, badge_txt, color=badge_fg, fontsize=6.5, fontweight="bold", ha="center", va="center")
@@ -936,9 +946,13 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
 
     badge_x = left_x + 64.5
     if net_pcs_diff > 0:
-        tot_badge_bg, tot_badge_fg, tot_badge_txt = "#fee2e2", "#b91c1c", f"▲ +{net_pcs_diff:,}"
+        tot_badge_bg = "#fee2e2"
+        tot_badge_fg = "#b91c1c"
+        tot_badge_txt = f"▲ +{net_pcs_diff:,}"
     else:
-        tot_badge_bg, tot_badge_fg, tot_badge_txt = "#dcfce7", "#15803d", f"▼ {net_pcs_diff:,}"
+        tot_badge_bg = "#dcfce7"
+        tot_badge_fg = "#15803d"
+        tot_badge_txt = f"▼ {net_pcs_diff:,}"
 
     ax.add_patch(patches.FancyBboxPatch((badge_x - 3.8, row_y - 0.7), 7.6, 2.1, boxstyle="round,pad=0.08,rounding_size=0.3", facecolor=tot_badge_bg, edgecolor="none"))
     ax.text(badge_x, row_y + 0.35, tot_badge_txt, color=tot_badge_fg, fontsize=6.6, fontweight="bold", ha="center", va="center")
@@ -957,9 +971,16 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     dec_val = int(top_declining['Temp_Diff']) if top_declining is not None else 0
 
     t1 = (
-        f"• Biggest Increased Defect:\n  {esc_name}\n  (+{esc_val:,} pcs more vs {prev_abbr})\n\n"
-        f"• Most Reduced Defect:\n  {dec_name}\n  ({dec_val:,} pcs less vs {prev_abbr})\n\n"
-        f"• Production Floor Actions:\n  1. Check mold clamp tonnage\n  2. Stabilize injection cushion\n  3. Follow standard purging."
+        f"• Biggest Increased Defect:\n"
+        f"  {esc_name}\n"
+        f"  (+{esc_val:,} pcs more vs {prev_abbr})\n\n"
+        f"• Most Reduced Defect:\n"
+        f"  {dec_name}\n"
+        f"  ({dec_val:,} pcs less vs {prev_abbr})\n\n"
+        f"• Production Floor Actions:\n"
+        f"  1. Check mold clamp tonnage\n"
+        f"  2. Stabilize injection cushion\n"
+        f"  3. Follow standard purging."
     )
     ax.text(78.2, 74.5, t1, color='#7f1d1d', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -967,9 +988,15 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     ax.add_patch(c2)
     ax.text(78.2, 38.0, "Total Period Overview", color='#15803d', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Audit Period:\n  Day {start_day_num:02d} to Day {sel_day_num:02d}\n  ({curr_abbr} vs {prev_abbr} same days).\n\n"
-        f"• Total Rejection:\n  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n  - Net Change: {net_pcs_diff:+,} Pcs.\n\n"
-        f"• Quality Guideline:\n  Strict line inspection on heavy molds."
+        f"• Audit Period:\n"
+        f"  Day {start_day_num:02d} to Day {sel_day_num:02d}\n"
+        f"  ({curr_abbr} vs {prev_abbr} same days).\n\n"
+        f"• Total Rejection:\n"
+        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
+        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs ({tot_prev_ton:.2f} T)\n"
+        f"  - Net Change: {net_pcs_diff:+,} Pcs.\n\n"
+        f"• Quality Guideline:\n"
+        f"  Strict line inspection on heavy molds."
     )
     ax.text(78.2, 34.0, t2, color='#166534', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -979,7 +1006,8 @@ def m2_generate_cause_pareto_jpg(df_cause_mom, sel_date_obj, start_day_num, sel_
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-    
+
+
 def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, sel_day_num, section_label, prev_abbr="Aug", curr_abbr="Sep"):
     fig, ax = plt.subplots(figsize=(19.0, 11.0), dpi=220)
     fig.patch.set_facecolor('#f8fafc')
@@ -1003,14 +1031,13 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     tot_prev_ton = float(df_lineman_mom[c_prev_ton].sum()) if c_prev_ton in df_lineman_mom.columns else 0.0
     tot_linemen = len(df_lineman_mom)
 
-    # Header Layout — Division Label Dropped for Clean Space
     ax.text(1.5, 98.4, "SENIOR OPERATOR SCRAP SUMMARY & COMPARISON", color='#0f172a', fontsize=16.5, fontweight='bold', va='top')
     ax.text(1.5, 95.8, f"Operator Accountability ({curr_abbr} {start_day_num:02d}–{sel_day_num:02d} vs {prev_abbr} {start_day_num:02d}–{sel_day_num:02d})  |  {section_label}", color='#64748b', fontsize=9.2, va='top')
 
-    # Centered Span Badge
-    span_badge = patches.FancyBboxPatch((35.0, 95.0), 30.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
+    # Span Badge back in original top-right position
+    span_badge = patches.FancyBboxPatch((67.5, 95.0), 31.0, 3.8, boxstyle="round,pad=0.2,rounding_size=0.5", facecolor='#1e293b', edgecolor='none')
     ax.add_patch(span_badge)
-    ax.text(50.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
+    ax.text(83.0, 96.9, f"SPAN: {span_text}", color='#ffffff', fontsize=8.2, fontweight='bold', ha='center', va='center')
 
     kpis = [
         (f"{curr_abbr.upper()} OPERATOR SCRAP", f"{tot_curr_pcs:,} Pcs", f"{tot_curr_ton:.2f} Metric Tons", "#dc2626"),
@@ -1080,8 +1107,15 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     ax.add_patch(c1)
     ax.text(78.2, 78.5, "Shift Handover Review", color='#0f172a', fontsize=12.0, fontweight='bold')
     t1 = (
-        f"• Comparison Window:\n  Benchmarking active team\n  across same operational days\n  (Day {start_day_num:02d}–{sel_day_num:02d}).\n\n"
-        f"• Line Directives:\n  Review machines where scrap\n  increased (+ Pcs).\n  Ensure purge scrap weighing\n  before shift handover."
+        f"• Comparison Window:\n"
+        f"  Benchmarking active team\n"
+        f"  across same operational days\n"
+        f"  (Day {start_day_num:02d}–{sel_day_num:02d}).\n\n"
+        f"• Line Directives:\n"
+        f"  Review machines where scrap\n"
+        f"  increased (+ Pcs).\n"
+        f"  Ensure purge scrap weighing\n"
+        f"  before shift handover."
     )
     ax.text(78.2, 74.5, t1, color='#334155', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1089,9 +1123,16 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     ax.add_patch(c2)
     ax.text(78.2, 38.0, "Floor Logging Check", color='#1d4ed8', fontsize=12.0, fontweight='bold')
     t2 = (
-        f"• Monitored Span:\n  {span_text}\n  ({sel_day_num - start_day_num + 1} Operational Days).\n\n"
-        f"• Scrap Logged:\n  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n  - {prev_abbr}: {tot_prev_pcs:,} Pcs\n  - Difference: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
-        f"• Daily Verification:\n  Check physical rejection bins\n  against ERP recorded numbers."
+        f"• Monitored Span:\n"
+        f"  {span_text}\n"
+        f"  ({sel_day_num - start_day_num + 1} Operational Days).\n\n"
+        f"• Scrap Logged:\n"
+        f"  - {curr_abbr}: {tot_curr_pcs:,} Pcs ({tot_curr_ton:.2f} T)\n"
+        f"  - {prev_abbr}: {tot_prev_pcs:,} Pcs\n"
+        f"  - Difference: {tot_curr_pcs - tot_prev_pcs:+,} Pcs.\n\n"
+        f"• Daily Verification:\n"
+        f"  Check physical rejection bins\n"
+        f"  against ERP recorded numbers."
     )
     ax.text(78.2, 34.0, t2, color='#1e3a8a', fontsize=10.2, linespacing=1.4, va='top')
 
@@ -1101,7 +1142,8 @@ def m2_generate_lineman_report_jpg(df_lineman_mom, sel_date_obj, start_day_num, 
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
-    
+
+
 def render_scrap_module():
     c_back, c_title, c_act = st.columns([1.5, 3.5, 1.5], vertical_alignment="center")
     with c_back:
@@ -1127,7 +1169,6 @@ def render_scrap_module():
     st.markdown("<div style='margin-bottom: 1.25rem;'></div>", unsafe_allow_html=True)
 
     if "m2_file_bytes" not in st.session_state:
-        # Centered Layout
         _, c_center, _ = st.columns([0.6, 2.8, 0.6])
         with c_center:
             st.markdown(
@@ -1174,7 +1215,6 @@ def render_scrap_module():
         all_dates = sorted(df_curr["DateStr"].unique().tolist())
         section_display_name = sec_name.split(">")[-1].strip()
 
-        # Grouped Industrial Toolbar
         st.markdown('<div class="control-bar-card">', unsafe_allow_html=True)
         c_date, c_x_day, c_cut, c_snap, c_excel = st.columns([1.5, 0.9, 1.1, 1.4, 1.5], gap="small")
         with c_date:
@@ -1198,10 +1238,8 @@ def render_scrap_module():
 
         df_day = df_curr[df_curr["DateStr"] == sel_date_str].copy()
         
-        # Sliced range from Start Day to Cutoff Day
         df_as_of = df_curr[(df_curr["DateClean"].dt.day >= start_day) & (df_curr["DateClean"].dt.day <= n_day)].copy()
         
-        # Filtered vs All machines on floor
         df_day_filtered = m2_compute_daily_rejection(df_day, pos_map=pos_map, min_qty=min_cutoff)
         df_day_all_mcs = m2_compute_daily_rejection_all(df_day, pos_map=pos_map)
 
@@ -1222,7 +1260,6 @@ def render_scrap_module():
         diff_ton = curr_as_of_avg_ton - prev_as_of_avg_ton
         pct_diff = (diff_ton / prev_as_of_avg_ton * 100.0) if prev_as_of_avg_ton > 0 else 0.0
 
-        # WhatsApp text with both Pcs and Tons
         if diff_ton > 0:
             variance_line_plain = f"⚠️ Variance: We are producing +{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%) more rejection compared to {prev_abbr} {start_day:02d}–{n_day:02d}."
             variance_line_html = f'<p style="margin: 0 0 0.75rem 0; color: #dc2626; font-size: 0.85rem;">⚠️ <b>Variance:</b> We are producing <b>+{diff_ton:.2f} Tons/Day (+{pct_diff:.1f}%)</b> more rejection compared to {prev_abbr} {start_day:02d}–{n_day:02d}.</p>'
@@ -1415,7 +1452,6 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 3: Rejection Defect Reason Analysis
         df_cause_mom_full = m2_compute_cause_mom_comparison(
             df_prev_as_of, df_as_of, prev_abbr, curr_abbr, include_variances=True
         )
@@ -1475,7 +1511,6 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 4: Senior Operator & Shift Quality Audit
         c_l_title, c_down_line = st.columns([3, 1.4], vertical_alignment="center")
         with c_l_title:
             st.markdown("#### SENIOR OPERATOR & SHIFT QUALITY AUDIT (ADDED BY)")
@@ -1630,7 +1665,6 @@ These are the line records from *{section_display_name}* where rejection exceede
 
         st.divider()
 
-        # Section 5: Daily Rejection Trend
         c_tr_title, c_tr_chk = st.columns([2.8, 1.6], vertical_alignment="center")
         with c_tr_title:
             st.markdown("#### DAILY REJECTION COMPARISON TREND (PIECES & TONNAGE)")
@@ -1654,3 +1688,7 @@ These are the line records from *{section_display_name}* where rejection exceede
             include_variances=show_trend_variances,
         )
         st.dataframe(trend_display, use_container_width=True, hide_index=True)
+
+
+if __name__ == "__main__":
+    render_scrap_module()
